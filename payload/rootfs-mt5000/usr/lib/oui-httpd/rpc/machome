@@ -1,0 +1,1198 @@
+-- machome: read-only status provider for the macOS-style Home tab.
+-- Installed at /usr/lib/oui-httpd/rpc/machome  (called as "machome"."get_stats")
+
+local M = {}
+local cjson = require "cjson"
+
+local function readf(p)
+    local f = io.open(p, "r")
+    if not f then return nil end
+    local s = f:read("*a")
+    f:close()
+    return s
+end
+
+local function num(p)
+    local s = readf(p)
+    if not s then return nil end
+    return tonumber((s:gsub("%s", "")))
+end
+
+local function trim(s)
+    return s and (s:gsub("^%s+", ""):gsub("%s+$", "")) or nil
+end
+
+local function parse_stat()
+    local t = {}
+    for line in (readf("/proc/stat") or ""):gmatch("[^\n]+") do
+        local name, rest = line:match("^(cpu%d*)%s+(.*)$")
+        if name then
+            local n = {}
+            for v in rest:gmatch("%d+") do n[#n + 1] = tonumber(v) end
+            local total = 0
+            for i = 1, math.min(#n, 8) do total = total + n[i] end
+            t[name] = { idle = (n[4] or 0) + (n[5] or 0), total = total }
+        end
+    end
+    return t
+end
+
+local PREV = "/tmp/machome_cpu"
+
+local function load_prev()
+    local s = readf(PREV)
+    if not s then return nil end
+    local ts = tonumber(s:match("^ts (%d+)"))
+    if not ts or os.time() - ts > 30 then return nil end
+    local t = {}
+    for name, idle, total in s:gmatch("(cpu%d*) (%d+) (%d+)") do
+        t[name] = { idle = tonumber(idle), total = tonumber(total) }
+    end
+    return t
+end
+
+local function save_prev(t)
+    local f = io.open(PREV, "w")
+    if not f then return end
+    f:write("ts ", os.time(), "\n")
+    for k, v in pairs(t) do
+        f:write(k, " ", string.format("%d", v.idle), " ", string.format("%d", v.total), "\n")
+    end
+    f:close()
+end
+
+local function usage(c, p)
+    if not c or not p then return nil end
+    local dt = c.total - p.total
+    if dt <= 0 then return nil end
+    local u = 100 * (1 - (c.idle - p.idle) / dt)
+    if u < 0 then u = 0 elseif u > 100 then u = 100 end
+    return math.floor(u * 10 + 0.5) / 10
+end
+
+local function cpu_stats()
+    local cur = parse_stat()
+    local prev = load_prev()
+    if not prev or not prev.cpu or not cur.cpu or (cur.cpu.total - prev.cpu.total) < 20 then
+        prev = cur
+        os.execute("sleep 1")
+        cur = parse_stat()
+    end
+    save_prev(cur)
+
+    local cores = {}
+    for i = 0, 63 do
+        local k = "cpu" .. i
+        if not cur[k] then break end
+        cores[#cores + 1] = usage(cur[k], prev[k]) or 0
+    end
+
+    return { usage = usage(cur.cpu, prev.cpu) or 0, cores = cores }
+end
+
+local function temps()
+    local list = {}
+    for i = 0, 15 do
+        local base = "/sys/class/thermal/thermal_zone" .. i
+        local t = num(base .. "/temp")
+        if not t then break end
+        list[#list + 1] = { name = trim(readf(base .. "/type")) or ("zone" .. i), temp = t / 1000 }
+    end
+    return list
+end
+
+local function net()
+    local out = {}
+    local p = io.popen("ls /sys/class/net 2>/dev/null")
+    if not p then return out end
+    for ifname in p:lines() do
+        if ifname:match("^eth%d") or ifname:match("^br%-lan$") or ifname:match("^wgclient") or
+           ifname:match("^ovpnclient") or ifname:match("^wgserver") or ifname:match("^tailscale") or
+           ifname:match("^usb") or ifname:match("^wwan") or ifname:match("^rmnet") then
+            local base = "/sys/class/net/" .. ifname
+            out[ifname] = {
+                rx = num(base .. "/statistics/rx_bytes") or 0,
+                tx = num(base .. "/statistics/tx_bytes") or 0,
+                state = trim(readf(base .. "/operstate")) or "unknown",
+                speed = num(base .. "/speed")
+            }
+        end
+    end
+    p:close()
+    return out
+end
+
+local function cooling()
+    local list = {}
+    for i = 0, 15 do
+        local base = "/sys/class/thermal/cooling_device" .. i
+        local cur = num(base .. "/cur_state")
+        if cur == nil then break end
+        list[#list + 1] = { type = trim(readf(base .. "/type")) or ("cooling" .. i), cur = cur, max = num(base .. "/max_state") or 0 }
+    end
+    local fans = {}
+    local p = io.popen("ls /sys/class/hwmon/*/fan*_input 2>/dev/null")
+    if p then
+        for f in p:lines() do fans[#fans + 1] = num(f) end
+        p:close()
+    end
+    return list, fans
+end
+
+-- DNS servers handed to LAN clients via DHCP option 6 (e.g. a local Pi-hole / DNS box)
+local function lan_dns()
+    local ok, uci = pcall(require, "uci")
+    if not ok then return {} end
+    local c = uci.cursor()
+    local opts = c:get("dhcp", "lan", "dhcp_option") or {}
+    if type(opts) == "string" then opts = { opts } end
+    local out = {}
+    for _, o in ipairs(opts) do
+        local code, rest = o:match("^%s*([%w:%-]+)%s*,(.*)$")
+        if code == "6" or code == "option:dns-server" then
+            for ip in rest:gmatch("[^,%s]+") do out[#out + 1] = ip end
+        end
+    end
+    return out
+end
+
+-- Data written by the background sampler (/usr/bin/machome-sampler)
+local function live()
+    local s = readf("/tmp/machome/live.json")
+    if not s or s == "" then return nil end
+    local ok, v = pcall(cjson.decode, s)
+    return ok and v or nil
+end
+
+-- 24 h history, downsampled to 5-minute buckets: temp (C max), down/up (bytes/s)
+function M.get_history()
+    local rows = {}
+    for line in (readf("/tmp/machome/hist") or ""):gmatch("[^\n]+") do
+        local ts, t, rx, tx = line:match("^(%d+) ([%d%.%-]+) (%d+) (%d+)")
+        if ts then rows[#rows + 1] = { tonumber(ts), tonumber(t), tonumber(rx), tonumber(tx) } end
+    end
+    local out = { t = {}, temp = {}, down = {}, up = {}, step = 300, count = #rows }
+    local B, bucket, acc = 300, nil, nil
+    local function flush()
+        if acc and acc.n > 0 then
+            out.t[#out.t + 1] = bucket
+            out.temp[#out.temp + 1] = math.floor(acc.temp / acc.n * 10 + 0.5) / 10
+            out.down[#out.down + 1] = acc.dt > 0 and math.floor(acc.rx / acc.dt) or 0
+            out.up[#out.up + 1] = acc.dt > 0 and math.floor(acc.tx / acc.dt) or 0
+        end
+    end
+    for i = 1, #rows do
+        local r = rows[i]
+        local b = r[1] - r[1] % B
+        if b ~= bucket then flush(); bucket = b; acc = { temp = 0, n = 0, rx = 0, tx = 0, dt = 0 } end
+        acc.temp = acc.temp + r[2]; acc.n = acc.n + 1
+        local p = rows[i - 1]
+        if p then
+            local dt, drx, dtx = r[1] - p[1], r[3] - p[3], r[4] - p[4]
+            if dt > 0 and dt < 600 and drx >= 0 and dtx >= 0 then
+                acc.rx = acc.rx + drx; acc.tx = acc.tx + dtx; acc.dt = acc.dt + dt
+            end
+        end
+    end
+    flush()
+    out.first = rows[1] and rows[1][1] or nil
+    return out
+end
+
+-- Full settings backup (standard OpenWrt sysupgrade -b), fetched via /download then deleted
+function M.make_backup()
+    os.execute("mkdir -p /tmp/machome && rm -f /tmp/machome/backup.tgz && /sbin/sysupgrade -b /tmp/machome/backup.tgz >/dev/null 2>&1")
+    local f = io.open("/tmp/machome/backup.tgz", "r")
+    if not f then return { ok = false } end
+    local size = f:seek("end"); f:close()
+    return { ok = true, path = "/tmp/machome/backup.tgz", size = size }
+end
+
+-- VPN provider names per config group (names only; no credentials leave the router)
+local KNOWN = {
+    { "surfshark", "Surfshark" }, { "windscribe", "Windscribe" }, { "whiskergalaxy", "Windscribe" },
+    { "mullvad", "Mullvad" }, { "nordvpn", "NordVPN" }, { "protonvpn", "Proton VPN" }, { "proton", "Proton VPN" },
+    { "ipvanish", "IPVanish" }, { "azirevpn", "AzireVPN" }, { "hide.me", "hide.me" }, { "hideme", "hide.me" },
+    { "purevpn", "PureVPN" }, { "privateinternetaccess", "PIA" }, { "pia", "PIA" }, { "expressvpn", "ExpressVPN" },
+    { "cyberghost", "CyberGhost" }, { "ivpn", "IVPN" }, { "airvpn", "AirVPN" }
+}
+local function canon(name, domain)
+    local n, d = (name or ""):lower(), (domain or ""):lower()
+    for _, k in ipairs(KNOWN) do if n:find(k[1], 1, true) then return k[2] end end
+    for _, k in ipairs(KNOWN) do if d:find(k[1], 1, true) then return k[2] end end
+    if d:match("^%a%a%-%a%a%a%-wg%-%d+") then return "Mullvad" end
+    return (name and name ~= "" and name ~= "FromApp") and name or nil
+end
+
+function M.get_vpn_providers()
+    local out, servers = {}, {}
+    local ok, rpc = pcall(require, "oui.rpc")
+    if not ok then return { groups = out, servers = servers } end
+    -- no pcall here: the call yields (ngx cosocket) and LuaJIT pcall can't cross that boundary
+    local r = rpc.call("vpn-client", "get_all_config_list", {})
+    if type(r) == "table" and type(r.configs) == "table" then
+        for _, kind in ipairs({ "wireguard", "openvpn" }) do
+            for _, g in ipairs(r.configs[kind] or {}) do
+                local p = g.peers and g.peers[1] or (g.clients and g.clients[1]) or {}
+                local nm = canon(g.group_name, p.end_point or p.name or p.server or "")
+                if nm and g.group_id then out[tostring(g.group_id)] = nm end
+                -- VPN card server picker (2026-11-15): saved servers, names and locations ONLY (never keys, logins or certs).
+                -- OpenVPN servers since 2026-11-17 (GL calls them clients; client_id goes in peer_id, kind tells them apart:
+                -- WireGuard and OpenVPN ids can be the same number).
+                if g.group_id then
+                    for _, pe in ipairs((kind == "wireguard" and g.peers or g.clients) or {}) do
+                        local id = kind == "wireguard" and pe.peer_id or pe.client_id
+                        if id then
+                            servers[#servers + 1] = { kind = kind, group_id = g.group_id, peer_id = id, name = tostring(pe.name or ("Server " .. id)),
+                                location = type(pe.location) == "string" and pe.location or "", provider = nm or tostring(g.group_name or "VPN") }
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return { groups = out, servers = servers }
+end
+
+-- ---------------- Discord alerts settings (webhook never returned to the page in full)
+local ALERTS = "/etc/machome/alerts.json"
+local WH_PAT = "^https://[%w%.]*discord[%w]*%.com/api/webhooks/%d+/[%w_%-]+$"
+local ALERT_TYPES = { "vpn", "dns", "wan", "newdev", "security", "temp", "firmware", "upgrade", "speed", "login", "weekly", "backup", "health", "config", "isp", "wifi", "schedule", "presence", "data", "upload", "devwatch", "monthly", "ping", "adspike" }
+
+-- event timeline (written by extras.lua for every alert): newest first, last 100
+function M.get_events()
+    local ok, v = pcall(cjson.decode, readf("/tmp/machome/events.json") or "[]")
+    local list = {}
+    if ok and type(v) == "table" then for i = #v, math.max(1, #v - 99), -1 do list[#list + 1] = v[i] end end
+    return { list = list, n = #list, total = (ok and type(v) == "table") and #v or 0, now = os.time() }
+end
+-- clear the event timeline (Recent events window): range "hour" | "day" | "week" removes the events from that
+-- period (the newest ones), "all" removes everything. Cleans the RAM copy and the copy kept for reboots, and tells
+-- the sampler (which keeps the list in memory) through /tmp/machome/events_clear.
+function M.clear_events(args)
+    local secs = ({ hour = 3600, day = 86400, week = 7 * 86400, all = 0 })[type(args) == "table" and args.range or ""]
+    if not secs then return { ok = false, err = "unknown range" } end
+    local since = secs == 0 and 0 or (os.time() - secs)
+    -- 2026-11-18: optional kinds = { "vpn", "ping", ... }: only events of those kinds
+    local kinds = nil
+    if type(args.kinds) == "table" and #args.kinds > 0 then
+        kinds = {}; for _, k in ipairs(args.kinds) do if type(k) == "string" and k:match("^[%w_]+$") then kinds[k] = true end end
+        if not next(kinds) then return { ok = false, err = "bad kinds" } end
+    end
+    local function filt(p)
+        local ok, v = pcall(cjson.decode, readf(p) or "[]"); if not ok or type(v) ~= "table" then return 0 end
+        local keep, n = {}, 0
+        for _, e in ipairs(v) do if type(e) == "table" and ((tonumber(e.t) or 0) < since or (kinds and not kinds[tostring(e.k)])) then keep[#keep + 1] = e else n = n + 1 end end
+        local f = io.open(p .. ".tmp", "w"); if f then f:write(#keep > 0 and cjson.encode(keep) or "[]"); f:close(); os.rename(p .. ".tmp", p) end
+        return n
+    end
+    local kl = {}; for k in pairs(kinds or {}) do kl[#kl + 1] = k end
+    local f = io.open("/tmp/machome/events_clear", "w"); if f then f:write(kinds and cjson.encode({ since = since, kinds = kl }) or tostring(since)); f:close() end
+    local n = filt("/tmp/machome/events.json")
+    if readf("/etc/machome/save/events.json") then filt("/etc/machome/save/events.json") end
+    return { ok = true, removed = n }
+end
+local function jdec(p, def) local s = readf(p); if not s or s == "" then return def end; local ok, v = pcall(cjson.decode, s); return (ok and type(v) == "table") and v or def end
+
+function M.get_alerts()
+    local c = jdec(ALERTS, {})
+    local wh = c.webhook or ""
+    local types = {}
+    for _, k in ipairs(ALERT_TYPES) do types[k] = not (type(c.types) == "table" and c.types[k] == false) end
+    return { enabled = c.enabled == true, has_webhook = wh ~= "", hint = (wh ~= "") and ("…" .. wh:sub(-6)) or "",
+        types = types, temp_f = tonumber(c.temp_f) or 185, ping_ms = tonumber(c.ping_ms) or 75,speed_daily = c.speed_daily ~= false, speed_hour = tonumber(c.speed_hour) or 3,
+        autoheal = c.autoheal ~= false, failover = c.failover ~= false, autoreboot = c.autoreboot ~= false, wifi_report = c.wifi_report ~= false, weekly_day = tonumber(c.weekly_day) or 0, weekly_hour = tonumber(c.weekly_hour) or 9,
+        wan_heal = c.wan_heal ~= false, dns_heal = c.dns_heal ~= false, ts_heal = c.ts_heal ~= false,
+        wifi_heal = c.wifi_heal ~= false, vpn_switch = c.vpn_switch == true, speed_retest = c.speed_retest ~= false,
+        nas_retry = c.nas_retry ~= false, nas_wake = c.nas_wake ~= false, leak_fix = c.leak_fix ~= false, ct_relief = c.ct_relief ~= false,
+        storage_trim = c.storage_trim ~= false, ap_uplink = c.ap_uplink ~= false,
+        svc_autostop = c.svc_autostop == true, chan_auto = c.chan_auto == true, modem_restart = c.modem_restart == true,
+        -- 2026-11-18
+        sqm_auto = c.sqm_auto == true, stuck_fix = c.stuck_fix ~= false, mem_fix = c.mem_fix ~= false, vpn_keep_provider = c.vpn_keep_provider ~= false, vpn_autoforget = c.vpn_autoforget ~= false,
+        adg_watch = c.adg_watch == true, vpn_return = c.vpn_return ~= false,
+        ev_keep_days = tonumber(c.ev_keep_days) or 14, digest_hour = tonumber(c.digest_hour) or 18,
+        digest_types = type(c.digest_types) == "table" and c.digest_types or {}, mutes = (function()
+            local m = {}; for k, u in pairs(type(c.mutes) == "table" and c.mutes or {}) do if tonumber(u) and tonumber(u) > os.time() then m[k] = tonumber(u) end end
+            return next(m) and m or cjson.empty_object or {} end)() }
+end
+
+function M.set_alerts(args)
+    args = args or {}
+    local c = jdec(ALERTS, {})
+    if type(args.webhook) == "string" and args.webhook ~= "" then
+        local w = trim(args.webhook)
+        if not w:match(WH_PAT) then return { ok = false, err = "That doesn't look like a Discord webhook URL (https://discord.com/api/webhooks/…)" } end
+        c.webhook = w
+    end
+    if args.clear_webhook == true then c.webhook = "" end
+    if args.enabled ~= nil then c.enabled = args.enabled == true end
+    if type(args.types) == "table" then
+        c.types = type(c.types) == "table" and c.types or {}
+        for _, k in ipairs(ALERT_TYPES) do if args.types[k] ~= nil then c.types[k] = args.types[k] == true end end
+    end
+    if tonumber(args.temp_f) then c.temp_f = math.max(120, math.min(220, math.floor(tonumber(args.temp_f)))) end
+    if tonumber(args.ping_ms) then c.ping_ms = math.max(20, math.min(1000, math.floor(tonumber(args.ping_ms)))) end   -- high WAN ping alert limit (2026-11-17)
+    if args.speed_daily ~= nil then c.speed_daily = args.speed_daily == true end
+    if tonumber(args.speed_hour) then c.speed_hour = math.max(0, math.min(23, math.floor(tonumber(args.speed_hour)))) end
+    if args.autoheal ~= nil then c.autoheal = args.autoheal == true end
+    if args.failover ~= nil then c.failover = args.failover == true end
+    if args.autoreboot ~= nil then c.autoreboot = args.autoreboot == true end
+    if args.wifi_report ~= nil then c.wifi_report = args.wifi_report == true end
+    for _, k in ipairs({ "wan_heal", "dns_heal", "ts_heal", "wifi_heal", "vpn_switch", "speed_retest",
+                         "nas_retry", "nas_wake", "leak_fix", "ct_relief", "storage_trim", "ap_uplink", "svc_autostop", "chan_auto", "modem_restart",
+                         "sqm_auto", "stuck_fix", "mem_fix", "vpn_keep_provider", "vpn_autoforget", "adg_watch", "vpn_return" }) do if args[k] ~= nil then c[k] = args[k] == true end end
+    -- 2026-11-18: how long Recent events are kept, and the daily digest
+    if tonumber(args.ev_keep_days) then c.ev_keep_days = math.max(1, math.min(30, math.floor(tonumber(args.ev_keep_days)))) end
+    if tonumber(args.digest_hour) then c.digest_hour = math.max(0, math.min(23, math.floor(tonumber(args.digest_hour)))) end
+    if type(args.digest_types) == "table" then
+        local ok = {}; for _, k in ipairs(ALERT_TYPES) do ok[k] = true end
+        local list = {}; for _, k in ipairs(args.digest_types) do if ok[k] then list[#list + 1] = k end end
+        c.digest_types = list
+    end
+    if tonumber(args.weekly_day) then c.weekly_day = math.max(0, math.min(6, math.floor(tonumber(args.weekly_day)))) end
+    if tonumber(args.weekly_hour) then c.weekly_hour = math.max(0, math.min(23, math.floor(tonumber(args.weekly_hour)))) end
+    if tonumber(args.plan_down) then c.plan_down = math.max(1, math.min(100000, tonumber(args.plan_down))) end
+    if tonumber(args.plan_up) then c.plan_up = math.max(1, math.min(100000, tonumber(args.plan_up))) end
+    os.execute("mkdir -p /etc/machome")
+    local f = io.open(ALERTS .. ".tmp", "w"); if not f then return { ok = false, err = "could not save" } end
+    f:write(cjson.encode(c)); f:close()
+    os.execute("chmod 600 " .. ALERTS .. ".tmp; mv " .. ALERTS .. ".tmp " .. ALERTS)
+    return { ok = true }
+end
+
+function M.test_alert()
+    local c = jdec(ALERTS, {})
+    local w = c.webhook or ""
+    if not w:match(WH_PAT) then return { ok = false, err = "No webhook saved yet" } end
+    local host = trim(readf("/proc/sys/kernel/hostname") or "Router")
+    local body = cjson.encode({ username = host .. " router", embeds = { {
+        title = "✅ Test alert from your " .. host, color = 3446617,
+        description = "Discord alerts are working. You'll be notified about VPN, DNS and internet problems, new devices, security changes, temperature, firmware updates and nightly speed tests.",
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ") } } })
+    local f = io.open("/tmp/machome/wh_test.json", "w"); if not f then return { ok = false, err = "tmp write failed" } end
+    f:write(body); f:close()
+    local p = io.popen("curl -s -m 12 -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' --data-binary @/tmp/machome/wh_test.json '" .. w .. "' 2>/dev/null")
+    local code = p and trim(p:read("*a") or "") or ""
+    if p then p:close() end
+    os.remove("/tmp/machome/wh_test.json")
+    return { ok = code == "204" or code == "200", code = code }
+end
+
+-- ---------------- NAS backup, AdGuard on the NAS, device pause, ISP report, hardware acceleration
+local function more() return dofile("/usr/lib/machome/more.lua") end
+local function lrpc(obj, method, params)
+    local P = more()
+    P.writef("/tmp/machome/lrpc_m.json", cjson.encode({ jsonrpc = "2.0", id = 1, method = "call", params = { "", obj, method, params or {} } }))
+    local p = io.popen("curl -s -m 20 -H 'glinet: 1' -H 'Content-Type: application/json' --data-binary @/tmp/machome/lrpc_m.json http://127.0.0.1/rpc 2>/dev/null")
+    local out = p and p:read("*a") or ""; if p then p:close() end
+    local ok, v = pcall(cjson.decode, out)
+    if ok and type(v) == "table" then if v.error then return nil, v.error end; return v.result end
+end
+
+function M.get_nas_backup()
+    local r = more().nas_public()
+    r.running = readf("/tmp/machome/nas_running") ~= nil
+    r.verifying = readf("/tmp/machome/nas_verifying") ~= nil
+    return r
+end
+-- VPN leak test (background, ~30 s): run + read the result
+function M.run_leaktest()
+    if readf("/tmp/machome/leak_running") then return { ok = true, msg = "Already running" } end
+    os.execute("mkdir -p /tmp/machome; echo 1 > /tmp/machome/leak_running; (lua -e 'local P=dofile(\"/usr/lib/machome/more.lua\"); P.leak_test()' >/dev/null 2>&1; rm -f /tmp/machome/leak_running) &")
+    return { ok = true }
+end
+function M.get_leaktest()
+    local ok, v = pcall(cjson.decode, readf("/tmp/machome/leaktest.json") or "null")
+    local okw, w = pcall(cjson.decode, readf("/tmp/machome/dnswatch.json") or "[]")
+    return { running = readf("/tmp/machome/leak_running") ~= nil, result = (ok and type(v) == "table") and v or cjson.null,
+             watch = (okw and type(w) == "table") and w or {} }
+end
+-- restore drill: download + check the newest backup on the NAS (background; never blocks nginx)
+function M.run_nas_verify()
+    if readf("/tmp/machome/nas_running") or readf("/tmp/machome/nas_verifying") then return { ok = true, msg = "Already running" } end
+    os.execute("mkdir -p /tmp/machome; echo 1 > /tmp/machome/nas_verifying; (lua -e 'local P=dofile(\"/usr/lib/machome/more.lua\"); P.nas_verify()' >/dev/null 2>&1; rm -f /tmp/machome/nas_verifying) &")
+    return { ok = true }
+end
+function M.set_nas_backup(args)
+    local ok, err = more().nas_set(args or {})
+    if not ok then return { ok = false, err = err } end
+    return { ok = true, pubkey = more().nas_public().pubkey }
+end
+function M.run_nas_backup()
+    if readf("/tmp/machome/nas_running") then return { ok = true, msg = "A backup is already running" } end
+    os.execute("mkdir -p /tmp/machome; echo 1 > /tmp/machome/nas_running; (lua -e 'local P=dofile(\"/usr/lib/machome/more.lua\"); P.nas_run()' >/dev/null 2>&1; rm -f /tmp/machome/nas_running) &")
+    return { ok = true }
+end
+
+function M.get_nas_adguard() return more().adg_status() end
+function M.set_nas_adguard(args)
+    local ok, err = more().adg_set(args or {})
+    if not ok then return { ok = false, err = err } end
+    return { ok = true, status = more().adg_status() }
+end
+
+function M.pause_device(args)
+    args = args or {}
+    local ok, r = more().pause(args.mac, args.pause == true, args.ip, lrpc)
+    if not ok then return { ok = false, err = type(r) == "string" and r or "The router didn't accept the change" } end
+    return { ok = true }
+end
+
+-- "It's mine": mark a new device (or all new devices) as known; the sampler applies it within ~10 s
+function M.ack_device(args)
+    args = args or {}
+    local line
+    if args.all == true then line = "ALL"
+    else
+        line = tostring(args.mac or ""):upper()
+        if not line:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") then return { ok = false, err = "Invalid device address" } end
+    end
+    local f = io.open("/tmp/machome/ack_devices", "a")
+    if not f then return { ok = false, err = "Couldn't save" } end
+    f:write(line .. "\n"); f:close()
+    return { ok = true }
+end
+
+-- schedules, who's home, data usage, Wake-on-LAN, speed history, AdGuard per device: life.lua, one entry point
+function M.life(args)
+    local ok, L = pcall(dofile, "/usr/lib/machome/life.lua")
+    if not ok or type(L) ~= "table" then return { ok = false, err = "life module missing" } end
+    local ok2, r = pcall(L.rpc, args or {})
+    if not ok2 then return { ok = false, err = tostring(r) } end
+    return r
+end
+
+function M.get_isp_report() return more().isp_report(6) end
+
+function M.get_accel()
+    local function run(c) local p = io.popen(c .. " 2>/dev/null"); if not p then return "" end; local s = p:read("*a") or ""; p:close(); return s end
+    local en = trim(run("uci -q get mtkhnat.global.enable")) == "1"
+    local bound = tonumber(trim(run("grep -c BND /sys/kernel/debug/hnat/all_entry"))) or 0
+    return { supported = readf("/etc/config/mtkhnat") ~= nil, enabled = en, bound = bound }
+end
+
+-- ---------------- Wi-Fi uplink (repeater) link quality: signal, PHY rate, retries. Read-only, fast (no scan).
+-- GL's repeater.get_status has SSID/IP/DNS/MAC but no signal; MediaTek's apcli shows "unknown" in iwinfo,
+-- so fall back to the driver's per-chain RSSI + last TX/RX rate ("iwpriv <dev> stat").
+function M.get_uplink()
+    local function run(c) local p = io.popen(c .. " 2>/dev/null"); if not p then return "" end; local s = p:read("*a") or ""; p:close(); return s end
+    local dev = trim(run("ubus call network.interface.wwan status | jsonfilter -e '@.l3_device'"))
+    if not dev or not dev:match("^[%w%._-]+$") then return { ok = false } end
+    local out = { ok = true, dev = dev }
+    local info = run("iwinfo " .. dev .. " info")
+    out.signal = tonumber(info:match("Signal: (%-%d+) dBm"))
+    out.noise = tonumber(info:match("Noise: (%-%d+) dBm"))
+    out.rate = tonumber(info:match("Bit Rate: ([%d%.]+) MBit/s"))
+    local st = run("iwpriv " .. dev .. " stat")
+    local rl = st:match("Rssi:([^\n]*)")
+    if rl then
+        local best, n = nil, 0
+        for v in rl:gmatch("%-?%d+") do v = tonumber(v); if v and v < 0 and v > -100 then n = n + 1; if not best or v > best then best = v end end end
+        if not out.signal and best then out.signal = best end
+        out.chains = n
+    end
+    local function rate(line)
+        if not line then return nil end
+        return { nss = tonumber(line:match("NSS(%d+)")), mcs = tonumber(line:match("MCS(%d+)")), bw = tonumber(line:match("BW(%d+)")),
+                 mode = line:match("(EHT)") or line:match("(HE)") or line:match("(VHT)") or line:match("(HT)") }
+    end
+    out.tx = rate(st:match("Last TX Rate%s*=%s*([^\n]*)")); out.rx = rate(st:match("Last RX Rate%s*=%s*([^\n]*)"))
+    out.tx_per = tonumber(st:match("Tx fail count%s*=%s*%d+, PER=([%d%.]+)%%"))
+    return out
+end
+
+-- ---------------- trackers + repairs (watch.lua, 2026-11-14)
+local function watchmod() local ok, W = pcall(dofile, "/usr/lib/machome/watch.lua"); return ok and type(W) == "table" and W or nil end
+--- live state for the page: Tailscale key expiry, watched devices, cable modem summary
+function M.get_watch()
+    local w = jdec("/tmp/machome/watch.json", {})
+    local m = jdec("/tmp/machome/modem.json", nil)
+    local dv = jdec("/etc/machome/devwatch.json", {})
+    return { ts_expiry = w.ts_expiry or cjson.null, devwatch = w.devwatch or cjson.null, watched = type(dv.devices) == "table" and dv.devices or {},
+        modem = m or cjson.null, modem_set = readf("/etc/machome/modem.json") ~= nil, mrs = w.mrs or cjson.null }
+end
+--- "Cancel restart" on the Home tab's warning: cancels the planned modem restart for THIS outage only
+function M.modem_rs_cancel(args)
+    local since = type(args) == "table" and tonumber(args.since)
+    if not since then return { ok = false, err = "bad request" } end
+    local f = io.open("/tmp/machome/mrs_cancel", "w"); if not f then return { ok = false, err = "could not save" } end
+    f:write(tostring(math.floor(since))); f:close()
+    return { ok = true }
+end
+--- "Check (no restart)": logs in to the gateway and finds its Restart button. Never restarts anything.
+function M.modem_rs_check()
+    local W = watchmod(); if not W or not W.modem_restart then return { ok = false, err = "module missing" } end
+    local r, err = W.modem_restart(true)
+    if not r then return { ok = false, err = err } end
+    return r
+end
+--- Control Center → "Restart modem" (2026-11-15): presses Restart on the cable gateway now, after the page's confirmation.
+--- Router mode only, gateway password saved, not during a speed test or firmware upgrade, at most once every 10 minutes.
+function M.modem_restart_now()
+    local function run(c) local p = io.popen(c .. " 2>/dev/null"); if not p then return "" end; local s = p:read("*a") or ""; p:close(); return s end
+    if trim(run("uci -q get glconfig.general.mode")) == "ap" then return { ok = false, err = "this router is in access point mode" } end
+    if readf("/etc/machome/modem.json") == nil then return { ok = false, err = "the cable modem isn't connected (Settings → Cable modem)" } end
+    local now, last = os.time(), tonumber(trim(readf("/tmp/machome/mrs_manual_t") or "")) or 0
+    if now - last < 600 then return { ok = false, err = "the modem was restarted " .. math.floor((now - last) / 60) .. " min ago; give it 10 minutes" } end
+    local stt = jdec("/tmp/machome/speedtest.json", {})
+    if stt.running then return { ok = false, err = "a speed test is running; try again when it finishes" } end
+    if trim(run("pidof sysupgrade")) ~= "" then return { ok = false, err = "a firmware upgrade is running" } end
+    local W = watchmod(); if not W or not W.modem_restart then return { ok = false, err = "module missing" } end
+    local r, err = W.modem_restart(false)
+    if not r then
+        os.execute("logger -t machome 'modem-restart: Restart modem from the Control Center failed'")
+        return { ok = false, err = err }
+    end
+    local f = io.open("/tmp/machome/mrs_manual_t", "w"); if f then f:write(tostring(now)); f:close() end
+    os.execute("logger -t machome 'modem-restart: pressed Restart on the cable gateway (Control Center)'")
+    return { ok = true }
+end
+--- VPN Health card → "Monitor 5 h" (2026-11-15): a read-only, 5-hour watch of every WireGuard tunnel
+--- (/usr/lib/machome/vpn_watch.lua) with one Discord summary at the end. Status lives in /tmp/machome/vpnwatch.json.
+local VW = "/tmp/machome/vpnwatch.json"
+local function vw_alive()
+    local pid = tonumber(trim(readf("/tmp/machome/vpnwatch.launch.pid") or ""))
+    if not pid then return false end
+    local cmd = readf("/proc/" .. pid .. "/cmdline") or ""
+    return cmd:find("vpn_watch.lua", 1, true) ~= nil
+end
+function M.vpnwatch_status()
+    local ok, s = pcall(cjson.decode, readf(VW) or "{}")
+    if not ok or type(s) ~= "table" then s = {} end
+    if s.running and not vw_alive() then s.running = false; s.lost = true end   -- stopped by a reboot or a crash
+    s.now = os.time()
+    return s
+end
+function M.vpnwatch_start()
+    local function run(c) local p = io.popen(c .. " 2>/dev/null"); if not p then return "" end; local s = p:read("*a") or ""; p:close(); return s end
+    if trim(run("uci -q get glconfig.general.mode")) == "ap" then return { ok = false, err = "this router is in access point mode" } end
+    if vw_alive() then return { ok = false, err = "a VPN monitor is already running" } end
+    local nets = "\n" .. run("ls -1 /sys/class/net")   -- WireGuard or OpenVPN client tunnel
+    if not (nets:find("\nwgclient%d") or nets:find("\novpnclient%d")) then return { ok = false, err = "no VPN tunnel is up" } end
+    if readf("/usr/lib/machome/vpn_watch.lua") == nil then return { ok = false, err = "module missing" } end
+    local now = os.time()
+    local f = io.open(VW, "w"); if f then f:write(cjson.encode({ running = true, start = now, ["end"] = now + 300 * 60, starting = true })); f:close() end
+    os.execute("rm -f /tmp/machome/vpnwatch.stop; start-stop-daemon -S -b -m -p /tmp/machome/vpnwatch.launch.pid -x /usr/bin/lua -- /usr/lib/machome/vpn_watch.lua 300 >/dev/null 2>&1")
+    os.execute("logger -t machome 'VPN monitor: started for 5 hours (Home tab)'")
+    return { ok = true, start = now, ["end"] = now + 300 * 60 }
+end
+--- VPN Health card → "Clear all VPN alerts" (2026-11-16): the sampler resets every tunnel's state on its next check
+--- (≤10 s): VPN warnings cleared, failover rules removed (devices back on their own tunnels), drop/blip history cleared.
+function M.vpn_clear()
+    local f = io.open("/tmp/machome/vpn_reset", "w"); if f then f:write(tostring(os.time())); f:close() end
+    os.execute("logger -t machome 'vpn check: Clear all VPN alerts requested (Home tab)'")
+    return { ok = f ~= nil }
+end
+--- Home tab alert banner → "Clear all" (2026-11-18): VPN checks, packet loss (VPN + internet) and the high-ping check
+--- all start fresh on the sampler's next check (≤10 s). The page hides the other banners itself (like Dismiss).
+function M.alerts_clear()
+    local function put(p, s, mode) local f = io.open(p, mode or "w"); if f then f:write(s); f:close(); return true end end
+    local ok = put("/tmp/machome/vpn_reset", tostring(os.time())) and put("/tmp/machome/pl_reset", "vpn\nwan\n", "a") and put("/tmp/machome/ping_reset", tostring(os.time()))
+    os.execute("logger -t machome 'alerts: Clear all requested (Home tab)'")
+    return { ok = ok == true }
+end
+--- mute one alert type for a while (banner / Recent events, 2026-11-18): secs 0 = unmute. Muted = no Discord message
+--- and no banner; still recorded in Recent events.
+function M.alert_mute(args)
+    local kind, secs = type(args) == "table" and tostring(args.kind or "") or "", type(args) == "table" and tonumber(args.secs) or nil
+    local valid = false; for _, k in ipairs(ALERT_TYPES) do if k == kind then valid = true end end
+    if not valid or not secs then return { ok = false, err = "bad request" } end
+    local c = jdec(ALERTS, {})
+    c.mutes = type(c.mutes) == "table" and c.mutes or {}
+    for k, u in pairs(c.mutes) do if not tonumber(u) or tonumber(u) <= os.time() then c.mutes[k] = nil end end
+    if secs <= 0 then c.mutes[kind] = nil else c.mutes[kind] = os.time() + math.min(secs, 8 * 86400) end
+    if not next(c.mutes) then c.mutes = nil end
+    local f = io.open(ALERTS .. ".tmp", "w"); if not f then return { ok = false, err = "can't save" } end
+    f:write(cjson.encode(c)); f:close(); os.execute("chmod 600 " .. ALERTS .. ".tmp"); os.rename(ALERTS .. ".tmp", ALERTS)
+    os.execute("logger -t machome 'alerts: " .. kind .. (secs <= 0 and " unmuted" or (" muted for " .. math.floor(secs / 60) .. " min")) .. " (Home tab)'")
+    return { ok = true, kind = kind, ["until"] = (c.mutes and c.mutes[kind]) or cjson.null }
+end
+--- forget removed VPNs (2026-11-18): what's on a tunnel right now, the same way the sampler sees it
+local function vpn_cur()
+    local okr, rpc = pcall(require, "oui.rpc"); if not okr then return nil end
+    local st = rpc.call("vpn-client", "get_status", {})
+    if type(st) ~= "table" or type(st.status_list) ~= "table" then return nil end
+    local groups = M.get_vpn_providers().groups or {}
+    local cur = { providers = {}, servers = {}, ifaces = {} }
+    for _, v in ipairs(st.status_list) do
+        if v.via then
+            local prov = groups[tostring(v.group_id)] or v.name or v.via
+            cur.providers[tostring(prov):lower()] = true
+            if v.name then cur.providers[tostring(v.name):lower()] = true end
+            cur.servers[(tostring(prov) .. "|" .. tostring(v.peer_name or v.via)):lower()] = true
+            cur.ifaces[v.via] = true
+        end
+    end
+    return cur
+end
+function M.vpn_forget_preview(args)
+    local P = more(); if type(P) ~= "table" or not P.vpn_forget_plan then return { ok = false, err = "module missing" } end
+    local cur = vpn_cur(); if not cur then return { ok = false, err = "couldn't read the VPN list" } end
+    local c = jdec(ALERTS, {})
+    local kp = (type(args) == "table" and args.keep_provider ~= nil) and (args.keep_provider == true) or (c.vpn_keep_provider ~= false)
+    local plan = P.vpn_forget_plan(cur, kp)
+    return { ok = true, total = plan.total, items = plan.items, keep_provider = kp }
+end
+function M.vpn_forget_apply(args)
+    local P = more(); if type(P) ~= "table" or not P.vpn_forget_plan then return { ok = false, err = "module missing" } end
+    local cur = vpn_cur(); if not cur then return { ok = false, err = "couldn't read the VPN list" } end
+    local c = jdec(ALERTS, {})
+    local kp = (type(args) == "table" and args.keep_provider ~= nil) and (args.keep_provider == true) or (c.vpn_keep_provider ~= false)
+    local plan = P.vpn_forget_plan(cur, kp)
+    P.vpn_forget_apply_files(plan)
+    if #plan.rel > 0 then local f = io.open("/tmp/machome/vpn_forget_req.json", "w"); if f then f:write(cjson.encode({ rel = plan.rel })); f:close() end end
+    os.execute("logger -t machome 'vpn forget: " .. plan.total .. " item(s) requested (Home tab)'")
+    return { ok = true, total = plan.total }
+end
+--- Outage & lag log for the ISP (owner's pick 9, 2026-11-18): every outage (with its likely cause), lag episode,
+--- modem restart and slow speed test of the last N days (default 30), a per-day summary and a ready-to-send text.
+function M.isp_log(args)
+    local days = math.max(1, math.min(31, tonumber(type(args) == "table" and args.days or nil) or 30))
+    local now = os.time(); local from = now - days * 86400
+    local function hm(t) return (os.date("%I:%M %p", t):gsub("^0", "")) end
+    local function day(t) return (os.date("%a %b %d", t):gsub(" 0", " ")) end
+    local function dur(s) s = math.floor(s or 0); if s < 90 then return s .. " s" elseif s < 5400 then return math.floor(s / 60 + 0.5) .. " min" else return string.format("%.1f h", s / 3600) end end
+    local ev, tot = {}, { outages = 0, down_s = 0, lag = 0, lag_s = 0, modem = 0, slow = 0 }
+    local CAUSE = { isp = "your ISP's side (the modem kept answering)", home = "the modem or its cable (the modem didn't answer either)", mixed = "the modem or the line was unstable" }
+    local causes = jdec("/etc/machome/np_outages.json", {})
+    for _, o in ipairs(jdec("/etc/machome/outages.json", {})) do
+        if type(o) == "table" and tonumber(o.s) and tonumber(o.e) and o.e >= from then
+            local cz; for _, c in ipairs(causes) do if type(c) == "table" and math.abs((tonumber(c.e) or 0) - o.e) < 300 then cz = CAUSE[c.cause] end end
+            tot.outages = tot.outages + 1; tot.down_s = tot.down_s + (o.e - o.s)
+            ev[#ev + 1] = { t = o.s, kind = "outage", text = "Internet down " .. dur(o.e - o.s) .. " (" .. hm(o.s) .. " – " .. hm(o.e) .. ")" .. (cz and (": likely " .. cz) or "") }
+        end
+    end
+    for _, p in ipairs(jdec("/etc/machome/ping_log.json", {})) do
+        if type(p) == "table" and tonumber(p.s) and tonumber(p.e) and p.e >= from then
+            tot.lag = tot.lag + 1; tot.lag_s = tot.lag_s + (p.e - p.s)
+            ev[#ev + 1] = { t = p.s, kind = "lag", text = (p.kind == "spiky" and ("Lag spikes (up to " .. tostring(p.pct or "?") .. "% of checks over the limit)") or ("High ping (up to " .. math.floor(tonumber(p.worst) or 0) .. " ms)")) ..
+                " for " .. dur(p.e - p.s) .. " (" .. hm(p.s) .. " – " .. hm(p.e) .. ")" }
+        end
+    end
+    local keep = jdec("/etc/machome/np_keep.json", {})
+    for _, b in ipairs(type(keep.modem_boots) == "table" and keep.modem_boots or {}) do
+        if type(b) == "table" and tonumber(b.t) and b.t >= from then tot.modem = tot.modem + 1; ev[#ev + 1] = { t = b.t, kind = "modem", text = "Cable modem restarted" .. (tonumber(b.up) and (" (it had been up " .. dur(b.up) .. ")") or "") } end
+    end
+    local a = jdec(ALERTS, {}); local plan = tonumber(a.plan_down) or 2000
+    for _, h in ipairs(jdec("/etc/machome/speedtest-history.json", {})) do
+        if type(h) == "table" and h.kind == "wan" and tonumber(h.time) and h.time >= from and tonumber(h.down) and h.down < plan * 0.7 then
+            tot.slow = tot.slow + 1
+            ev[#ev + 1] = { t = h.time, kind = "slow", text = "Speed test " .. math.floor(h.down) .. " / " .. math.floor(tonumber(h.up) or 0) .. " Mbps (" .. math.floor(h.down * 100 / plan) .. "% of your " .. plan .. " Mbps plan)" }
+        end
+    end
+    table.sort(ev, function(x, y) return x.t > y.t end)
+    -- per day: middle ping, lag-spike share, no-answer share, evening middle ping (7-11 PM)
+    local dmap, daily = {}, {}
+    for _, x in ipairs(jdec("/etc/machome/wan_hours.json", {})) do
+        if type(x) == "table" and tonumber(x.h) and x.h >= from and tonumber(x.med) then
+            local d = os.date("%Y-%m-%d", x.h); local hr = tonumber(os.date("%H", x.h))
+            local r = dmap[d] or { d = d, t = x.h, meds = {}, eve = {}, spk = 0, loss = 0, n = 0 }
+            table.insert(r.meds, x.med); if hr >= 19 and hr < 23 then table.insert(r.eve, x.med) end
+            r.spk = r.spk + (tonumber(x.spk) or 0); r.loss = r.loss + (tonumber(x.loss) or 0); r.n = r.n + 1
+            dmap[d] = r
+        end
+    end
+    local function med(t) if #t == 0 then return nil end; table.sort(t); return t[math.ceil(#t / 2)] end
+    for _, r in pairs(dmap) do daily[#daily + 1] = { d = r.d, t = r.t, ping = med(r.meds), eve = med(r.eve) or cjson.null, spk = math.floor(r.spk / r.n * 10 + 0.5) / 10, loss = math.floor(r.loss / r.n * 100 + 0.5) / 100, hours = r.n } end
+    table.sort(daily, function(x, y) return x.t > y.t end)
+    local up = 100 - tot.down_s * 100 / (days * 86400)
+    local lines = { string.format("Last %d days: %d outage%s (%s down in total, %.2f%% online) · %d lag episode%s (%s) · %d modem restart%s · %d slow speed test%s.",
+        days, tot.outages, tot.outages == 1 and "" or "s", dur(tot.down_s), up, tot.lag, tot.lag == 1 and "" or "s", dur(tot.lag_s), tot.modem, tot.modem == 1 and "" or "s", tot.slow, tot.slow == 1 and "" or "s") }
+    if type(keep.evening) == "table" and (keep.evening.days or 0) >= 4 then
+        lines[#lines + 1] = string.format("Evenings (7-11 PM): worse on %d of the last %d days (ping %s ms vs %s ms during the day).", keep.evening.slow or 0, keep.evening.days or 0, tostring(math.floor(keep.evening.eve or 0)), tostring(math.floor(keep.evening.rest or 0)))
+    end
+    lines[#lines + 1] = ""
+    for i, e in ipairs(ev) do if i <= 60 then lines[#lines + 1] = "• " .. day(e.t) .. " " .. hm(e.t) .. " · " .. e.text end end
+    if #ev > 60 then lines[#lines + 1] = "… and " .. (#ev - 60) .. " more" end
+    if #ev == 0 then lines[#lines + 1] = "No outages, lag episodes, modem restarts or slow speed tests recorded in this period." end
+    return { ok = true, days = days, events = ev, daily = daily, totals = tot, uptime = math.floor(up * 100 + 0.5) / 100, text = table.concat(lines, "\n"),
+        since = (function() local h = jdec("/etc/machome/wan_hours.json", {}); return (h[1] and h[1].h) or cjson.null end)() }
+end
+function M.isp_log_send(args)
+    local r = M.isp_log(args)
+    local f = io.open("/tmp/machome/isp_log_send.json", "w"); if not f then return { ok = false, err = "can't write" } end
+    f:write(cjson.encode({ title = "📋 Internet log: last " .. r.days .. " days", text = r.text })); f:close()
+    return { ok = true }
+end
+--- VPN outage log (owner, 2026-11-20): REAL VPN outages only (pings AND web pages failed through the tunnel, or no
+--- handshake / tunnel), from /etc/machome/vpn_outages.json (extras), up to 60 days. Ready text for a provider's support.
+--- args: { days = 1..60, provider = "NordVPN" (optional) }. Names and server names only (no addresses or keys).
+function M.vpn_log(args)
+    local days = math.max(1, math.min(60, tonumber(type(args) == "table" and args.days or nil) or 30))
+    local want = type(args) == "table" and type(args.provider) == "string" and args.provider ~= "" and args.provider or nil
+    local now = os.time(); local from = now - days * 86400
+    local function hm(t) return (os.date("%I:%M %p", t):gsub("^0", "")) end
+    local function day(t) return (os.date("%a %b %d", t):gsub(" 0", " ")) end
+    local function dur(s) s = math.floor(s or 0); if s < 90 then return s .. " s" elseif s < 5400 then return math.floor(s / 60 + 0.5) .. " min" else return string.format("%.1f h", s / 3600) end end
+    local ev, provs, per = {}, {}, {}
+    for _, e in ipairs(jdec("/etc/machome/vpn_outages.json", {})) do
+        if type(e) == "table" and tonumber(e.t) and e.t >= from then
+            local prov = tostring(e.provider or e.label or "VPN")
+            provs[prov] = true
+            if not want or want == prov then
+                -- still open = no end, not cut short by a restart, not added from the alert history (no end recorded)
+                local open = not e["end"] and not e.cut and not e.src
+                local d = tonumber(e.d) or (open and (now - e.t)) or nil
+                local srv = e.peer and tostring(e.peer) or nil
+                local k = prov .. (srv and (" · " .. srv) or "")
+                per[k] = per[k] or { n = 0, s = 0, u = 0 }; per[k].n = per[k].n + 1; per[k].s = per[k].s + (d or 0); if not d then per[k].u = per[k].u + 1 end
+                local bits = { tostring(e.label or e.via or prov) .. (srv and (", server " .. srv) or "") }
+                if open then bits[#bits + 1] = "DOWN NOW for " .. dur(d)
+                elseif d then bits[#bits + 1] = "down " .. dur(d) .. " (" .. hm(e.t) .. " – " .. hm(e["end"]) .. ")"
+                else bits[#bits + 1] = e.src and "down (length not recorded)" or "down (end not seen: the router or its checks restarted)" end
+                if e.why then bits[#bits + 1] = tostring(e.why) end
+                if e.moved then bits[#bits + 1] = "devices moved to " .. tostring(e.moved) .. " (still on the VPN)" end
+                if (tonumber(e.heals) or 0) > 0 then bits[#bits + 1] = "auto-heal restarted it " .. e.heals .. "×" end
+                if e.gaveup then bits[#bits + 1] = "auto-heal gave up" end
+                ev[#ev + 1] = { t = e.t, d = d or cjson.null, open = open, provider = prov, server = srv or cjson.null, text = table.concat(bits, " · ") }
+            end
+        end
+    end
+    table.sort(ev, function(x, y) return x.t > y.t end)
+    local plist = {}; for p in pairs(provs) do plist[#plist + 1] = p end; table.sort(plist)
+    local sums = {}; for k, v in pairs(per) do sums[#sums + 1] = { name = k, n = v.n, s = v.s, u = v.u } end
+    table.sort(sums, function(x, y) return x.n > y.n end)
+    local lines = { string.format("VPN outages, last %d days%s: %d. An outage = 30 s or more with no pings AND no web page through the tunnel (or no handshake), checked by the router every 10 s with continuous pings plus an HTTPS check; my own internet connection was up at the time.",
+        days, want and (" (" .. want .. ")") or "", #ev) }
+    for _, x in ipairs(sums) do
+        lines[#lines + 1] = string.format("- %s: %d outage%s", x.name, x.n, x.n == 1 and "" or "s") ..
+            ((x.n > x.u) and (", " .. dur(x.s) .. " in total" .. (x.u > 0 and (" (" .. x.u .. " with no recorded length)") or "")) or " (lengths not recorded)")
+    end
+    lines[#lines + 1] = ""
+    for i, e in ipairs(ev) do if i <= 60 then lines[#lines + 1] = "• " .. day(e.t) .. " " .. hm(e.t) .. " · " .. e.text end end
+    if #ev > 60 then lines[#lines + 1] = "… and " .. (#ev - 60) .. " more" end
+    if #ev == 0 then lines[#lines + 1] = "No VPN outages recorded in this period." end
+    do local p = io.popen("uci -q get system.@system[0].zonename 2>/dev/null"); local z = p and p:read("*l") or nil; if p then p:close() end
+       lines[#lines + 1] = "(Times: router's local time" .. ((z and z ~= "") and (", " .. z:gsub("[^%w/_%-]", "")) or "") .. ".)" end
+    return { ok = true, days = days, provider = want or cjson.null, providers = plist, events = ev, totals = sums, text = table.concat(lines, "\n") }
+end
+function M.vpn_log_send(args)
+    local r = M.vpn_log(args)
+    local f = io.open("/tmp/machome/isp_log_send.json", "w"); if not f then return { ok = false, err = "can't write" } end
+    f:write(cjson.encode({ title = "📋 VPN outage log: last " .. r.days .. " days" .. ((r.provider ~= cjson.null) and (" (" .. r.provider .. ")") or ""), text = r.text })); f:close()
+    return { ok = true }
+end
+--- one line: a Speed History series (label) or one "Past servers this week" entry (reliability key)
+function M.speedhist_remove(args)
+    local P = more(); local label = type(args) == "table" and args.label
+    if type(P) ~= "table" or not P.speedhist_remove or type(label) ~= "string" or label == "" then return { ok = false, err = "bad request" } end
+    return { ok = true, removed = P.speedhist_remove(label) }
+end
+function M.rel_remove(args)
+    local key = type(args) == "table" and args.key
+    if type(key) ~= "string" or key == "" or #key > 200 then return { ok = false, err = "bad request" } end
+    local f = io.open("/tmp/machome/vpn_forget_req.json", "w"); if f then f:write(cjson.encode({ rel = { key } })); f:close() end
+    return { ok = f ~= nil }
+end
+--- DNS hub (dock "DNS" button, 2026-11-16): every DNS setting in one place. Read-only; addresses and names only,
+--- never logins or keys. The NAS AdGuard part asks AdGuard for its DNS settings (≤6 s if the NAS is slow).
+function M.dns_hub()
+    local function run(c) local p = io.popen(c .. " 2>/dev/null"); if not p then return "" end; local s = p:read("*a") or ""; p:close(); return s end
+    local function words(s) local t = {}; for w in (s or ""):gmatch("[^%s,]+") do t[#t + 1] = w end; return t end
+    local function ns(f) local t = {}; for ip in (readf(f) or ""):gmatch("nameserver%s+(%S+)") do t[#t + 1] = ip end; return t end
+    local o = { now = os.time(), mode = trim(run("uci -q get glconfig.general.mode")) }
+    o.wan = { set = words(run("uci -q get network.wan.dns")), peerdns = trim(run("uci -q get network.wan.peerdns")), active = ns("/tmp/resolv.conf.d/resolv.conf.auto") }
+    o.dnsmasq = { servers = words(run("uci -q get dhcp.@dnsmasq[0].server")), noresolv = trim(run("uci -q get dhcp.@dnsmasq[0].noresolv")) == "1",
+        cache = tonumber(trim(run("uci -q get dhcp.@dnsmasq[0].cachesize"))) or 150, running = trim(run("pidof dnsmasq")) ~= "" }
+    local opt6 = {}
+    for x in run("uci -q get dhcp.lan.dhcp_option"):gmatch("%S+") do
+        local v = x:match("^6,(.+)$") or x:match("^option:dns%-server,(.+)$"); if v then for ip in v:gmatch("[^,]+") do opt6[#opt6 + 1] = ip end end
+    end
+    o.lan = { dhcp = opt6, router = trim(run("uci -q get network.lan.ipaddr")), dhcpv6 = trim(run("uci -q get dhcp.lan.dhcpv6")), ra = trim(run("uci -q get dhcp.lan.ra")) }
+    local okr, rpc = pcall(require, "oui.rpc")
+    if okr then
+        -- no pcall around rpc.call (it yields; see get_vpn_providers)
+        local g = rpc.call("dns", "get_config", {})
+        if type(g) == "table" then o.gl = { mode = g.mode, manual = g.manual_list, override_vpn = g.override_vpn, force = g.force_dns, rebind = g.rebind_protection, provider = g.provider } end
+        local a = rpc.call("adguardhome", "get_config", {})
+        if type(a) == "table" then o.router_adg = { enabled = a.enabled == true, dns = a.dns_enabled == true } end
+        local st, tn = rpc.call("vpn-client", "get_status", {}), rpc.call("vpn-client", "get_tunnel", {})
+        local pv = M.get_vpn_providers()
+        local act = {}
+        for _, t in ipairs(type(tn) == "table" and type(tn.tunnels) == "table" and tn.tunnels or {}) do
+            local v = type(t.via) == "table" and t.via or {}; local cf = type(v.configs) == "table" and v.configs[1] or {}
+            if v.via and type(cf.id_list) == "table" then act[v.via] = cf.id_list[1] end
+        end
+        o.vpn = {}
+        for _, v in ipairs(type(st) == "table" and type(st.status_list) == "table" and st.status_list or {}) do
+            if v.via then
+                local pid = act[v.via] and tostring(act[v.via]):gsub("%D", "") or nil
+                o.vpn[#o.vpn + 1] = { via = v.via, name = v.name, enabled = v.enabled == true, status = v.status, server = v.peer_name,
+                    provider = (pv.groups or {})[tostring(v.group_id or "")], type = v.type,
+                    -- WireGuard: the DNS saved with the server. OpenVPN: the server pushes it on connect (shown via resolv)
+                    dns = (pid and v.type ~= "openvpn") and words(run("uci -q get wireguard.peer_" .. pid .. ".dns")) or {},
+                    resolv = ns("/tmp/resolv.conf.d/resolv.conf." .. v.via) }
+            end
+        end
+    end
+    local P = more()
+    if type(P) == "table" and P.adg_cfg then
+        local c = P.adg_cfg()
+        if type(c.url) == "string" and c.url ~= "" then
+            o.nas_adg = { host = c.url:match("^https?://([^/:%]]+)") or "", dns = P.adg_dns and P.adg_dns() or nil }
+        end
+    end
+    local lv = jdec("/tmp/machome/live.json", {})
+    o.live = { dns = lv.dns, dh = lv.dh }
+    local w = jdec("/tmp/machome/dnswho.json", nil)
+    if type(w) == "table" then o.who = { names = w.names, ispleak = w.ispleak == true, t = w.t } end
+    local h = jdec("/tmp/machome/dnswatch.json", {})
+    o.whohist = {}; if type(h) == "table" then for i = math.max(1, #h - 47), #h do if h[i] then o.whohist[#o.whohist + 1] = { t = h[i].t, n = h[i].n } end end end
+    return o
+end
+--- DNS Race: one lookup of a domain at every resolver at once, in the background (≈2 s); poll dns_race_result.
+function M.dns_race(args)
+    local d = type(args) == "table" and tostring(args.domain or "") or ""
+    d = d:lower():gsub("^%s+", ""):gsub("%s+$", ""):gsub("^https?://", ""):gsub("/.*$", "")
+    if d == "" then d = "example.com" end
+    if #d > 100 or not d:match("^[%w][%w%-%.]*%.[%a][%w%-]*$") then return { ok = false, err = "that doesn't look like a domain name (e.g. example.com)" } end
+    local lock = tonumber(trim(readf("/tmp/machome/dnsrace.lock") or ""))
+    if lock and os.time() - lock < 15 then return { ok = false, err = "a race is already running" } end
+    local f = io.open("/tmp/machome/dnsrace.lock", "w"); if f then f:write(tostring(os.time())); f:close() end
+    os.execute("(lua /usr/lib/machome/dns_race.lua '" .. d .. "'; rm -f /tmp/machome/dnsrace.lock) >/dev/null 2>&1 &")
+    return { ok = true, domain = d, started = os.time() }
+end
+--- Lookup map: what it takes to resolve a domain (LAN DNS → AdGuard log → full trace), in the background (≈1–4 s).
+function M.dns_trace(args)
+    local d = type(args) == "table" and tostring(args.domain or "") or ""
+    d = d:lower():gsub("^%s+", ""):gsub("%s+$", ""):gsub("^https?://", ""):gsub("/.*$", "")
+    if d == "" then d = "weather.com" end
+    if #d > 100 or not d:match("^[%w][%w%-%.]*%.[%a][%w%-]*$") then return { ok = false, err = "that doesn't look like a domain name (e.g. weather.com)" } end
+    local lock = tonumber(trim(readf("/tmp/machome/dnstrace.lock") or ""))
+    if lock and os.time() - lock < 20 then return { ok = false, err = "a lookup map is already being drawn" } end
+    local f = io.open("/tmp/machome/dnstrace.lock", "w"); if f then f:write(tostring(os.time())); f:close() end
+    os.execute("(lua /usr/lib/machome/dns_trace.lua '" .. d .. "'; rm -f /tmp/machome/dnstrace.lock) >/dev/null 2>&1 &")
+    return { ok = true, domain = d, started = os.time() }
+end
+function M.dns_trace_result()
+    local r = jdec("/tmp/machome/dnstrace.json", {})
+    if type(r) ~= "table" then r = {} end
+    r.running = readf("/tmp/machome/dnstrace.lock") ~= nil
+    return r
+end
+function M.dns_race_result()
+    local r = jdec("/tmp/machome/dnsrace.json", {})
+    if type(r) ~= "table" then r = {} end
+    r.running = readf("/tmp/machome/dnsrace.lock") ~= nil
+    return r
+end
+--- "Clear" on a packet-loss warning (2026-11-16): the sampler starts that line's loss history fresh (≤10 s).
+--- args.via = wgclientN | ovpnclientN | wan
+function M.loss_clear(args)
+    local via = type(args) == "table" and tostring(args.via or "") or ""
+    if not (via:match("^wgclient%d+$") or via:match("^ovpnclient%d+$") or via == "wan") then return { ok = false, err = "bad request" } end
+    local f = io.open("/tmp/machome/pl_reset", "a"); if f then f:write(via, "\n"); f:close() end
+    os.execute("logger -t machome 'packet-loss check restarted for " .. via .. " (Home tab)'")
+    return { ok = f ~= nil }
+end
+function M.vpnwatch_stop()
+    if not vw_alive() then return { ok = false, err = "no VPN monitor is running" } end
+    local f = io.open("/tmp/machome/vpnwatch.stop", "w"); if f then f:write(tostring(os.time())); f:close() end
+    os.execute("logger -t machome 'VPN monitor: stop requested (Home tab); sending the summary'")
+    return { ok = true }
+end
+function M.devwatch_set(args)
+    local W = watchmod(); if not W or type(args) ~= "table" then return { ok = false, err = "bad request" } end
+    local ok, err = W.devwatch_set(args.mac, args.on == true, args.name)
+    return { ok = ok, err = err }
+end
+function M.modem_set(args)
+    local W = watchmod(); if not W or type(args) ~= "table" then return { ok = false, err = "bad request" } end
+    local ok, err = W.modem_set(args)
+    if ok and not args.clear then os.execute("touch /tmp/machome/modem_now") end
+    return { ok = ok, err = err }
+end
+--- one read of the gateway now (~5-10 s): signal summary or the reason it failed. Never returns the password.
+function M.modem_test()
+    local W = watchmod(); if not W then return { ok = false, err = "module missing" } end
+    local r, err = W.modem_fetch()
+    if not r then return { ok = false, err = err } end
+    if W.modem_check then W.modem_check(r) end
+    local f = io.open("/tmp/machome/modem.json", "w"); if f then f:write(cjson.encode(r)); f:close() end
+    return r
+end
+function M.monthly_preview()
+    local W = watchmod(); if not W then return { ok = false } end
+    return W.monthly_preview()
+end
+
+-- ---------------- fan: dial data, GL start temperature, optional manual speed (failsafe in extras.lua)
+local FANCFG = "/etc/machome/fan.json"
+local function fan_paths()
+    local p = io.popen("ls /sys/class/hwmon/*/pwm1 2>/dev/null"); local pwm = p and p:read("*l"); if p then p:close() end
+    if not pwm then return nil end
+    return { pwm = pwm, rpm = pwm:gsub("pwm1$", "fan1_input") }
+end
+local function uci1(k) local p = io.popen("uci -q get " .. k .. " 2>/dev/null"); local v = p and p:read("*l"); if p then p:close() end; return v end
+local function fan_state()
+    local fp = fan_paths(); if not fp then return { supported = false } end
+    local ok, c = pcall(cjson.decode, readf(FANCFG) or "{}"); if not ok or type(c) ~= "table" then c = {} end
+    local sysfs = uci1("glfan.globals.sysfs") or "/sys/class/thermal/thermal_zone0/temp"
+    local div = tonumber(uci1("glfan.globals.div") or "1000") or 1000
+    local p = io.popen("pidof gl_fan"); local pid = p and p:read("*l"); if p then p:close() end
+    local pwm = num(fp.pwm) or 0
+    return { supported = true, pwm = pwm, pct = math.floor(pwm * 100 / 255 + 0.5), rpm = num(fp.rpm) or 0,
+        temp_c = (num(sysfs) or 0) / div, target_c = tonumber(uci1("glfan.globals.temperature") or "") or cjson.null,
+        warn_c = tonumber(uci1("glfan.globals.warn_temperature") or "") or cjson.null,
+        mode = c.mode == "manual" and "manual" or "auto", manual_pct = tonumber(c.pct) or 50,
+        gl_running = pid ~= nil, failsafe = readf("/tmp/machome/fan_failsafe") ~= nil }
+end
+function M.get_fan() return fan_state() end
+
+function M.set_fan(args)
+    args = args or {}
+    local fp = fan_paths(); if not fp then return { ok = false, err = "This router has no controllable fan" } end
+    local st = fan_state()
+    -- start temperature (GL's controller target), entered in °F
+    if tonumber(args.target_f) then
+        local c = math.floor((tonumber(args.target_f) - 32) * 5 / 9 + 0.5)
+        if c < 40 or c > 85 then return { ok = false, err = "Choose a temperature between 104°F and 185°F" } end
+        local warn = tonumber(st.warn_c) or 75
+        if warn < c + 5 then warn = c + 5 end
+        local r, e = lrpc("fan", "set_config", { temperature = c, warn_temperature = warn })
+        if r == nil then return { ok = false, err = "GL's fan service refused the change" .. (e and (": " .. tostring(e.message or e)) or "") } end
+    end
+    if args.mode == "manual" or args.mode == "auto" then
+        local pct = math.max(0, math.min(100, math.floor(tonumber(args.pct) or st.manual_pct or 50)))
+        os.execute("mkdir -p /etc/machome")
+        local f = io.open(FANCFG, "w"); if f then f:write(cjson.encode({ mode = args.mode, pct = pct })); f:close() end
+        os.remove("/tmp/machome/fan_failsafe")
+        if args.mode == "manual" then
+            os.execute("/etc/init.d/gl_fan stop >/dev/null 2>&1; sleep 1; echo " .. math.floor(pct * 255 / 100 + 0.5) .. " > " .. fp.pwm)
+        else
+            os.execute("/etc/init.d/gl_fan start >/dev/null 2>&1")
+        end
+    elseif fan_state().mode == "manual" then
+        os.execute("/etc/init.d/gl_fan stop >/dev/null 2>&1")   -- GL's set_config restarts its controller; stay manual
+    end
+    return { ok = true, fan = fan_state() }
+end
+
+-- ---------------- weather (Open-Meteo by ZIP; optional touchscreen sleep wallpaper)
+local function wxmod() local ok, W = pcall(dofile, "/usr/lib/machome/weather.lua"); return ok and W or nil end
+local function has_screen() local f = io.open("/etc/init.d/gl_screen", "r"); if f then f:close(); return true end; return false end
+
+function M.get_weather()
+    local W = wxmod(); if not W then return { ok = false, err = "weather module missing" } end
+    local c = W.load_cfg()
+    return { ok = true, zip = c.zip or "", place = c.place or "", screen_supported = has_screen(), screen = c.screen ~= false, radar = c.radar ~= false,
+        dismissed = c.dismissed == true, data = jdec(W.DATA, nil) or cjson.null }
+end
+
+function M.set_weather(args)
+    args = args or {}
+    local W = wxmod(); if not W then return { ok = false, err = "weather module missing" } end
+    local c = W.load_cfg()
+    if args.dismiss == true then c.dismissed = true; W.save_cfg(c); return { ok = true } end
+    if args.screen ~= nil then c.screen = args.screen == true end
+    if args.radar ~= nil then c.radar = args.radar == true; if c.radar then os.execute("touch /tmp/machome/wx_radar_now") end end
+    if args.zip ~= nil then
+        local g, err = W.geocode(trim(tostring(args.zip)))
+        if not g then return { ok = false, err = err } end
+        c.zip, c.place, c.lat, c.lon, c.dismissed = g.zip, g.place, g.lat, g.lon, nil
+    end
+    W.save_cfg(c)
+    local d = c.lat and W.fetch(c)
+    if d then local f = io.open(W.DATA, "w"); if f then f:write(cjson.encode(d)); f:close() end end
+    os.execute("touch /tmp/machome/wx_force")   -- sampler re-renders the sleep screen on its next tick
+    if args.zip ~= nil and c.radar ~= false then os.execute("touch /tmp/machome/wx_radar_now") end   -- new place: new radar map
+    return { ok = true, zip = c.zip, place = c.place, screen = c.screen ~= false, radar = c.radar ~= false, data = d or cjson.null }
+end
+
+-- ---------------- reliability (7 days) + speed history, device usage
+function M.get_reliability()
+    return { rel = jdec("/etc/machome/reliability.json", { buckets = {} }), cur = jdec("/tmp/machome/rel_cur.json", {}),
+        speed = jdec("/etc/machome/speedtest-history.json", {}), time = os.time() }
+end
+
+-- ---------------- one-click fixes (whitelisted actions only; slow restarts run in the background)
+local function sh(c) local p = io.popen(c .. " 2>/dev/null"); if not p then return "" end; local s = p:read("*a") or ""; p:close(); return s end
+local function bg(c) os.execute("/bin/sh -c '" .. c .. "' </dev/null >/dev/null 2>&1 &") end
+local function flog(msg) os.execute("logger -t machome-fix '" .. msg:gsub("'", "") .. "'") end
+
+function M.fix(args)
+    args = args or {}
+    local a, t = args.action, args.target
+    if a == "vpn" then
+        if type(t) ~= "string" or not (t:match("^wgclient%d+$") or t:match("^ovpnclient%d+$")) then return { ok = false, err = "invalid tunnel" } end
+        flog("restart tunnel " .. t); bg("ifdown " .. t .. "; sleep 2; ifup " .. t)
+        return { ok = true, msg = "Restarting " .. t .. ". It should reconnect within about 15 seconds." }
+    elseif a == "wan" then
+        flog("renew WAN"); bg("ifup wan")
+        return { ok = true, msg = "Renewing the internet connection. Give it about 30 seconds." }
+    elseif a == "dns" then
+        local srv = trim(sh("uci -q get dhcp.lan.dhcp_option | tr ' ' '\\n' | sed -n 's/^6,\\([^,]*\\).*/\\1/p' | head -1"))
+        if srv == "" then srv = "127.0.0.1" end
+        local ping = sh("ping -c 2 -W 1 " .. srv):match("(%d+) packets received")
+        local dig = sh("dig +time=2 +tries=1 @" .. srv .. " example.com A"):match("status: (%u+)")
+        flog("dns check " .. srv .. " ping=" .. tostring(ping) .. " dns=" .. tostring(dig) .. "; restart dnsmasq")
+        bg("/etc/init.d/dnsmasq restart")
+        local up = tonumber(ping or "0") > 0
+        return { ok = true, server = srv, reachable = up, answering = dig == "NOERROR",
+            msg = (dig == "NOERROR") and ("DNS server " .. srv .. " is answering again. Restarted the router's DNS service too.")
+                or (up and ("DNS server " .. srv .. " is online but its DNS isn't answering. Restart AdGuard Home on your NAS.")
+                or ("DNS server " .. srv .. " isn't reachable. Check that your NAS is powered on and connected.")) }
+    elseif a == "harden" then
+        local done = {}
+        if trim(sh("uci -q get dropbear.@dropbear[0].PasswordAuth")) ~= "off" then
+            os.execute("uci set dropbear.@dropbear[0].PasswordAuth=off; uci set dropbear.@dropbear[0].RootPasswordAuth=off; uci commit dropbear")
+            bg("sleep 1; /etc/init.d/dropbear restart"); done[#done + 1] = "SSH key-only login"
+        end
+        if not (sh("ls -l /etc/config/wireguard"):match("^%-rw%-%-%-%-%-%-%-")) then os.execute("chmod 600 /etc/config/wireguard"); done[#done + 1] = "VPN key file locked" end
+        -- OpenVPN logins (2026-11-17): same rule as the WireGuard key file (GL re-creates them world-readable on save)
+        local ovl = false
+        if (readf("/etc/config/ovpnclient") or ""):find("option password", 1, true) and not (sh("ls -l /etc/config/ovpnclient"):match("^%-rw%-%-%-%-%-%-%-")) then
+            os.execute("chmod 600 /etc/config/ovpnclient"); ovl = true end
+        for f in sh("ls /etc/openvpn/profiles/*/auth/* 2>/dev/null"):gmatch("[^\n]+") do
+            if not f:find("'", 1, true) and not (sh("ls -l '" .. f .. "'"):match("^%-rw%-%-%-%-%-%-%-")) then os.execute("chmod 600 '" .. f .. "'"); ovl = true end
+        end
+        if ovl then done[#done + 1] = "OpenVPN login files locked" end
+        local fw = false
+        for s in sh("uci show firewall | grep -E \"name='Allow-(IPSec-ESP|ISAKMP)'\""):gmatch("firewall%.([^%.]+)%.name") do
+            if trim(sh("uci -q get firewall." .. s .. ".enabled")) ~= "0" then os.execute("uci set firewall." .. s .. ".enabled=0"); fw = true end
+        end
+        if fw then os.execute("uci commit firewall"); bg("/etc/init.d/firewall reload"); done[#done + 1] = "IPsec rules off" end
+        -- only the services the owner chose to disable on THIS router (written by optimize.sh)
+        local opt = {}
+        for s in (readf("/etc/machome/optimized") or ""):gmatch("[%w_%-]+") do if s ~= "netifyd" then opt[#opt + 1] = s end end
+        for _, s in ipairs(opt) do
+            if os.execute("/etc/init.d/" .. s .. " enabled 2>/dev/null") == 0 then os.execute("/etc/init.d/" .. s .. " stop >/dev/null 2>&1; /etc/init.d/" .. s .. " disable >/dev/null 2>&1"); done[#done + 1] = s .. " disabled" end
+        end
+        if os.execute("/etc/init.d/machome enabled") ~= 0 then os.execute("/etc/init.d/machome enable"); done[#done + 1] = "sampler auto-start" end
+        os.execute("/usr/sbin/machome-vpn-rps fix >/dev/null 2>&1")
+        local https = trim(sh("uci -q get oui-httpd.main.redirect_https")) ~= "1"
+        if https then done[#done + 1] = "HTTPS-only needs re-enabling on the router's Security page" end
+        flog("restore hardening: " .. (#done > 0 and table.concat(done, ", ") or "nothing to change"))
+        return { ok = true, changed = done, msg = #done > 0 and ("Restored: " .. table.concat(done, ", ") .. ".") or "Everything was already in place." }
+    end
+    return { ok = false, err = "unknown action" }
+end
+
+function M.get_usage()
+    return jdec("/tmp/machome/usage.json", { d24 = {}, d7 = {} })
+end
+
+-- Speed test (Ookla CLI), run by /etc/init.d/machome-st under procd so nginx never waits on it
+local function st_running()
+    local pid = trim(readf("/tmp/machome/speedtest.lock") or "")
+    return pid ~= "" and readf("/proc/" .. pid .. "/cmdline") ~= nil
+end
+
+function M.start_speedtest(args)
+    local mode = args and args.mode
+    if mode ~= "wan" and mode ~= "vpn" and mode ~= "all" then return { ok = false, err = "invalid mode" } end
+    -- VPN chooser (2026-11-17): args.iface = one tunnel to test (mode "vpn" only)
+    local iface = args.iface
+    if iface ~= nil and iface ~= cjson.null and iface ~= "" then
+        iface = tostring(iface)
+        if mode ~= "vpn" or not (iface:match("^wgclient%d+$") or iface:match("^ovpnclient%d+$")) then return { ok = false, err = "invalid tunnel" } end
+    else iface = nil end
+    if st_running() then return { ok = false, err = "A speed test is already running" } end
+    os.execute("mkdir -p /tmp/machome")
+    local f = io.open("/tmp/machome/speedtest.req", "w"); if f then f:write(iface and ("vpn:" .. iface) or mode); f:close() end
+    os.remove("/tmp/machome/speedtest.cancel")
+    local f2 = io.open("/tmp/machome/speedtest.json", "w")
+    if f2 then f2:write(cjson.encode({ running = true, mode = mode, started = os.time(), total = 0, index = 0, results = {} })); f2:close() end
+    os.execute("/etc/init.d/machome-st restart >/dev/null 2>&1")
+    return { ok = true }
+end
+
+function M.cancel_speedtest()
+    local f = io.open("/tmp/machome/speedtest.cancel", "w"); if f then f:write("1"); f:close() end
+    os.execute("killall speedtest >/dev/null 2>&1")
+    return { ok = true }
+end
+
+function M.get_speedtest()
+    local function dec(p) local s = readf(p); if not s or s == "" then return nil end; local ok, v = pcall(cjson.decode, s); return ok and v or nil end
+    local state = dec("/tmp/machome/speedtest.json")
+    local running = st_running()
+    if state and state.running and not running and state.started and os.time() - state.started > 15 then state.running = false end
+    return { state = state, last = dec("/etc/machome/speedtest-last.json"), running = running or (state and state.running) or false }
+end
+
+-- Active uplink device: follows Ethernet WAN, repeater (apcli*), tethering or modem via the default route
+local function active_wan()
+    local p = io.popen("ip -4 route show default 2>/dev/null")
+    local best, bm = nil, nil
+    if p then
+        for line in p:lines() do
+            local dev = line:match(" dev (%S+)")
+            local metric = tonumber(line:match(" metric (%d+)") or "0")
+            if dev and (not bm or metric < bm) then best, bm = dev, metric end
+        end
+        p:close()
+    end
+    if best then return best end
+    local q = io.popen("uci -q get network.wan.device 2>/dev/null")
+    local d = q and trim(q:read("*a") or "") or ""
+    if q then q:close() end
+    return d ~= "" and d or "eth1"
+end
+
+function M.get_stats()
+    local cool, fans = cooling()
+    local freq = num("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
+    local maxfreq = num("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq")
+    return {
+        cpu = cpu_stats(),
+        temps = temps(),
+        cooling = cool,
+        lan_dns = lan_dns(),
+        wan_dev = active_wan(),
+        net_mode = (function()   -- "router" | "ap" | "wds" | "relay" | "mesh": AP mode changes which cards make sense
+            local p = io.popen("uci -q get glconfig.general.mode 2>/dev/null"); local m = p and p:read("*l") or ""; if p then p:close() end
+            local g = io.popen("ip -4 route show default 2>/dev/null"); local r = g and g:read("*l") or ""; if g then g:close() end
+            return { mode = (m ~= "" and m or "router"), gateway = r:match("via (%d+%.%d+%.%d+%.%d+)") }
+        end)(),
+        dhcp = (function()  -- LAN DHCP pool use; nil when this router doesn't hand out addresses (AP mode / DHCP off)
+            local p = io.popen("for k in dhcp.lan.ignore dhcp.lan.start dhcp.lan.limit network.lan.ipaddr network.lan.netmask glconfig.general.mode dhcp.@dnsmasq[0].leasefile; do echo \"$(uci -q get $k)\"; done")
+            local o = {}; if p then for l in p:lines() do o[#o + 1] = l end; p:close() end
+            if o[6] == "ap" or o[1] == "1" or not tonumber(o[2]) or not tonumber(o[3]) then return nil end
+            local function n(ip) local a, b, c, d = tostring(ip or ""):match("^(%d+)%.(%d+)%.(%d+)%.(%d+)"); if not a then return nil end; return ((tonumber(a) * 256 + tonumber(b)) * 256 + tonumber(c)) * 256 + tonumber(d) end
+            local function s(x) return string.format("%d.%d.%d.%d", math.floor(x / 16777216) % 256, math.floor(x / 65536) % 256, math.floor(x / 256) % 256, x % 256) end
+            local ip, mask = n(o[4]), n(o[5])
+            local cidr = tostring(o[4] or ""):match("/(%d+)$"); if not mask and cidr then mask = 4294967296 - 2 ^ (32 - tonumber(cidr)) end
+            if not ip or not mask then return nil end
+            local size = 4294967296 - mask; local net = ip - ip % size                       -- network address (mask is contiguous)
+            local first = net + tonumber(o[2]); local last = math.min(first + tonumber(o[3]) - 1, net + size - 2)
+            if last < first then return nil end
+            local used, seen, now = 0, {}, os.time()
+            local f = io.open((o[7] ~= "" and o[7]) or "/tmp/dhcp.leases", "r")
+            if f then for l in f:lines() do
+                local exp, lip = l:match("^(%d+) %S+ (%d+%.%d+%.%d+%.%d+)")
+                local x = n(lip)
+                if x and x >= first and x <= last and not seen[x] and (tonumber(exp) == 0 or tonumber(exp) > now) then seen[x] = true; used = used + 1 end
+            end; f:close() end
+            return { first = s(first), last = s(last), size = last - first + 1, used = used }
+        end)(),
+        tailscale = (function()  -- nil when not installed; cheap checks only (no tailscale CLI in the poll)
+            local f = io.open("/usr/sbin/tailscale", "r"); if not f then return nil end; f:close()
+            local p = io.popen("uci -q get tailscale.settings.enabled; uci -q get tailscale.settings.lan_enabled; ip -4 -o addr show dev tailscale0 2>/dev/null")
+            local out = p and p:read("*a") or ""; if p then p:close() end
+            local en, lan = out:match("^(%d)\n(%d)\n")
+            return { enabled = (en == "1"), lan = (lan == "1"), up = out:find("inet 100%.") ~= nil }
+        end)(),
+        live = live(),
+        fan_rpm = fans,
+        fan = (function()   -- PWM duty + mode for the System fan dial
+            local p = io.popen("ls /sys/class/hwmon/*/pwm1 2>/dev/null"); local f = p and p:read("*l"); if p then p:close() end
+            if not f then return nil end
+            local pwm = num(f) or 0
+            local c = readf("/etc/machome/fan.json") or ""
+            return { pct = math.floor(pwm * 100 / 255 + 0.5), mode = c:find('"manual"', 1, true) and "manual" or "auto",
+                     failsafe = readf("/tmp/machome/fan_failsafe") ~= nil }
+        end)(),
+        freq_mhz = freq and math.floor(freq / 1000) or nil,
+        max_freq_mhz = maxfreq and math.floor(maxfreq / 1000) or nil,
+        net = net(),
+        conntrack = {
+            count = num("/proc/sys/net/netfilter/nf_conntrack_count"),
+            max = num("/proc/sys/net/netfilter/nf_conntrack_max")
+        },
+        hostname = trim(readf("/proc/sys/kernel/hostname")),
+        time = os.time()
+    }
+end
+
+return M

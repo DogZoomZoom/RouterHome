@@ -1,0 +1,413 @@
+ROUTER HOME INSTALLER - CHANGELOG
+=================================
+Newest first. To get a newer version on your router, run the installer again and choose 1.
+Your settings (Discord webhook, weather ZIP, NAS backup, etc.) are kept.
+
+
+VERSION 2.5  (2026-11-14, updated 2026-11-20)
+-------------------------
+  - Network Health: the modem check works with the cable modem in bridge mode (it
+    pings the modem itself instead of your ISP's gateway, which may ignore pings).
+  - VPN outage log (VPN Health card, "Outage log"): every real VPN outage of the last
+    7, 30 or 60 days, with how long it lasted, why, and where your devices went. Filter
+    by provider and copy it or send it to Discord for your VPN provider's support.
+  - More accurate VPN checks: each tunnel now keeps one steady ping running (like
+    "ping -t" on a PC) instead of starting new pings every check. Some VPN servers
+    (Nord, Surfshark) pause answers to lots of new pings, which showed up as false
+    30-second "stalls" while your devices were fine. Ping-only blips no longer count
+    in the 7-day reliability numbers or the 5-hour monitor.
+  - Phone view: the 📱 button (automatic on small screens) shows a compact page with
+    big buttons: status, internet, VPN switches, devices, speed test, clear alerts...
+  - Outage & lag log (ISP report card): every outage with its likely cause, lag
+    episode, modem restart and slow speed test of the last 30 days, ready to copy or
+    send to Discord for your ISP.
+  - Alerts when your internet is slower most evenings, and when the cable modem
+    restarts by itself. Opt-in alert when one device suddenly has far more blocked
+    lookups than usual.
+  - Auto-heal: after giving up on a tunnel, the router keeps watching its VPN server
+    and reconnects as soon as it's back.
+  - Network Health card: busiest device right now, DNS speed vs usual (and AdGuard's
+    blocked share), ping under load from normal heavy use, connection table, IPv6
+    status, the likely cause of the last outage, and a Good / Fair / Poor grade per
+    VPN tunnel.
+  - New repairs/alerts: modem switched into router mode (double NAT) and back; slow
+    DNS (AdGuard vs its provider); a tunnel stuck "connecting" gets restarted; a
+    service whose memory keeps growing gets restarted; and an opt-in SQM trial for
+    lag under load (two warnings first; it undoes itself if it doesn't help).
+  - The leak test no longer warns about DNS when AdGuard sends its lookups encrypted.
+  - Alerts: Mute (1 hour / rest of today / a week), "Clear all" under the alert
+    banners, show or clear Recent events by type, choose how long events are kept,
+    and a daily digest for less urgent alert types.
+  - VPNs you remove are forgotten from the speed history and reliability after 24
+    hours (or right away with "Forget removed VPNs"); remove single lines with ×.
+  - Network Health card: internet health at a glance. A Good / Fair / Poor verdict,
+    where a problem is (router -> modem -> internet), a warning when the modem is in
+    router mode (double NAT), jitter and lag spikes, what the line is good for right
+    now (browsing, calls, gaming), uptime and the last outage, a 24-hour strip, and
+    the cable modem signal.
+  - New Discord alert: high internet ping (default over 75 ms; set it in the alert
+    settings). Catches both steady high ping and frequent lag spikes, and is built
+    not to spam: at most one alert an hour, one reminder after 2 hours, one "back to
+    normal". A Home page banner shows while it's high.
+  - Internet card: new "WAN ping" section. Cloudflare, Google and Quad9 are pinged
+    directly over your internet connection every 10 seconds, with a graph (Last hour /
+    24 hours, with a ms scale, times and hover values) and per-server averages
+    (10 min / 1 h / 24 h), jitter, packet loss and range.
+  - Speed Test card: "Test VPN" now asks which tunnel to test: one of them, or all of
+    them one after another. Testing one tunnel keeps the others' earlier results.
+  - OpenVPN tunnels now get everything WireGuard tunnels get: VPN Health checklist,
+    Network Health row, speed test, alerts, failover (WireGuard and OpenVPN tunnels
+    can cover for each other), auto-heal, the 5-hour monitor, the leak test, the DNS
+    Race and the server picker on the VPN card. OpenVPN has no "handshake", so its
+    stand-in is "Server responding": when data last came back from the VPN server.
+  - Your OpenVPN provider login (saved by GL readable to every program on the router)
+    is now kept root-only, like the WireGuard key file, and re-locked automatically
+    after you save VPN settings. The Security card shows "OpenVPN login files locked".
+  - New "VPN Health" card next to VPN: for each tunnel, pings (Cloudflare and Quad9),
+    a domain lookup and a web page check through the tunnel, the handshake, and drops
+    in the last hour / 24 hours. Hidden in access point mode.
+  - VPN tunnels you turn off, remove or switch to another server no longer cause
+    "VPN down" alerts or a stuck warning: they're dropped from the checks (or start
+    fresh), and a tunnel gets 2 minutes to reconnect after a change. New tunnels are
+    picked up right away.
+  - Easter egg: a red "DNS" button at the end of the dock opens "It's always DNS, Hub":
+    every DNS setting of your network in one place, how a lookup travels, who answers
+    your devices, a DNS Race between all your DNS servers, and a Lookup map that shows
+    every step it takes to find a name (e.g. weather.com: AdGuard -> Quad9 -> root ->
+    .com -> the site's own servers).
+  - Packet-loss alerts at the top of the page have a "Clear" button: it restarts the
+    10-minute loss check from scratch (unlike Dismiss, which only hides it for 24 h).
+    Changing or removing a VPN tunnel clears its loss history automatically too.
+  - VPN Health card: a "Clear all VPN alerts" button (clears every VPN warning, moves
+    devices back to their own tunnels, and re-checks every tunnel from scratch).
+  - VPN Health card: a "Monitor 5 h" button. It watches every VPN tunnel closely for 5
+    hours (pings every few seconds, plus a domain lookup and a web page through each
+    tunnel) and sends one summary to Discord at the end. While it runs, the button
+    counts down; click it to stop early (the summary is still sent).
+  - Internet card: "DNS" is now "WAN DNS", with a new "LAN DNS" row under it (the
+    DNS your devices are told to use, e.g. AdGuard on a NAS).
+  - VPN failover and "tunnel down" alerts now need pings AND a web page through the
+    tunnel to fail. If only pings stop (some VPN servers briefly ignore pings while
+    traffic keeps flowing), devices stay put; VPN Health lists these as "ping-only
+    blips". Real outages still switch tunnels in about 30 seconds.
+  - VPN card: an on/off switch on each tunnel, and click a tunnel to switch it to
+    another server you've saved in GL's VPN page.
+  - Card order: Security now sits next to AdGuard Home; Clients and Top Devices by
+    Data sit side by side. Top Devices shows 4 devices per list and scrolls for more.
+  - Small colored icons next to the card titles (System, Network Health, Last 24
+    Hours, Ads Blocked, Data This Month, Clients, Top Devices, Speed Test & Leak Test,
+    Speed History, Sensors, Services).
+  - Control Center: a "Restart modem" button under Back up settings and Restart
+    router. It asks first, and only appears in router mode once the cable modem is
+    connected (Settings > Cable modem).
+  - Internet card: "Modem uptime" under Cable modem signal (how long since the cable
+    modem last restarted; read hourly with the signal).
+  - Top bar: an "All systems normal" status light (orange "1 warning" / red "1 problem"
+    when something needs attention; click it to jump to the alerts). Green lights,
+    including Online, blink slowly.
+  - New auto-heal repairs (Settings > Auto-heal):
+      * Retry a failed NAS backup (after 1 hour, then 6 hours).
+      * Wake the NAS with Wake-on-LAN if it's asleep (when it goes offline, and
+        before a backup).
+      * Fix a VPN leak the hourly leak test finds, then test again.
+      * Clear a runaway device's connections before the connection table fills up.
+      * Clean up router storage when it's nearly full.
+      * Access points: reconnect to the main router if the link stops working.
+      * Opt-in: turn a service off again if a firmware update restarts it.
+      * Opt-in: switch to a quieter Wi-Fi channel (switches back if devices don't
+        reconnect).
+      * Opt-in, last resort: restart the cable modem after 15 minutes without
+        internet. Two warnings before you can turn it on, and a 5-minute "Cancel
+        restart" banner on the Home tab before it acts.
+  - Auto-heal has its own window: Settings > Alerts & backups > Auto-heal (it was
+    inside Discord alerts). Your switches are kept, and you still get a Discord
+    message when a fix runs.
+  - Cable modem: fixed reading the Xfinity XB10's signal page (channels and SNR were
+    missed). The Internet card now says "Cable modem signal" with the status, SNR and
+    channel count; click it for every reading (model, lock status, power, errors).
+  - Live wallpaper: the background colors slowly move and blend (macOS and Android
+    looks, matching your accent color / color theme). Switch: Settings > Live
+    wallpaper.
+  - Control Center is shorter: the switches, Back up settings and Restart router
+    stay; privacy mode, look, colors, layout, Discord alerts, NAS backup, cable
+    modem, ISP report card and weather moved into one "Settings" window.
+    It has its own search box, and the page search bar (/) finds settings too.
+  - New trackers and repairs:
+      * Tailscale key expiry warning (14, 7 and 1 days before).
+      * "Alert me if it goes offline" switch in each device's sheet (your NAS is
+        pre-selected on main routers).
+      * Cable modem signal check (Xfinity gateways: enter the gateway password once in
+        Control Center > Settings > Cable modem).
+      * Weekly Wi-Fi report now includes weak-signal devices, devices dropped for a poor
+        connection, connect/drop counts and radar events (and the channel suggestion
+        is fixed).
+      * Clear "NAS is full" message when a backup fails for lack of space.
+      * Wi-Fi band self-heal: a band that stops working is restarted once.
+      * A slow nightly speed test is re-tested once before it counts.
+      * A stalling VPN server gets a suggestion; optional auto-switch to the next
+        server on that tunnel (off by default).
+      * Monthly summary on Discord on the 1st (with a Preview button).
+  - Leak test results fold into one line ("No leaks found · N checks passed"); click
+    the arrow for the full list. It opens by itself if anything fails.
+  - The VPN Reliability card is now part of the VPN card: each tunnel shows its last
+    7 days (uptime, ping, loss, day/evening ping, nightly speed) right under it.
+  - VPN tunnels and the internet connection are now checked against two servers at
+    once (Cloudflare and Quad9); they only count as down when both get no answer.
+  - Routers in access-point mode no longer send "Internet outage" alerts (the main
+    router reports real outages). In router mode they alert as before.
+  - Recent events window: Clear the past hour, day, week, or all events.
+  - Travel routers (Slate, Beryl, etc., or any router getting internet over Wi-Fi or a
+    phone): hotel sign-in page detection with an "Open sign-in page" button; a
+    "This Network" safety check each time you join a network; "Networks You've Used"
+    report cards with grades; a home check through Tailscale; and data per network with
+    an optional daily limit. Home routers on a cable aren't affected.
+  - Touchscreen weather: all text is now white with a soft shadow, easier to read on
+    the radar map.
+  - A speed test on one of your own GL.iNet routers (access point / repeater) no longer
+    sets off the "Unusual upload" alert. Steady uploading from them still does.
+  - Quad9's other networks (shown as "WOODYNET-2" etc.) are now named Quad9 in the DNS
+    check.
+  - LED on/off (e.g. an LED schedule) no longer sends "Router settings changed".
+
+
+VERSION 2.4.1  (2026-11-11)
+---------------------------
+  - Page search: a search box under the top bar finds anything on the Home tab (a
+    device, "tunnel 2", "temperature"...) and jumps to it. Press / to start typing.
+  - Search box at the top of Control Center > Discord alerts: type "vpn", "upload",
+    "auto fix", "reboot"... to find any alert type, schedule or auto-fix switch.
+  - Automatic leak test every hour (main routers), with a "Possible VPN / DNS leak"
+    alert if anything fails and a message when it's clear again.
+  - The status chips at the top always fit on one line (they shrink, then use short
+    labels like "VPN 3/3"; hover for the full text).
+  - VPN & DNS leak test, in its own box in the renamed "Speed Test & Leak Test" card:
+    proves each tunnel hides your home address, devices can only leave through the VPN,
+    the kill switch is armed, IPv6 can't bypass it and DNS goes through it. The DNS
+    check also names the company answering your lookups (Quad9, Cloudflare, ... or your
+    ISP = leak) and works with the VPN off. Read-only, ~30 s.
+  - Hourly DNS check: which DNS provider answers your lookups, with history; alerts if
+    your ISP starts answering or a never-seen provider appears.
+  - NAS backups are now restore-checked after every backup (the newest copy is
+    downloaded back into memory and checked to be complete), with a "Backups healthy"
+    chip at the top and "Verify now" in the NAS backup settings.
+  - Alert when a router restarts unexpectedly (power cut or crash).
+  - New "Recent events" line in the System card ("No events" or the number). Click it
+    for a timeline of everything the router noticed or did (outages, VPN failovers and
+    auto-fixes, new devices, sign-ins, settings changes...), newest first, click an event
+    for details. Works even without Discord; kept for 14 days.
+  - New alert "Unusual upload from a device": a device sending 1 GB+ in about an hour
+    and 10x more than it normally does (possible hacked device, malware or a runaway
+    backup). Turn it on/off in Control Center > Discord alerts.
+  - New "About" in the top bar (next to System): a searchable guide to every feature
+    (what it does and how to use it), grouped by area. The footer now reads
+    "Router Home v2.4.1 · build ... · Made by DogZoomZoom & Claude AI (the bot)".
+  - More self-care (each with a switch in Control Center > Alerts where it changes
+    something, and a Discord message when it acts):
+      * VPN tunnels that stay down are disconnected and reconnected after 2 minutes
+        (was 5), and you're told if 3 tries didn't help and where their devices are.
+      * Internet renew when the modem cable is up but there's no internet for 3 min.
+      * The router's own DNS is restarted if it stops answering (never touches AdGuard).
+      * Tailscale is restarted if it's on but stays disconnected for 10 minutes.
+      * Alerts: a turned-off service running again, the DHCP pool 90% full, and the
+        router log flooding (300+ lines a minute).
+  - System card: new "DHCP pool" gauge: how many of the router's DHCP addresses are in
+    use (e.g. 28 of 150), turning orange/red as the pool fills. Hover for the address
+    range. Only shown when the router hands out addresses (not in access-point mode).
+  - Travel routers (e.g. Slate 7 Pro): new "Wi-Fi Uplink" card next to Internet (the VPN
+    card moves further down). It shows the network the router is linked to, signal
+    strength with bars, band, Wi-Fi generation, security, link speed, retries, IP,
+    gateway, DNS, MAC and how long it's been connected. "Choose network" lists your
+    saved networks (one tap, no password) and nearby networks from a scan, or joins a
+    hidden one. Business (802.1X) networks are sent to GL's Internet page.
+  - Access points: the Tailscale chip shows Tailscale's status too, but GL itself does
+    not allow Tailscale in access-point mode, so it stays off there.
+  - Removed the Network Map card (it wasn't needed). Its optional router-to-router
+    pairing is gone too: it made the access point log an SSH sign-in every minute,
+    which set off sign-in alerts. Saved layouts adjust by themselves.
+
+
+VERSION 2.4  (2026-11-10)
+-------------------------
+Weather
+  - Easter egg: click the weather box for a live weather radar (Ventusky), centered on
+    your ZIP. It loads only when opened and is removed completely when closed. ZIP
+    settings moved to the radar window's "Weather settings" button (and Control Center).
+  - Touchscreen routers (e.g. Slate 7 Pro): the weather sleep screen can show a live
+    radar map behind the weather (Iowa State University / National Weather Service,
+    refreshed every 15 minutes). With no rain nearby it shows a sun, or a moon and
+    stars at night. Switch: Weather settings > "Radar background".
+
+Ads Blocked by Device
+  - Also works with AdGuard Home running on the router itself (not only on a NAS). If
+    AdGuard can't tell devices apart (GL passes lookups through the router's own DNS
+    first), the card shows the most-blocked sites instead.
+  - Fixed: it stayed on "Collecting…" forever. It now fills in within 5 minutes when
+    AdGuard on a NAS is connected.
+  - "Who's Home" is hidden by default (bring it back with Control Center > Layout >
+    Edit > Show).
+
+Other
+  - A "Tailscale on / off" chip appears next to "Security OK" on routers that have
+    Tailscale installed.
+
+
+VERSION 2.3  (2026-11-10)
+-------------------------
+Home tab
+  - The version number and build date are shown at the bottom of the Home tab
+    ("Router Home v2.3 · build ..."), so you can tell which version a router runs.
+  - Brume 3 build: now runs the same shared code as every other model.
+
+
+VERSION 2.2  (2026-11-10)
+-------------------------
+Home tab - lots of new things:
+  - Edit your layout: Control Center > Layout > Edit. Move cards, make them small /
+    medium / large, or hide them. Saved per browser; Reset puts everything back.
+  - Network Map: a live picture of your internet, router and the busiest devices.
+    Bubbles grow with traffic.
+  - Who's Home: open a phone in the Clients card and type whose phone it is. The card
+    shows who's home, with optional Discord messages when people arrive or leave.
+  - Internet schedules: pause a device's internet on chosen days and times (e.g.
+    bedtime), from the device's sheet.
+  - Data This Month: usage for your billing month, with an optional data cap (or
+    Unlimited) and Discord warnings at 80% and 100%.
+  - Wake-on-LAN: turn on a computer from Control Center (enable it in the computer's
+    device sheet first).
+  - Speed History: a chart of your nightly speed tests over the last 60 days.
+  - Ads Blocked by Device (with AdGuard on a NAS): which devices AdGuard blocks the most.
+
+
+VERSION 2.1  (2026-11-10)
+-------------------------
+Home tab
+  - Accent colors for the macOS look, like macOS's Appearance settings: pick from 9 in
+    Control Center > Accent color (Multicolor, Blue, Purple, Pink, Red, Orange, Yellow,
+    Green, Graphite). Buttons, switches, links and the background tint all change to
+    match, in light and dark mode. Saved per browser.
+
+
+VERSION 2.0  (2026-11-10)
+-------------------------
+Home tab
+  - Color themes for the Android look, like Android's "Material You": pick from 9 in
+    Control Center > Colors (Playful, Ocean, Forest, Sunset, Grape, Rose, Citrus, Mint,
+    Slate). The whole Home tab re-colors, and each one has a dark-mode version. Each
+    browser remembers its own choice.
+
+
+VERSION 1.9  (2026-11-10)
+-------------------------
+Home tab
+  - The Android look is now colorful and playful: every card has its own color (pink,
+    lime, lavender, peach, sky, mint), colorful status chips, vivid dock icons in fun
+    shapes, colored Control Center tiles, a vivid weather card and a bolder headline.
+    Dark mode uses deep versions of the same colors.
+
+
+VERSION 1.8  (2026-11-10)
+-------------------------
+Home tab
+  - New "Android" look, inspired by the Android 17 style: soft tonal colors, big rounded
+    cards, pill-shaped buttons, Android-style switches, a blurred Quick-Settings-style
+    Control Center and a pill dock with matching icons. Works in light and dark mode.
+  - Switch looks in Control Center > Look (macOS / Android). Each browser remembers its
+    own choice.
+
+
+VERSION 1.7  (2026-11-10)
+-------------------------
+Home tab
+  - Smarter VPN health check: once a minute each WireGuard tunnel is also tested with a
+    real web (HTTPS) request, in the background. A tunnel that still answers pings but
+    can't load web pages now counts as down, so alerts, auto-heal and failover react to
+    it (after about 2 minutes). Busy tunnels during a speed test don't count as failures.
+  - Access point mode: the "slow internet" alert is skipped. An access point's own speed
+    test goes through the main router, so it can't measure your internet plan.
+    Tip: turn off the nightly speed test on access points (Control Center > Alerts).
+
+
+VERSION 1.6  (2026-11-07)
+-------------------------
+Home tab
+  - The weather widget is about 20% bigger (icon, temperature, text and the 3-day
+    forecast).
+
+Installer
+  - Added this changelog.
+  - Added FEATURE GUIDE.txt: what every card, alert, setting and optional question does.
+
+
+VERSION 1.5  (2026-11-07)
+-------------------------
+Home tab
+  - VPN failover now works on every model, not just the Brume 3. If one WireGuard VPN
+    tunnel stops working for about 30 seconds, its devices move to another working
+    tunnel and move back once it recovers. They never leave the VPN. This needs two or
+    more tunnels. Turn it off in Control Center > Alerts > "Move devices to a working
+    tunnel".
+
+Installer: three new optional questions (each off unless you say yes)
+  - Harden a few kernel security settings.
+  - Check signatures on add-on packages (skipped automatically if the router can't
+    verify GL's package lists).
+  - Remove an unused FTP entry that some GL firmware ships.
+
+
+VERSION 1.4  (2026-11-07)
+-------------------------
+Home tab: the router now looks after itself
+  - Automatic reboot ONLY for serious problems that last: memory nearly exhausted,
+    connection table full, or the admin services stuck. A gentler fix is tried first.
+    It reboots at most once a day and twice a week, never within 6 hours of starting,
+    and never during a speed test, backup or upgrade. Problems that aren't urgent wait
+    for 2-5 AM. You get a Discord message before and after. Switch:
+    "Reboot the router if it has a major problem".
+  - Restarts the router's admin/API services if they stop answering.
+  - Clock check: fixes and alerts if the router's time stops syncing.
+  - Alerts when the connection table, storage, RAM disk or memory gets nearly full.
+  - Settings change log: an hourly Discord message listing any router settings that
+    changed. Passwords and keys are never shown.
+  - Slow-internet alert: when 3 nightly speed tests in a row are under 70% of your plan.
+  - Cable check: alerts if the cable to your modem (or to the main router, in access
+    point mode) drops below its normal speed, or keeps disconnecting.
+  - Weekly Wi-Fi channel report (routers with Wi-Fi): Sunday 3 AM. Says whether a
+    clearly quieter channel is available. Switch: "Weekly Wi-Fi channel report".
+  - New alert types you can turn on/off: Router health, Settings changed,
+    Slow internet, Wi-Fi report.
+
+
+VERSION 1.3  (2026-11-07)
+-------------------------
+  - VPN failover added for the Brume 3 (extended to all models in 1.5).
+  - "It's mine" button: new-device alerts can be cleared for good with one click.
+
+
+VERSION 1.2  (2026-11-07)
+-------------------------
+  - Brume 3 support: the installer detects a Brume 3 by itself and installs the
+    Brume 3 version. Nothing to choose.
+  - New optional question (Brume 3 only): VPN speed tuning, which spreads packet
+    handling over 3 CPU cores.
+  - Mac version: "Install Router Home (Mac).command" (see READ ME FIRST.txt).
+
+
+VERSION 1.1  (2026-11-07)
+-------------------------
+  - Optional security and cleanup questions after the install, each explained and asked
+    one at a time: HTTPS-only admin page, lock the VPN key file, close unused IPsec ports,
+    and turn off DPI app detection, cellular/SMS, Bonjour (avahi) or the Bark client.
+  - New menu option 3: undo all of the optional changes.
+  - "SSH key-only login" is deliberately not offered, because it would stop this
+    installer from working again.
+
+
+VERSION 1.0  (2026-11-07)
+-------------------------
+  - First release for Windows: installs the Home tab on GL.iNet routers with firmware
+    4.x (tested on Flint 3, Brume 3 and Slate 7 Pro).
+  - Uses Windows' own SSH. Your router password is typed into SSH's prompt and is never
+    saved.
+  - Optional Ookla speed test: the router downloads it straight from Ookla, and only if
+    you accept Ookla's terms.
+  - Menu option 2 removes the Home tab again.
