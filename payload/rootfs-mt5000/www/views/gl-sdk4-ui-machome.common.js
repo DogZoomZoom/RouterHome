@@ -1022,7 +1022,7 @@ var DOCK = [
   ['lanip','Network','net','indigo'],'|',['overview','System','gear','gray'],['upgrade','Upgrade','up','pink'],['@dnshub','DNS','dnsq','red']
 ];
 
-var MH_VERSION = '2.6.7', MH_BUILD = '2026-11-22';
+var MH_VERSION = '2.6.8', MH_BUILD = '2026-11-22';
 var MH_REPO = 'https://github.com/xDarkHawkx/RouterHome';   /* updates come from this repo's GitHub Releases */
 var MH_CREDIT = 'Made by DogZoomZoom &amp; Claude AI (the bot)';
 /* "About Home" guide (Control Center > About Home): [section, intro, [[feature, how it works / how to use], ...]] */
@@ -2211,8 +2211,21 @@ return {
       var th = (s.cooling || []).filter(function(c){ return /cpufreq/.test(c.type); })[0];
       if (th && th.cur > 0) add({ id: 'throttle', lvl: 'warn', icon: 'cpu', title: 'CPU is being throttled to cool down', detail: 'Thermal throttling level ' + th.cur + ' of ' + th.max + '. Speeds may be reduced.', route: 'overview', rl: 'Open System' });
       var CRIT = { ssh: 1, keys: 1, wanfw: 1, pf: 1, remote: 1, upnp: 1, https: 1 };
-      (L.sec || []).forEach(function(c){ if (!c.ok && !c.rec) add({ id: 'sec-' + c.id, lvl: CRIT[c.id] ? 'crit' : 'warn', icon: 'shield', title: 'Security: ' + c.label + ' failed',
-        detail: String(c.detail), since: inc.sec_since && inc.sec_since[c.id], route: 'firewallview', rl: 'Open Security' }); });
+      (L.sec || []).forEach(function(c){
+        if (c.ok || c.rec) return;
+        /* 2.6.8 (user report): say what happened. Services switched off at install that are back on, usually because a
+           firmware upgrade re-enabled them; "Turn them off again" only touches that list */
+        if (c.id === 'svc'){
+          var sv = String(c.detail || '').replace(/^Re-enabled:\s*/, '').split(/,\s*/).filter(Boolean), up = (L.x && L.x.upg) || null;
+          var fresh = up && up.t && (Date.now() / 1000 - up.t) < 14 * 86400, n = sv.length || 1;
+          add({ id: 'sec-svc', lvl: 'warn', icon: 'shield',
+            title: (fresh ? 'The firmware upgrade turned ' + n + ' service' + (n > 1 ? 's' : '') + ' back on' : n + ' service' + (n > 1 ? 's' : '') + ' you turned off ' + (n > 1 ? 'are' : 'is') + ' back on'),
+            detail: 'You switched ' + (n > 1 ? 'these' : 'this') + ' off when you installed Router Home: ' + sv.join(', ') + (fresh ? ' (firmware ' + up.from + ' → ' + up.to + ')' : '') + '. Auto-heal can do this by itself next time (Settings → Auto-heal).',
+            since: inc.sec_since && inc.sec_since[c.id], route: 'overview', rl: 'Open System' });
+          return;
+        }
+        add({ id: 'sec-' + c.id, lvl: CRIT[c.id] ? 'crit' : 'warn', icon: 'shield', title: 'Security: ' + c.label + ' failed',
+          detail: String(c.detail), since: inc.sec_since && inc.sec_since[c.id], route: 'firewallview', rl: 'Open Security' }); });
       var seen = L.seen || {};
       (this.clientsArr() || []).forEach(function(c){
         var ts = c.mac && seen[String(c.mac).toUpperCase()];
@@ -2231,6 +2244,7 @@ return {
         if (mm) i.fix = { action: 'vpn', target: mm[2], label: 'Restart tunnel', what: 'Restart ' + lab(mm[2]) + '? Devices on it lose internet for a few seconds while it reconnects.' };
         else if (i.id === 'wan') i.fix = { action: 'wan', label: 'Renew connection', what: 'Renew the internet connection? This restarts the router’s WAN link. It can’t power-cycle your modem.' };
         else if (i.id === 'dns') i.fix = { action: 'dns', label: 'Fix DNS', what: 'Check your DNS server and restart the router’s DNS service? If the NAS itself is down, you’ll need to fix it there.' };
+        else if (i.id === 'sec-svc') i.fix = { action: 'svcoff', label: 'Turn them off again', what: 'Stop and switch off again the services you chose to turn off when you installed Router Home? Nothing else changes, and they stay off after a restart.' };
         else if (/^sec-/.test(i.id)) i.fix = { action: 'harden', label: 'Restore settings', what: 'Put back the security settings this router had before (only the ones it had; SSH key-only only if an SSH key is installed)?' };
       });
       /* muted alert types (Mute on a banner, 2026-11-18) are left out everywhere (banner, top bar) until the mute ends */
@@ -2247,7 +2261,7 @@ return {
       this.confirm({ title: f.label + '?', icon: 'bolt', grad: GRAD.orange, ok: f.label, working: 'Working…', body: '<p>' + esc(f.what) + '</p>' },
         function(){ return rpcx('machome', 'fix', f.target ? { action: f.action, target: f.target } : { action: f.action }, 30000).then(function(r){
           if (!r || !r.ok) throw new Error((r && r.err) || 'the fix could not run');
-          if (f.action === 'dns' || f.action === 'harden'){
+          if (f.action === 'dns' || f.action === 'harden' || f.action === 'svcoff'){
             setTimeout(function(){ self.openModal('<div class="hic" style="background:' + (r.answering === false ? GRAD.orange : GRAD.green) + '">' + svg('shield') + '</div><h2>' + esc(f.label) + '</h2><p>' + esc(r.msg) + '</p><div class="btns"><button class="pri" data-m="cancel">OK</button></div>', {}); }, 80);
             return null;
           }

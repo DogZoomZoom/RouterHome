@@ -6,6 +6,18 @@ installer again and choose 1. Your settings (Discord webhook, weather ZIP, NAS b
 etc.) are kept either way.
 
 
+VERSION 2.6.8  (2026-11-22)
+-------------------------
+  - After a GL firmware upgrade, the services you chose to turn off during install (app
+    detection, cellular/SMS, Bonjour) can come back on. The alert now says so plainly
+    ("The firmware upgrade turned 6 services back on", with the firmware versions) instead
+    of "Security: Optimized services stay off failed", and its button "Turn them off
+    again" only touches those services. Auto-heal can do it by itself next time (Settings
+    > Auto-heal > "Turn a service off again if it comes back").
+  - Fixed: "netifyd" was listed as turned back on after an upgrade although it stays off
+    by its own setting. Thanks to the user who reported it.
+
+
 VERSION 2.6.7  (2026-11-22)
 -------------------------
   - Security card: no more red "failed" alerts for settings your router never had. If

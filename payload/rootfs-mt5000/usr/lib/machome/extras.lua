@@ -899,6 +899,8 @@ local function boot_check(now, sec)
             "Upgraded from " .. last .. " to " .. curv .. ". " .. fine .. " custom files intact.", (#broken > 0) and "orange" or "green", fields)
     end
     if curv ~= "" then writef(LASTVER, curv) end
+    -- remembered for the page (2.6.8): "the firmware upgrade turned N services back on"
+    if last ~= "" and curv ~= "" and last ~= curv then X.last_upgrade = { from = last, to = curv, t = now }; writef(EDIR .. "/last_upgrade.json", cjson.encode(X.last_upgrade)) end
     return last ~= "" and curv ~= "" and last ~= curv
 end
 
@@ -1444,6 +1446,7 @@ function X.live()
     return { vh = next(vhl) and vhl or cjson.null, inc = inc, fw = fw, ready = ready, alerts = { enabled = X.cfg.enabled, configured = X.cfg.webhook ~= "", sent = stats.sent, failed = stats.failed,
         last = stats.last or cjson.null, last_ok = stats.last_ok or cjson.null, queued = #queue, mutes = next(mutes) and mutes or cjson.null },
         np = (okn and np) or cjson.null, vuln = X.vuln_sum or cjson.null,
+        upg = (function() if X.last_upgrade == nil then X.last_upgrade = jread(EDIR .. "/last_upgrade.json", nil) or false end; return X.last_upgrade or cjson.null end)(),
         sched = { enabled = X.cfg.speed_daily, hour = X.cfg.speed_hour, last_day = trim(readf(SCHED) or "") } }
 end
 

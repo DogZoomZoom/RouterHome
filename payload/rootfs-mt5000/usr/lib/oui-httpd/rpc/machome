@@ -1135,6 +1135,17 @@ function M.fix(args)
             msg = (dig == "NOERROR") and ("DNS server " .. srv .. " is answering again. Restarted the router's DNS service too.")
                 or (up and ("DNS server " .. srv .. " is online but its DNS isn't answering. Restart AdGuard Home on your NAS.")
                 or ("DNS server " .. srv .. " isn't reachable. Check that your NAS is powered on and connected.")) }
+    elseif a == "svcoff" then
+        -- 2.6.8: "Turn them off again" on the services banner: only the services the owner/user chose to turn off at
+        -- install (/etc/machome/optimized; netifyd is kept off by its own setting), nothing else
+        local done = {}
+        for s in (readf("/etc/machome/optimized") or ""):gmatch("[%w_%-]+") do
+            if s ~= "netifyd" and readf("/etc/init.d/" .. s) and os.execute("/etc/init.d/" .. s .. " enabled 2>/dev/null") == 0 then
+                os.execute("/etc/init.d/" .. s .. " stop >/dev/null 2>&1; /etc/init.d/" .. s .. " disable >/dev/null 2>&1"); done[#done + 1] = s
+            end
+        end
+        flog("services off again: " .. (#done > 0 and table.concat(done, ", ") or "nothing to change"))
+        return { ok = true, changed = done, msg = #done > 0 and ("Turned off again: " .. table.concat(done, ", ") .. ". They stay off after a restart. To have this done by itself after the next firmware upgrade, turn on Settings → Auto-heal → “Turn a service off again if it comes back”.") or "They were already off." }
     elseif a == "harden" then
         local done = {}
         -- 2.6.7 (user report): only put back what THIS router had (the security baseline: checks that passed here

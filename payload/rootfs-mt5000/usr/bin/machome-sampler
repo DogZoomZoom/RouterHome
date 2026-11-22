@@ -359,7 +359,9 @@ local function security()
 
     -- only checked for services the owner chose to disable on this router (/etc/machome/optimized, one per line)
     local opt = {}
-    for s in (readf("/etc/machome/optimized") or ""):gmatch("[%w_%-]+") do opt[#opt + 1] = s end
+    -- netifyd skipped (2.6.8, user report): after a firmware upgrade its boot link comes back, but its own setting
+    -- (uci enabled=0) keeps it off, so it isn't running; the repair and the upgrade checklist already skip it
+    for s in (readf("/etc/machome/optimized") or ""):gmatch("[%w_%-]+") do if s ~= "netifyd" then opt[#opt + 1] = s end end
     if #opt > 0 then
         local back = {}
         for _, s in ipairs(opt) do
