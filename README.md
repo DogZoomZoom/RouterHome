@@ -63,7 +63,7 @@ Only three models have been tested, but nothing is built for one model: the Home
 - **Hardware-specific features only appear when the router has the hardware:** fan control, the touchscreen weather (Slate 7 Pro), hardware crypto details, Wi-Fi details. Temperature sensors the Home tab doesn't recognize show their raw names.
 - **Toolkit extras:** speed limits use GL's own limiter (most 4.x models have it); the MTU tool needs WireGuard tunnels.
 - **Firmware versions matter more than models.** Tested on firmware 4.9 and 4.10. On a much older 4.x, a card might show no data if GL changed something internally. The page still loads, and **Remove** (option 2 in the installer) undoes everything.
-- **Tried it on another model?** Please open an issue with your model and firmware version, and a screenshot if something looks off.
+- **Tried it on another model?** Let me know how it went (see [Found a bug or an issue?](#found-a-bug-or-an-issue)), with your model and firmware version, and a screenshot if something looks off.
 
 ## Install
 
@@ -96,6 +96,14 @@ Full details, including the optional security settings the installer offers, are
 - **With the installer:** run it again and choose **1** to update (your settings are kept), **2** to remove Router Home, or **3** to undo the optional security changes.
 
 Updates are signed: the Home tab only installs packages signed with the Router Home release key, so a tampered download is refused. From 2.6.4 the router also checks once a day by itself and sends a Discord message when a new version is out (it never installs on its own).
+
+## Found a bug or an issue?
+
+Report it to me on **[Discord](https://discord.com/users/861741061465571349)**. It helps to include:
+
+- your router model and firmware version (GL admin page → System → Overview)
+- your Router Home version (the line at the very bottom of the Home tab)
+- what happened, and a screenshot if something looks wrong. Turn on **privacy mode** first (the eye icon in the top bar) so your IP and MAC addresses and device names are hidden.
 
 ## License
 
