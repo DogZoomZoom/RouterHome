@@ -943,7 +943,7 @@ function alertKind(id){
 var DIGEST_TYPES = ['newdev', 'config', 'login', 'presence', 'schedule', 'devwatch', 'wifi', 'upload', 'speed', 'backup', 'health', 'isp', 'data', 'firmware'];
 var KIND_NAMES = { vpn: 'VPN', wan: 'Internet', dns: 'DNS', ping: 'High ping', newdev: 'New device', security: 'Security', temp: 'Temperature', firmware: 'Firmware', upgrade: 'Firmware upgrade',
   speed: 'Speed test', login: 'Sign-in', weekly: 'Weekly report', backup: 'NAS backup', health: 'Router health', config: 'Settings changed', isp: 'Internet speed',
-  wifi: 'Wi-Fi report', schedule: 'Schedule', presence: 'Who’s home', data: 'Data cap', upload: 'Unusual upload', devwatch: 'Watched device', monthly: 'Monthly summary', travel: 'Travel', adspike: 'Unusual blocking', rhupdate: 'Router Home update' };
+  wifi: 'Wi-Fi report', schedule: 'Schedule', presence: 'Who’s home', data: 'Data cap', upload: 'Unusual upload', devwatch: 'Watched device', monthly: 'Monthly summary', travel: 'Travel', adspike: 'Unusual blocking', rhupdate: 'Router Home update', vuln: 'Vulnerability' };
 function bytes(n){ n = Number(n) || 0; var u = ['B','KB','MB','GB','TB','PB'], i = 0; while (n >= 1024 && i < u.length - 1){ n /= 1024; i++; } return (i ? n.toFixed(n < 10 ? 2 : n < 100 ? 1 : 0) : n) + ' ' + u[i]; }
 function rate(bps){ var b = (Number(bps) || 0) * 8; if (b >= 1e9) return [(b/1e9).toFixed(2),'Gbps']; if (b >= 1e6) return [(b/1e6).toFixed(b >= 1e8 ? 0 : 1),'Mbps']; if (b >= 1e3) return [(b/1e3).toFixed(0),'Kbps']; return [b.toFixed(0),'bps']; }
 function dur(s){ s = Math.floor(Number(s) || 0); var d = Math.floor(s/86400), h = Math.floor(s%86400/3600), m = Math.floor(s%3600/60); return (d ? d + 'd ' : '') + (d || h ? h + 'h ' : '') + m + 'm'; }
@@ -1014,7 +1014,7 @@ var DOCK = [
   ['lanip','Network','net','indigo'],'|',['overview','System','gear','gray'],['upgrade','Upgrade','up','pink'],['@dnshub','DNS','dnsq','red']
 ];
 
-var MH_VERSION = '2.6.4', MH_BUILD = '2026-11-22';
+var MH_VERSION = '2.6.5', MH_BUILD = '2026-11-22';
 var MH_REPO = 'https://github.com/xDarkHawkx/RouterHome';   /* updates come from this repo's GitHub Releases */
 var MH_CREDIT = 'Made by DogZoomZoom &amp; Claude AI (the bot)';
 /* "About Home" guide (Control Center > About Home): [section, intro, [[feature, how it works / how to use], ...]] */
@@ -1037,6 +1037,7 @@ var ABOUT = [
   ['GL.inet Utilities Toolkit','The last card on the page: point-and-click tools inspired by phantasm22’s GL.iNet Utilities Toolkit (github.com/phantasm22/GL-iNet_utils), rebuilt from scratch for Router Home. Hardware: CPU, memory, storage, temperatures (°F), network ports, Wi-Fi radios and a VPN crypto acceleration check. Benchmarks: CPU thermal stress (stops at 203 °F), VPN & crypto speed, storage, memory and DNS latency; results stay until the router restarts. Network: MTU check and per-device speed limits (below). Zram & system: zram size and compression, package system check (leftover lock, refresh lists). SSH keys: list, add and remove; the last key can’t be removed while password sign-in is off.'],
   ['MTU check','Toolkit → Network → “Check MTU”: measures the biggest packet the internet path (and the path to each VPN server) carries without being split up, then shows the best size for each WireGuard tunnel (path minus 60 bytes for WireGuard’s own wrapping, 80 for an IPv6 server). Nothing changes while it measures. “Use N” changes that tunnel’s size and tests it for a minute: if websites or full-size packets stop getting through, the old size comes back by itself. Only the server the tunnel uses now is changed (other saved servers keep their size); an undo script is kept in /root/machome-backup/. OpenVPN tunnels aren’t changed.'],
   ['Speed limits','Toolkit → Network → Speed limits: cap a device’s download and upload speed (Mbps). This uses GL’s own speed limiter, the same one as Clients → Speed limit, so limits show there too and stay after a restart. Remove a limit with “Remove”. Set limits on the main router; an access point passes its devices’ traffic to the main router, which limits them there.'],
+  ['Known vulnerabilities','Security card → “Known vulnerabilities”: checks this router against published security problems, with plain rules (no AI). Source 1: GL.iNet security notices, turned into a signed list on the Router Home GitHub page (which models/firmware, what to look for on the router: a process, file, setting, service or open port, and which fix applies). The router only accepts a list signed with the Router Home release key; a copy ships built in. Source 2: the National Vulnerability Database (NVD), published CVEs for this exact model matched to this firmware version. Downloaded once a day; the on-router checks repeat every 10 minutes. Results: Not affected, Exposed (a risky setting is on), Suspicious file, Signs of infection, or Firmware update needed. Fixes come from a short fixed list (stop a process and delete its file, keeping a copy as evidence; change one setting; turn off a service; tighten file permissions), always ask first and leave an undo script in /root/machome-backup/ where that makes sense. Firmware upgrades are never automatic: you get a button to the Upgrade page. New findings send one Discord alert (type “Vulnerability”). It only knows what has been published, and “no signs” doesn’t prove a router was never attacked.'],
   ['Zram gauge','System card, next to Memory: zram is memory the router compresses instead of running out of RAM (GL’s zram-swap package; about half the RAM, set up automatically at boot). The gauge shows how full it is; hover for the compression ratio, the real RAM it uses and the peak since the last restart. Orange from 60% full, red from 85%. Shown only when zram is on. A GL firmware upgrade removes the zram-swap package; Router Home reinstalls it by itself once the internet is back (only on a router that had it) and sends an “upgrade” alert.'],
   ['VPN outage log','VPN Health card → “Outage log”: every REAL VPN outage (30 s or more with no pings and no web page through the tunnel) of the last 7, 30 or 60 days, with server, length, why, where devices went and whether auto-heal restarted it. Filter by provider, then “Copy as text” or “Send to Discord” for the VPN provider’s support. Ping-only blips aren’t listed. Recording since 11-20 evening; kept for 60 days.'],
   ['Phone view','The 📱 button in the menu bar switches to a compact page for phones: overall status, internet grade and speed, VPN tunnels with on/off switches, devices online, and big buttons (speed test, test VPN, clear alerts, recent events, DNS hub, outage log, settings). It turns on by itself on small screens; your choice is remembered in that browser. “Full page” goes back.'],
@@ -2484,7 +2485,7 @@ return {
         self.mh.alerts = a;
         var T = [['vpn','VPN tunnel down or stale'],['wan','Internet outage (sent when it’s back)'],['ping','High internet ping (over your limit for 5 min; at most 1 alert an hour if it keeps bouncing)'],['dns','DNS server not responding'],['newdev','New device joins'],
                  ['security','Security check changes'],['temp','Router running hot'],['firmware','New firmware + upgrade checklist'],['upgrade','After an upgrade: what broke'],['speed','Nightly speed test results'],
-                 ['login','Admin sign-ins (web + SSH) and failed SSH attempts'],['weekly','Weekly summary report'],['backup','NAS backup failures'],['health','Router health: auto-reboot, stuck services, clock, storage/memory, cable speed'],['config','Router settings changed'],['isp','Internet slower than your plan 3 nights in a row'],['wifi','Weekly Wi-Fi channel report'],['schedule','Device schedules (paused / back online)'],['presence','Who’s home (arrive / leave)'],['data','Data cap (80% and 100%)'],['upload','Unusual upload from a device (possible hacked device or runaway backup)'],['devwatch','Watched device goes offline / comes back (pick devices in their device sheet)'],['monthly','Monthly summary (1st of the month)'],['adspike','Unusual blocking for one device (needs “Watch for unusual blocking” below)'],['rhupdate','New Router Home version on GitHub (checked once a day; never installs by itself)']];
+                 ['login','Admin sign-ins (web + SSH) and failed SSH attempts'],['weekly','Weekly summary report'],['backup','NAS backup failures'],['health','Router health: auto-reboot, stuck services, clock, storage/memory, cable speed'],['config','Router settings changed'],['isp','Internet slower than your plan 3 nights in a row'],['wifi','Weekly Wi-Fi channel report'],['schedule','Device schedules (paused / back online)'],['presence','Who’s home (arrive / leave)'],['data','Data cap (80% and 100%)'],['upload','Unusual upload from a device (possible hacked device or runaway backup)'],['devwatch','Watched device goes offline / comes back (pick devices in their device sheet)'],['monthly','Monthly summary (1st of the month)'],['adspike','Unusual blocking for one device (needs “Watch for unusual blocking” below)'],['rhupdate','New Router Home version on GitHub (checked once a day; never installs by itself)'],['vuln','Known vulnerability found (GL.iNet notices + NVD; signs of infection, exposed settings, firmware updates)']];
         var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
         var dayOpts = days.map(function(d, i){ return '<option value="' + i + '"' + (i === a.weekly_day ? ' selected' : '') + '>' + d + '</option>'; }).join('');
         var whours = ''; for (var wh = 0; wh < 24; wh++) whours += '<option value="' + wh + '"' + (wh === a.weekly_hour ? ' selected' : '') + '>' + ((wh % 12) || 12) + ':00 ' + (wh < 12 ? 'AM' : 'PM') + '</option>';
@@ -3024,11 +3025,19 @@ return {
     },
     secHtml: function(list, bad){
       if (!list.length) return '<div class="mh-empty">Running security checks… results within a minute.</div>';
-      var h = '<div class="mh-big"><div class="mh-ico" style="background:' + (bad.length ? GRAD.orange : GRAD.green) + '">' + svg('shield') + '</div><div><h3>' +
-        (bad.length ? bad.length + ' issue' + (bad.length > 1 ? 's' : '') + ' found' : 'All clear') + '</h3><p>' + (list.length - bad.length) + ' of ' + list.length + ' checks passed · rechecked every minute</p></div></div>';
+      var xv = (this.mh.stats && this.mh.stats.live && this.mh.stats.live.x && this.mh.stats.live.x.vuln) || null;
+      var nvb = (xv && xv.worst && xv.worst !== 'ok') ? 1 : 0, nb = bad.length + nvb;   /* a vulnerability finding counts as one issue */
+      var h = '<div class="mh-big"><div class="mh-ico" style="background:' + (xv && xv.worst === 'infected' ? GRAD.red : nb ? GRAD.orange : GRAD.green) + '">' + svg('shield') + '</div><div><h3>' +
+        (nb ? nb + ' issue' + (nb > 1 ? 's' : '') + ' found' : 'All clear') + '</h3><p>' + (list.length - bad.length) + ' of ' + list.length + ' checks passed · rechecked every minute</p></div></div>';
       var sorted = bad.concat(list.filter(function(c){ return c.ok; }));
       var x = (this.mh.stats && this.mh.stats.live && this.mh.stats.live.x) || {}, rd = x.ready, al = x.alerts;
       var extra = '';
+      /* known vulnerabilities (2.6.5): signed GL notice list + NVD, checked by vulncheck.lua; details in openVuln() */
+      var vu = x.vuln, VW = { infected: ['var(--mh-red)', '!', 'Signs of infection'], exposed: ['var(--mh-orange)', '!', 'Exposed'], update: ['var(--mh-orange)', '↑', 'Firmware update needed'], suspicious: ['var(--mh-orange)', '?', 'Suspicious file'] };
+      var vw = vu && VW[vu.worst];
+      var vrow = '<div class="mh-ck click" data-act="vuln" style="cursor:pointer"><i style="background:' + (!vu ? 'var(--mh-text3)' : vw ? vw[0] : 'var(--mh-green)') + '">' + (!vu ? '…' : vw ? vw[1] : '✓') + '</i><b>Known vulnerabilities</b><small>' +
+        (!vu ? 'First check within a few minutes' : vw ? vu.problems + ' to look at · ' + vw[2] : 'None found · ' + (vu.n_gl || 0) + ' GL notice' + (vu.n_gl === 1 ? '' : 's') + ' + ' + (vu.n_nvd || 0) + ' NVD') + ' ›</small></div>';
+      if (!vw) extra += vrow;   /* a finding goes to the top of the list instead (below) */
       if (rd){
         var lost = (rd.lost || []).length, rev = (rd.revert || []).length;
         extra += '<div class="mh-ck click" data-act="ready" style="cursor:pointer"><i style="background:' + (lost ? 'var(--mh-orange)' : 'var(--mh-blue)') + '">' + (lost ? '!' : 'i') + '</i><b>Firmware-upgrade safe</b><small>' +
@@ -3036,7 +3045,7 @@ return {
       }
       if (al) extra += '<div class="mh-ck click" data-act="alerts" style="cursor:pointer"><i style="background:' + (al.enabled && al.configured ? 'var(--mh-green)' : 'var(--mh-text3)') + '">' + (al.enabled && al.configured ? '✓' : '–') + '</i><b>Discord alerts</b><small>' +
           (al.enabled && al.configured ? 'On' + (al.sent ? ' · ' + al.sent + ' sent' : '') + (al.queued ? ' · ' + al.queued + ' queued' : '') : al.configured ? 'Paused' : 'Not set up') + ' ›</small></div>';
-      return h + '<div class="mh-rows mh-scroll">' + sorted.map(function(c){
+      return h + '<div class="mh-rows mh-scroll">' + (vw ? vrow : '') + sorted.map(function(c){
         return '<div class="mh-ck"><i style="background:' + (c.ok ? 'var(--mh-green)' : 'var(--mh-orange)') + '">' + (c.ok ? '✓' : '!') + '</i><b>' + esc(c.label) + '</b><small>' + esc(c.detail) + '</small></div>';
       }).join('') + extra + '</div>';
     },
@@ -3191,6 +3200,7 @@ return {
       if (name === 'uitheme'){ try { localStorage.setItem('machome-ui', arg === 'android' ? 'android' : 'mac'); } catch (e) {} this.theme(); if (this.mh.ccOpen) this.set('cc', this.ccHtml()); return; }
       if (name === 'alerts'){ this.closeCC(); return this.openAlerts(); }
       if (name === 'ready') return this.openReadiness();
+      if (name === 'vuln') return this.openVuln();
       if (name === 'wx-dis') return this.wxDismiss(arg);
       if (name === 'wx-ack') return this.wxAck(arg);
       if (name === 'wx-ackall') return this.wxAck(null);
@@ -4612,6 +4622,71 @@ return {
       el.innerHTML = m.updAvail
         ? '<span style="color:var(--mh-orange)">⬆ Router Home needs an update: version ' + esc(m.updAvail) + ' is available.</span> <button class="mh-btn" data-act="updates" style="margin:0 0 0 6px;padding:3px 10px;font-size:12px">Update now</button>'
         : '<span style="color:var(--mh-green)">✓ Router Home is up to date</span> <span style="color:var(--mh-text2)">(' + esc(MH_VERSION) + ')</span>';
+    },
+    /* ---- Known vulnerabilities (2.6.5): Security card row → this window. Data: rpc vuln_status (vulncheck.lua). */
+    openVuln: function(msg){
+      var self = this;
+      var shell = function(inner, running){ return '<div class="hic" style="background:' + GRAD.indigo + '">' + svg('shield') + '</div><h2>Known vulnerabilities</h2>' + inner +
+        '<div class="err" data-e></div><div class="btns"><button data-m="cancel">Close</button><button class="pri" data-m="check"' + (running ? ' disabled' : '') + '>' + (running ? 'Checking…' : 'Check now') + '</button></div>'; };
+      if (!document.getElementById('machome-modal') || !msg) this.openModal(shell('<p>Loading…</p>', true), {});
+      rpc('machome', 'vuln_status').then(function(r){
+        if (!document.getElementById('machome-modal')) return;
+        if (!r || !r.ok){ self.openModal(shell('<p>Couldn’t read the results from the router.</p>'), self.vulnHandlers()); return; }
+        var now = Math.floor(Date.now() / 1000), items = r.items || [];
+        var ST = { infected: ['var(--mh-red)', 'Signs of infection'], exposed: ['var(--mh-orange)', 'Exposed'], update: ['var(--mh-orange)', 'Firmware update needed'],
+                   suspicious: ['var(--mh-orange)', 'Suspicious file'], ok: ['var(--mh-green)', 'Not affected'] };
+        var SEV = { critical: 'var(--mh-red)', high: 'var(--mh-orange)', medium: 'var(--mh-yellow)', low: 'var(--mh-text2)' };
+        var model = String(r.model || '').toUpperCase();
+        var h = (msg && msg.trim() ? '<p style="color:var(--mh-green)">' + esc(msg) + '</p>' : '') +
+          '<p style="font-size:13px"><b>' + (model ? 'GL-' + esc(model) : 'This router') + '</b> · firmware ' + esc(r.fw || '?') + ' · ' +
+          (r.t ? 'checked ' + ago(now - r.t) : 'not checked yet') + (r.running ? ' · <b>checking now…</b>' : '') + '</p>';
+        var probs = items.filter(function(i){ return i.status !== 'ok'; }), oks = items.filter(function(i){ return i.status === 'ok'; });
+        var card = function(i){
+          var st = ST[i.status] || ST.ok, src = i.kind === 'nvd' ? 'NVD' : 'GL.iNet notice';
+          return '<div class="mh-vh" style="text-align:left;margin:8px 0"><b>' + esc(i.title) + '</b>' +
+            '<div style="font-size:12px;margin:3px 0"><span style="color:' + st[0] + ';font-weight:600">' + st[1] + '</span> · <span style="color:' + (SEV[i.severity] || 'var(--mh-text2)') + '">' + esc(i.severity || 'unknown') + (i.score ? ' ' + esc(i.score) : '') + '</span> · ' + esc(src) + (i.published ? ' · ' + esc(i.published) : '') +
+            (i.link ? ' · <a href="' + esc(i.link) + '" target="_blank" rel="noopener" style="color:var(--mh-blue)">details ›</a>' : '') + '</div>' +
+            ((i.found || []).length ? '<ul style="margin:4px 0 4px 18px;font-size:12px">' + i.found.map(function(f){ return '<li>' + esc(f) + '</li>'; }).join('') + '</ul>' : '') +
+            (i.status !== 'ok' && i.summary ? '<details style="font-size:12px;margin:4px 0"><summary>What it is</summary>' + esc(i.summary) + '</details>' : '') +
+            (i.advice ? '<p style="text-align:left;font-size:12px;margin:4px 0">' + esc(i.advice) + '</p>' : '') +
+            (i.firmware_note ? '<p style="text-align:left;font-size:12px;margin:4px 0;color:var(--mh-text2)">Firmware: ' + esc(i.firmware_note) + '</p>' : '') +
+            (i.fixed_in ? '<p style="text-align:left;font-size:12px;margin:4px 0">Fixed in firmware ' + esc(i.fixed_in) + '.</p>' : '') +
+            ((i.fix || i.upgrade) ? '<p style="text-align:left;margin:6px 0 0">' + (i.fix ? '<button style="border:0;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;background:var(--mh-blue);color:#fff;margin:2px 4px 2px 0" data-m="fix" data-id="' + esc(i.id) + '" data-label="' + esc(i.fix.label) + '"' + (r.running ? ' disabled' : '') + '>' + esc(i.fix.label) + '</button> ' : '') +
+              (i.upgrade ? '<button style="border:0;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;background:rgba(127,127,127,.18);color:inherit;margin:2px 4px 2px 0" data-m="upgrade">Open the Upgrade page</button>' : '') + '</p>' : '') + '</div>';
+        };
+        h += '<div style="max-height:52vh;overflow:auto">';
+        h += probs.length ? probs.map(card).join('') : '<p style="text-align:left;color:var(--mh-green)">✓ Nothing known affects this router right now.</p>';
+        if (oks.length) h += '<details style="text-align:left;font-size:12px;margin:6px 0"><summary>Checked and not affected (' + oks.length + ')</summary>' + oks.map(card).join('') + '</details>';
+        var adv = r.adv || {}, nvd = r.nvd || {};
+        h += '<p style="font-size:12px;color:var(--mh-text2);text-align:left;margin-top:8px">Sources: <b>GL.iNet notices</b>: ' + (adv.n || 0) + ' in the signed list (' + (adv.source === 'github' ? 'from GitHub' : 'built-in copy') + (adv.updated ? ', updated ' + esc(adv.updated) : '') + ')' + (adv.err ? ' · ' + esc(adv.err) : '') +
+          '. <b>NVD</b>: ' + (nvd.err ? 'couldn’t check (' + esc(nvd.err) + ')' : (nvd.n || 0) + ' published vulnerabilit' + (nvd.n === 1 ? 'y' : 'ies') + ' for this model' + (nvd.t ? ', downloaded ' + ago(now - nvd.t) : '')) + '.</p>';
+        h += '</div>';
+        h += '<details style="text-align:left;font-size:12px;margin:8px 0"><summary><b>How this works</b></summary><div style="text-align:left">' +
+          '<p>Two sources, checked with plain rules (no AI):</p>' +
+          '<p><b>1. GL.iNet security notices.</b> When GL posts a notice, it’s turned into an entry in a list on the Router Home GitHub page: which models and firmware it affects, what to look for on the router (a running process, a file, a setting, a service, an open port), and which fix applies. The list is signed with the Router Home release key, the same one updates use, and the router ignores any copy whose signature doesn’t match, so nobody can slip in fake checks or fixes. A copy ships with Router Home, so it works offline too.</p>' +
+          '<p><b>2. The National Vulnerability Database (NVD).</b> Published vulnerabilities (CVEs) for this exact model, matched against this router’s firmware version. NVD can take days or weeks to list something new, and many GL models have no entries.</p>' +
+          '<p><b>When:</b> both are downloaded once a day; the checks on the router repeat every 10 minutes. A new finding sends one Discord alert (type “Vulnerability”).</p>' +
+          '<p><b>Fixes</b> only come from a short fixed list: stop a process and delete its file (a copy is kept as evidence), change one setting, turn off a service, tighten a file’s permissions. Each asks first and leaves an undo script in /root/machome-backup/ where undoing makes sense. Firmware upgrades are never automatic: you get a button to the Upgrade page.</p>' +
+          '<p><b>Limits:</b> it only knows what has been published. It can’t find unknown problems, and “no signs” doesn’t prove a router was never attacked.</p></div></details>';
+        self.openModal(shell(h, r.running), self.vulnHandlers());
+        if (r.running) setTimeout(function(){ if (document.getElementById('machome-modal')) self.openVuln(msg || ' '); }, 2500);
+      });
+    },
+    vulnHandlers: function(){
+      var self = this;
+      return {
+        check: function(md, b){ b.disabled = true; b.textContent = 'Checking…';
+          rpcx('machome', 'vuln_check', {}, 15000).then(function(){ setTimeout(function(){ self.openVuln(' '); }, 1500); })
+            .catch(function(e){ b.disabled = false; b.textContent = 'Check now'; md.querySelector('[data-e]').textContent = 'Couldn’t start: ' + e.message; }); },
+        fix: function(md, b){
+          var id = b.getAttribute('data-id'), label = b.getAttribute('data-label');
+          if (!confirm(label + '?\n\nA backup or evidence copy is kept in /root/machome-backup/ on the router.')) return;
+          b.disabled = true; b.textContent = 'Working…';
+          rpcx('machome', 'vuln_fix', { id: id }, 30000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'didn’t work');
+            self.openVuln('Done: ' + r.done + (r.undo ? ' (undo: ' + r.undo + ')' : '') + '. Now: ' + (r.status === 'ok' ? 'not affected.' : r.status + '.')); })
+            .catch(function(e){ b.disabled = false; b.textContent = label; md.querySelector('[data-e]').textContent = 'Fix failed: ' + e.message; }); },
+        upgrade: function(){ self.closeModal(); self.go('upgrade'); }
+      };
     },
     openUpdates: function(){
       var self = this, m = this.mh;

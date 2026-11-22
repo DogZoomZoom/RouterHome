@@ -39,7 +39,7 @@ end
 -- ---------------------------------------------------------------- config
 local DEF = { webhook = "", enabled = false, temp_f = 185, ping_ms = 75, speed_daily = true, speed_hour = 3,
     types = { vpn = true, dns = true, wan = true, newdev = true, security = true, temp = true, firmware = true, upgrade = true, speed = true,
-              login = true, weekly = true, backup = true, health = true, config = true, isp = true, wifi = true, schedule = true, presence = true, data = true, upload = true, devwatch = true, monthly = true, ping = true, adspike = true, rhupdate = true } }
+              login = true, weekly = true, backup = true, health = true, config = true, isp = true, wifi = true, schedule = true, presence = true, data = true, upload = true, devwatch = true, monthly = true, ping = true, adspike = true, rhupdate = true, vuln = true } }
 local function load_cfg()
     local c = jread(ALERTS, {})
     local out = { webhook = c.webhook or "", enabled = c.enabled == true, temp_f = tonumber(c.temp_f) or DEF.temp_f, ping_ms = tonumber(c.ping_ms) or DEF.ping_ms,
@@ -938,6 +938,54 @@ local function zram_tick(now, online, upgraded)
     os.execute("logger -t machome 'zram: reinstalling zram-swap after the firmware upgrade (try " .. p.tries .. " of 6)'")
 end
 
+-- ---------------------------------------------------------------- known vulnerabilities (2.6.5, owner 2026-11-22)
+-- vulncheck.lua runs in the background: a full run (signed GL list from GitHub + NVD) once a day (failed downloads
+-- retried after an hour), a local re-check every 10 minutes. Here: read its results for the Security card, and send
+-- ONE Discord alert (type "vuln") per advisory and status (infected / exposed / needs update / suspicious), plus a
+-- green one when an infection or exposure is gone. State: /etc/machome/vuln_state.json (written only on changes).
+local VSTATE, VOUT = EDIR .. "/vuln_state.json", DIR .. "/vuln.json"
+local vst, vu_local, vu_seen = nil, 0, 0
+local VWORDS = { infected = "🚨 Signs of infection", exposed = "⚠ Exposed", update = "⬆ Firmware update needed", suspicious = "⚠ Suspicious file" }
+local function vuln_tick(now, online)
+    vst = vst or jread(VSTATE, {}); if type(vst) ~= "table" then vst = {} end
+    vst.notified = type(vst.notified) == "table" and vst.notified or {}
+    local okV, V = pcall(dofile, "/usr/lib/machome/vulncheck.lua"); if not okV or type(V) ~= "table" then return end
+    local up = tonumber((readf("/proc/uptime") or ""):match("^(%d+)")) or 0
+    local changed = false
+    if up >= 900 and online and now - (tonumber(vst.fetched) or 0) >= 86400 then
+        if V.start("run") then vst.fetched = now; vst.retry = nil; changed = true end
+    elseif now - vu_local >= 600 and up >= 120 then
+        if V.start("local") then vu_local = now end
+    end
+    local r = jread(VOUT, nil)
+    if r and tonumber(r.t) and r.t > vu_seen and type(r.items) == "table" then
+        vu_seen = r.t
+        -- a full run whose downloads failed: try again in an hour instead of tomorrow
+        if r.mode == "run" and r.fetch_ok == false and not vst.retry then vst.fetched = now - 86400 + 3600; vst.retry = true; changed = true end
+        X.vuln_sum = { problems = r.problems or 0, worst = r.worst or "ok", t = r.t, fetched = r.fetched or cjson.null, n_gl = r.adv and r.adv.n or 0, n_nvd = r.nvd and r.nvd.n or 0 }
+        local now_bad = {}
+        for _, it in ipairs(r.items) do
+            if VWORDS[it.status] then
+                now_bad[it.id] = it.status
+                if vst.notified[it.id] ~= it.status then
+                    local found = (type(it.found) == "table" and #it.found > 0) and ("\n• " .. table.concat(it.found, "\n• ")) or ""
+                    alert("vuln", VWORDS[it.status] .. ": " .. tostring(it.title),
+                        tostring(it.summary or ""):sub(1, 300) .. found .. "\n" .. (type(it.fix) == "table" and ("**Fix:** Security card → Known vulnerabilities → " .. tostring(it.fix.label)) or it.upgrade and "**Fix:** install the firmware update (Upgrade page)." or ""),
+                        (it.status == "infected") and "red" or "orange", { { name = "Details", value = tostring(it.link or "Security card on the Home tab"), inline = false } })
+                    vst.notified[it.id] = it.status; changed = true
+                end
+            end
+        end
+        for id, was in pairs(vst.notified) do
+            if not now_bad[id] then
+                if was == "infected" or was == "exposed" then alert("vuln", "✅ Resolved: " .. id, "The Security card's check no longer finds what it reported (" .. was .. ").", "green") end
+                vst.notified[id] = nil; changed = true
+            end
+        end
+    end
+    if changed then writef(VSTATE, cjson.encode(vst)) end
+end
+
 -- ---------------------------------------------------------------- Router Home updates: daily check (2026-11-22, owner)
 -- Once a day the router asks GitHub for the newest Router Home release (updater.lua check) and sends ONE Discord
 -- message per new version (alert type "rhupdate"). It never installs anything: that stays a click in
@@ -1314,6 +1362,7 @@ function X.tick(ctx)
         if not booted then booted = true; local okb, u = pcall(boot_check, now, ctx.sec); upgraded = okb and u == true end
         pcall(zram_tick, now, online, upgraded)
         if online then pcall(rhupd_tick, now) end
+        pcall(vuln_tick, now, online)
         -- security transitions
         if ctx.sec and #ctx.sec > 0 then
             if prev_sec then
@@ -1379,7 +1428,7 @@ function X.live()
     local okn, np = false, nil; if NP and NP.live then okn, np = pcall(NP.live) end
     return { vh = next(vhl) and vhl or cjson.null, inc = inc, fw = fw, ready = ready, alerts = { enabled = X.cfg.enabled, configured = X.cfg.webhook ~= "", sent = stats.sent, failed = stats.failed,
         last = stats.last or cjson.null, last_ok = stats.last_ok or cjson.null, queued = #queue, mutes = next(mutes) and mutes or cjson.null },
-        np = (okn and np) or cjson.null,
+        np = (okn and np) or cjson.null, vuln = X.vuln_sum or cjson.null,
         sched = { enabled = X.cfg.speed_daily, hour = X.cfg.speed_hour, last_day = trim(readf(SCHED) or "") } }
 end
 

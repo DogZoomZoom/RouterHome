@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "updated": "2026-11-22",
+  "about": "Router Home known-vulnerability list (GL.iNet security notices turned into checks). Signed with the Router Home release key; routers ignore a copy whose signature doesn't match. Format: docs/VULN-CHECKER.md in the Router Home project.",
+  "advisories": [
+    {
+      "id": "GL-2026-11-20",
+      "title": "GL.iNet cloud remote management was exploited to install malware",
+      "published": "2026-11-20",
+      "severity": "critical",
+      "link": "https://www.gl-inet.com/en-gb/blogs/blog/glinet-security-notice-2026-11-20",
+      "summary": "An unauthorized party used a vulnerability in GL.iNet's cloud remote management services to install malicious software on some GL.iNet routers and KVM devices. GL has blocked that attack path, so devices can't be newly infected through it, but that doesn't remove malware from devices that were already infected. GL's sign of infection: a running process containing \"crond -i /tmp/.log\".",
+      "models": ["*"],
+      "firmware_note": "GL scheduled stable firmware with security fixes for routers on 2026-11-22. Install it when the Upgrade page offers it, even if this check finds nothing.",
+      "indicators": [
+        { "type": "process", "match": "crond -i /tmp/.log", "label": "The malware process \"crond -i /tmp/.log\" is running (GL's sign of infection)" },
+        { "type": "file", "path": "/tmp/.log", "strength": "possible", "label": "A hidden file /tmp/.log exists (the malware's file; not proof on its own)" }
+      ],
+      "exposures": [
+        { "type": "uci", "key": "gl-cloud.@cloud[0].enable", "equals": "1", "label": "GoodCloud remote management is turned on (the service that was exploited)" }
+      ],
+      "fixes": {
+        "infected": { "type": "kill_remove", "process": "crond -i /tmp/.log", "path": "/tmp/.log", "label": "Stop the malware process and delete /tmp/.log" },
+        "suspicious": { "type": "kill_remove", "process": "crond -i /tmp/.log", "path": "/tmp/.log", "label": "Delete /tmp/.log (a copy is kept)" },
+        "exposed": { "type": "uci_set", "key": "gl-cloud.@cloud[0].enable", "value": "0", "restart": "gl-cloud", "label": "Turn off GoodCloud remote management" }
+      },
+      "advice": {
+        "infected": "GL says to treat the router as infected. Stopping the process removes the running malware, but GL's own remedy is a factory reset (or the security firmware), then setting the router up again and changing the admin password. Install the stable security firmware as soon as it's offered.",
+        "suspicious": "The malware's file name is there but its process isn't running. Delete it, then run the check again; if the process ever shows up, treat the router as infected.",
+        "exposed": "No sign of infection, but the exploited service is on. GL has blocked the attack path; turning remote management off until the security firmware is installed removes the risk entirely. You can turn it back on in GL's Applications > GoodCloud page later.",
+        "ok": "No signs of infection and GoodCloud remote management is off. GL still recommends installing the stable security firmware when it's offered."
+      }
+    }
+  ]
+}

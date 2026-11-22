@@ -6,6 +6,20 @@ installer again and choose 1. Your settings (Discord webhook, weather ZIP, NAS b
 etc.) are kept either way.
 
 
+VERSION 2.6.5  (2026-11-22)
+-------------------------
+  - Known vulnerabilities, on the Security card: checks the router against published
+    security problems with plain rules (no AI). Two sources: GL.iNet security notices,
+    turned into a signed list of checks on the Router Home GitHub page (security folder),
+    and the National Vulnerability Database (published CVEs for your exact model and
+    firmware). Shows Not affected / Exposed / Signs of infection / Firmware update needed,
+    offers a one-click fix where one is safe (it asks first and keeps an undo script or an
+    evidence copy), and sends a Discord alert (new type "Vulnerability"). Downloaded once a
+    day; the checks on the router repeat every 10 minutes. First entry: GL's 2026-11-20
+    notice (malware via cloud remote management): checks for GL's sign of infection and
+    whether GoodCloud remote management is on.
+
+
 VERSION 2.6.4  (2026-11-22)
 -------------------------
   - New "Network" tab in the GL.inet Utilities Toolkit card:

@@ -275,6 +275,25 @@ SECURITY
     permissions, unused firewall openings, remote access, UPnP, disabled services, etc.
   - "Firmware-upgrade safe": whether your Home tab and settings will survive a
     firmware upgrade.
+  - "Known vulnerabilities" (click it): checks this router against published security
+    problems. No AI; two sources checked with plain rules:
+      1. GL.iNet security notices, turned into a list of checks on the Router Home
+         GitHub page: which models/firmware, what to look for on the router (a running
+         process, a file, a setting, a service, an open port) and which fix applies.
+         The list is signed with the Router Home release key (the same one updates use);
+         the router ignores a copy whose signature doesn't match. A copy ships built in.
+      2. The National Vulnerability Database (NVD): published vulnerabilities (CVEs)
+         for this exact model, compared with this router's firmware version.
+    Downloaded once a day; the checks on the router repeat every 10 minutes.
+    Results: Not affected, Exposed (a risky setting is on), Suspicious file, Signs of
+    infection, or Firmware update needed, with GL's advice and a link to the notice.
+    Fix buttons only use a short fixed list: stop a process and delete its file (a copy
+    is kept as evidence), change one setting, turn off a service, tighten a file's
+    permissions. Each asks first and leaves an undo script in /root/machome-backup/
+    where undoing makes sense. Firmware upgrades are never automatic: "Open the Upgrade
+    page". "Check now" re-checks right away. New findings send one Discord alert
+    (type "Vulnerability"). Limits: it only knows what has been published, and "no
+    signs" doesn't prove a router was never attacked.
   - Whether Discord alerts are working.
 
 SENSORS            Every temperature sensor in °F.

@@ -22,7 +22,7 @@ local function done(err, msg)
     os.execute("rm -rf " .. W)
 end
 -- every file Router Home owns (settings in /etc/machome are never touched)
-local FILES = "usr/share/oui/menu.d/machome.json www/views/gl-sdk4-ui-machome.common.js.gz usr/lib/oui-httpd/rpc/machome usr/bin/machome-sampler usr/lib/machome etc/init.d/machome usr/bin/machome-speedtest etc/init.d/machome-st usr/share/gl-download.d/machome usr/share/gl-validator.d/machome.lua usr/share/machome/release.pub usr/sbin/machome-vpn-rps"
+local FILES = "usr/share/oui/menu.d/machome.json www/views/gl-sdk4-ui-machome.common.js.gz usr/lib/oui-httpd/rpc/machome usr/bin/machome-sampler usr/lib/machome etc/init.d/machome usr/bin/machome-speedtest etc/init.d/machome-st usr/share/gl-download.d/machome usr/share/gl-validator.d/machome.lua usr/share/machome/release.pub usr/share/machome/advisories.json usr/sbin/machome-vpn-rps"
 local function existing() local t = {}; for f in FILES:gmatch("%S+") do if readf("/" .. f) or sh("[ -d /" .. f .. " ] && echo d"):match("d") then t[#t + 1] = f end end; return table.concat(t, " ") end
 local function healthy()
     os.execute("sleep 15")

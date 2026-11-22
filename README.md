@@ -19,6 +19,11 @@ An internet grade, a router → modem → internet check that shows where a prob
 - **VPN Health:** a steady ping per tunnel, DNS and web checks through each tunnel, handshake status, drops vs. harmless ping-only blips, a 5-hour deep monitor and a VPN outage log.
 - **Automatic failover:** if a tunnel goes down, its devices move to another healthy tunnel within about 30 seconds (never off the VPN) and move back when it recovers.
 - **Security:** checks SSH, the firewall, port forwards, UPnP, remote access and more, every minute.
+- **Known vulnerabilities** (Security card, 2.6.5+): checks the router against published security problems, with plain rules (no AI):
+  - **GL.iNet security notices**, turned into a signed list of checks in [`security/`](security). For example, the [11-20 cloud-management notice](https://www.gl-inet.com/en-gb/blogs/blog/glinet-security-notice-2026-11-20) checks for GL's sign of infection and whether the exploited service is on.
+  - **The National Vulnerability Database (NVD):** published CVEs for your exact model, matched to your firmware version.
+
+  It shows Not affected / Exposed / Signs of infection / Firmware update needed, offers a one-click fix where one is safe, and sends a Discord alert for new findings. Firmware upgrades are never automatic. How it works, and why the list is signed: [security/README.md](security/README.md).
 
 ### AdGuard, blocked ads and data use
 AdGuard Home status (on the router or a NAS), top blocked sites, which devices get the most ads blocked, and internet use for your billing month with a per-day chart and an optional data cap.
