@@ -291,9 +291,15 @@ local function svc_running(name)
     return sh("ubus call service list '{\"name\":\"" .. name .. "\"}'"):find('"running": true', 1, true) ~= nil
 end
 
+-- Baseline (2.6.7, user report): a check counts as "failed" (red alert, Restore settings) only if it has passed on THIS
+-- router at least once since Router Home was installed. A check that never passed is a recommendation: e.g. a user who
+-- kept GL's defaults (password SSH, plain HTTP) shouldn't see red "failed" alerts for settings they never had.
+-- Routers that were hardened before (the owner's) have every check in the baseline, so nothing changes for them.
+local SEC_BASE = "/etc/machome/sec_baseline.json"
 local function security()
     local c = {}
     local function add(id, label, ok, detail) c[#c + 1] = { id = id, label = label, ok = ok, detail = detail } end
+    local okb, base = pcall(cjson.decode, readf(SEC_BASE) or "{}"); if not okb or type(base) ~= "table" then base = {} end
 
     local pa = uci_get("dropbear.@dropbear[0].PasswordAuth")
     add("ssh", "SSH key-only login", pa == "off" or pa == "0", (pa == "off" or pa == "0") and "Password login disabled" or "Password login is ON")
@@ -311,11 +317,14 @@ local function security()
     if (readf("/etc/config/ovpnclient") or ""):find("option password", 1, true) then ovf[#ovf + 1] = "/etc/config/ovpnclient" end
     for f in sh("ls /etc/openvpn/profiles/*/auth/* 2>/dev/null"):gmatch("[^\n]+") do ovf[#ovf + 1] = f end
     -- GL rewrites them readable on every VPN save, so they're re-locked here (logged) instead of warning each time.
+    -- Only on routers whose VPN files were locked down on purpose (2.6.7): the WireGuard key file is 600, or the
+    -- OpenVPN files were locked before. On a router with GL's defaults this is offered as a recommendation instead.
+    local relock = perm == "-rw-------" or base.ovpnperm == true
     if #ovf > 0 then
         local open, fixed = 0, 0
         for _, f in ipairs(ovf) do
             if not f:find("'", 1, true) and (trim(sh("ls -l '" .. f .. "'")):match("^(%S+)") or "") ~= "-rw-------" then
-                os.execute("chmod 600 '" .. f .. "'")
+                if relock then os.execute("chmod 600 '" .. f .. "'") end
                 if (trim(sh("ls -l '" .. f .. "'")):match("^(%S+)") or "") == "-rw-------" then fixed = fixed + 1 else open = open + 1 end
             end
         end
@@ -367,6 +376,13 @@ local function security()
         add("vpntune", "VPN speed tuning applied", ok, ok and "Queue 5000 · cores 1-3" or ("Queue " .. bl .. " · budget " .. bu .. " · RPS " .. rps))
     end
 
+    -- baseline: every check that passes now joins it for good; a failing check outside it is only a recommendation
+    local grew = false
+    for _, x in ipairs(c) do
+        if x.ok and base[x.id] ~= true then base[x.id] = true; grew = true end
+        x.rec = (not x.ok) and base[x.id] ~= true
+    end
+    if grew then local f = io.open(SEC_BASE .. ".tmp", "w"); if f then f:write(cjson.encode(base)); f:close(); os.rename(SEC_BASE .. ".tmp", SEC_BASE) end end
     return c
 end
 

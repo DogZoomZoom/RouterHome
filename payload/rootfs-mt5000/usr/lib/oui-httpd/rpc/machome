@@ -800,6 +800,47 @@ function M.vuln_status()
 end
 function M.vuln_check() local V = vul(); if V.running() then return { ok = true, running = true } end; return { ok = V.start("run"), running = true } end
 function M.vuln_fix(a) local id = type(a) == "table" and a.id; if type(id) ~= "string" or not id:match("^[%w%-%._]+$") then return { ok = false, err = "bad request" } end; return vul().fix(id) end
+--- Security recommendations (2.6.7): "Turn on" for one check that never passed on this router. Same commands as the
+--- installer's optional changes; every change writes /root/machome-backup/undo-sec-<id>.sh. HTTPS-only is done by the
+--- page through GL's own local-access setting. SSH key-only needs at least one SSH key (else it would lock SSH out).
+function M.sec_apply(args)
+    local function sh(c) local p = io.popen(c .. " 2>/dev/null"); if not p then return "" end; local s = p:read("*a") or ""; p:close(); return s end   -- (the file's own sh/bg are defined further down)
+    local function bg(c) os.execute("/bin/sh -c '" .. c .. "' </dev/null >/dev/null 2>&1 &") end
+    local id = type(args) == "table" and args.id
+    local B = "/root/machome-backup"; os.execute("mkdir -p " .. B)
+    local undo, done = {}, nil
+    if id == "ssh" then
+        local n = tonumber(trim(sh("grep -c '^[^#]*ssh-' /etc/dropbear/authorized_keys"))) or 0
+        if n < 1 then return { ok = false, err = "add an SSH key first (GL.inet Utilities Toolkit → SSH keys), or you'd be locked out of SSH" } end
+        local pa, rpa = trim(sh("uci -q get dropbear.@dropbear[0].PasswordAuth")), trim(sh("uci -q get dropbear.@dropbear[0].RootPasswordAuth"))
+        undo[#undo + 1] = "uci set dropbear.@dropbear[0].PasswordAuth='" .. (pa ~= "" and pa or "on") .. "'; uci set dropbear.@dropbear[0].RootPasswordAuth='" .. (rpa ~= "" and rpa or "on") .. "'; uci commit dropbear; /etc/init.d/dropbear restart"
+        os.execute("uci set dropbear.@dropbear[0].PasswordAuth=off; uci set dropbear.@dropbear[0].RootPasswordAuth=off; uci commit dropbear")
+        bg("sleep 1; /etc/init.d/dropbear restart"); done = "SSH now accepts keys only"
+    elseif id == "wgperm" then
+        local old = trim(sh("stat -c %a /etc/config/wireguard")); if old == "" then return { ok = false, err = "there's no VPN key file on this router" } end
+        undo[#undo + 1] = "chmod " .. old .. " /etc/config/wireguard"
+        os.execute("chmod 600 /etc/config/wireguard"); done = "VPN key file locked (600)"
+    elseif id == "ovpnperm" then
+        local files = {}
+        if (readf("/etc/config/ovpnclient") or ""):find("option password", 1, true) then files[#files + 1] = "/etc/config/ovpnclient" end
+        for f in sh("ls /etc/openvpn/profiles/*/auth/* 2>/dev/null"):gmatch("[^\n]+") do if not f:find("'", 1, true) then files[#files + 1] = f end end
+        for _, f in ipairs(files) do local old = trim(sh("stat -c %a '" .. f .. "'")); if old ~= "" then undo[#undo + 1] = "chmod " .. old .. " '" .. f .. "'" end; os.execute("chmod 600 '" .. f .. "'") end
+        done = #files .. " OpenVPN login file" .. (#files == 1 and "" or "s") .. " locked (600)"
+    elseif id == "ipsec" then
+        local n = 0
+        for s in sh("uci show firewall | grep -E \"name='Allow-(IPSec-ESP|ISAKMP)'\""):gmatch("firewall%.([^%.]+)%.name") do
+            local old = trim(sh("uci -q get firewall." .. s .. ".enabled")); undo[#undo + 1] = "uci set firewall." .. s .. ".enabled='" .. (old ~= "" and old or "1") .. "'"
+            os.execute("uci set firewall." .. s .. ".enabled=0"); n = n + 1
+        end
+        if n == 0 then return { ok = false, err = "no IPsec firewall rules found" } end
+        os.execute("uci commit firewall"); bg("/etc/init.d/firewall reload"); undo[#undo + 1] = "uci commit firewall; /etc/init.d/firewall reload"
+        done = "closed " .. n .. " unused IPsec firewall opening" .. (n == 1 and "" or "s")
+    else return { ok = false, err = "this one is changed in GL's own settings pages" } end
+    local uf = B .. "/undo-sec-" .. id .. ".sh"
+    local f = io.open(uf, "w"); if f then f:write("# undo: Security card \"Turn on\" for " .. id .. " (" .. os.date("%Y-%m-%d %H:%M") .. ")\n" .. table.concat(undo, "\n") .. "\nlogger -t machome 'undo-sec: " .. id .. " undone'\n"); f:close(); os.execute("chmod 700 " .. uf) end
+    os.execute("logger -t machome 'security: " .. id .. " turned on from the Home tab (" .. done:gsub("'", "") .. ")'")
+    return { ok = true, done = done, undo = uf }
+end
 --- Router Home updates from GitHub (owner, 2026-11-22): Settings → Router Home → Updates. Signed packages only.
 local function upd() return dofile("/usr/lib/machome/updater.lua") end
 function M.upd_check() return upd().check() end
@@ -1009,8 +1050,29 @@ local function has_screen() local f = io.open("/etc/init.d/gl_screen", "r"); if 
 function M.get_weather()
     local W = wxmod(); if not W then return { ok = false, err = "weather module missing" } end
     local c = W.load_cfg()
+    -- lat/lon rounded to city level: the page's radar window centers on it (works outside the US since 2.6.7)
     return { ok = true, zip = c.zip or "", place = c.place or "", screen_supported = has_screen(), screen = c.screen ~= false, radar = c.radar ~= false,
-        dismissed = c.dismissed == true, data = jdec(W.DATA, nil) or cjson.null }
+        dismissed = c.dismissed == true, off = c.off == true, unit = W.unit and W.unit() or "F",
+        lat = c.lat and math.floor(c.lat * 10 + 0.5) / 10 or cjson.null, lon = c.lon and math.floor(c.lon * 10 + 0.5) / 10 or cjson.null,
+        data = jdec(W.DATA, nil) or cjson.null }
+end
+--- Preferences (2.6.7): temperature unit "F" (default) or "C", for the page, Discord messages and the weather.
+function M.get_prefs()
+    local p = jdec("/etc/machome/prefs.json", {}); if type(p) ~= "table" then p = {} end
+    return { ok = true, temp_unit = p.temp_unit == "C" and "C" or "F" }
+end
+function M.set_prefs(args)
+    local u = type(args) == "table" and args.temp_unit
+    if u ~= "C" and u ~= "F" then return { ok = false, err = "bad request" } end
+    local p = jdec("/etc/machome/prefs.json", {}); if type(p) ~= "table" then p = {} end
+    p.temp_unit = u
+    os.execute("mkdir -p /etc/machome"); local f = io.open("/etc/machome/prefs.json", "w"); if not f then return { ok = false, err = "can't save" } end
+    f:write(cjson.encode(p)); f:close()
+    -- weather in the new unit right away (and a re-drawn touchscreen picture)
+    local W = wxmod()
+    if W then local c = W.load_cfg(); if c.lat and c.off ~= true then local d = W.fetch(c); if d then local g = io.open(W.DATA, "w"); if g then g:write(cjson.encode(d)); g:close() end end end end
+    os.execute("touch /tmp/machome/wx_force")
+    return { ok = true, temp_unit = u }
 end
 
 function M.set_weather(args)
@@ -1018,12 +1080,19 @@ function M.set_weather(args)
     local W = wxmod(); if not W then return { ok = false, err = "weather module missing" } end
     local c = W.load_cfg()
     if args.dismiss == true then c.dismissed = true; W.save_cfg(c); return { ok = true } end
+    -- weather on/off (2.6.7): off = no downloads, nothing shown, touchscreen wallpaper restored by the sampler
+    if args.off ~= nil then
+        c.off = args.off == true; if c.off then c.dismissed = true end
+        W.save_cfg(c); os.execute("touch /tmp/machome/wx_force")
+        if c.off then return { ok = true, off = true } end
+    end
+    if args.place ~= nil and args.zip == nil then args.zip = args.place end   -- "place": ZIP or city (same thing since 2.6.7)
     if args.screen ~= nil then c.screen = args.screen == true end
     if args.radar ~= nil then c.radar = args.radar == true; if c.radar then os.execute("touch /tmp/machome/wx_radar_now") end end
     if args.zip ~= nil then
         local g, err = W.geocode(trim(tostring(args.zip)))
         if not g then return { ok = false, err = err } end
-        c.zip, c.place, c.lat, c.lon, c.dismissed = g.zip, g.place, g.lat, g.lon, nil
+        c.zip, c.place, c.lat, c.lon, c.dismissed, c.off = g.zip, g.place, g.lat, g.lon, nil, nil
     end
     W.save_cfg(c)
     local d = c.lat and W.fetch(c)
@@ -1068,21 +1137,25 @@ function M.fix(args)
                 or ("DNS server " .. srv .. " isn't reachable. Check that your NAS is powered on and connected.")) }
     elseif a == "harden" then
         local done = {}
-        if trim(sh("uci -q get dropbear.@dropbear[0].PasswordAuth")) ~= "off" then
+        -- 2.6.7 (user report): only put back what THIS router had (the security baseline: checks that passed here
+        -- before), and never switch to key-only SSH without an SSH key (that would lock the user out of SSH).
+        local base = jdec("/etc/machome/sec_baseline.json", {}); if type(base) ~= "table" then base = {} end
+        local nkeys = tonumber(trim(sh("grep -c '^[^#]*ssh-' /etc/dropbear/authorized_keys"))) or 0
+        if base.ssh == true and nkeys > 0 and trim(sh("uci -q get dropbear.@dropbear[0].PasswordAuth")) ~= "off" then
             os.execute("uci set dropbear.@dropbear[0].PasswordAuth=off; uci set dropbear.@dropbear[0].RootPasswordAuth=off; uci commit dropbear")
             bg("sleep 1; /etc/init.d/dropbear restart"); done[#done + 1] = "SSH key-only login"
         end
-        if not (sh("ls -l /etc/config/wireguard"):match("^%-rw%-%-%-%-%-%-%-")) then os.execute("chmod 600 /etc/config/wireguard"); done[#done + 1] = "VPN key file locked" end
+        if base.wgperm == true and not (sh("ls -l /etc/config/wireguard"):match("^%-rw%-%-%-%-%-%-%-")) then os.execute("chmod 600 /etc/config/wireguard"); done[#done + 1] = "VPN key file locked" end
         -- OpenVPN logins (2026-11-17): same rule as the WireGuard key file (GL re-creates them world-readable on save)
         local ovl = false
-        if (readf("/etc/config/ovpnclient") or ""):find("option password", 1, true) and not (sh("ls -l /etc/config/ovpnclient"):match("^%-rw%-%-%-%-%-%-%-")) then
+        if base.ovpnperm == true and (readf("/etc/config/ovpnclient") or ""):find("option password", 1, true) and not (sh("ls -l /etc/config/ovpnclient"):match("^%-rw%-%-%-%-%-%-%-")) then
             os.execute("chmod 600 /etc/config/ovpnclient"); ovl = true end
-        for f in sh("ls /etc/openvpn/profiles/*/auth/* 2>/dev/null"):gmatch("[^\n]+") do
+        for f in (base.ovpnperm == true and sh("ls /etc/openvpn/profiles/*/auth/* 2>/dev/null") or ""):gmatch("[^\n]+") do
             if not f:find("'", 1, true) and not (sh("ls -l '" .. f .. "'"):match("^%-rw%-%-%-%-%-%-%-")) then os.execute("chmod 600 '" .. f .. "'"); ovl = true end
         end
         if ovl then done[#done + 1] = "OpenVPN login files locked" end
         local fw = false
-        for s in sh("uci show firewall | grep -E \"name='Allow-(IPSec-ESP|ISAKMP)'\""):gmatch("firewall%.([^%.]+)%.name") do
+        for s in (base.ipsec == true and sh("uci show firewall | grep -E \"name='Allow-(IPSec-ESP|ISAKMP)'\"") or ""):gmatch("firewall%.([^%.]+)%.name") do
             if trim(sh("uci -q get firewall." .. s .. ".enabled")) ~= "0" then os.execute("uci set firewall." .. s .. ".enabled=0"); fw = true end
         end
         if fw then os.execute("uci commit firewall"); bg("/etc/init.d/firewall reload"); done[#done + 1] = "IPsec rules off" end
@@ -1094,7 +1167,7 @@ function M.fix(args)
         end
         if os.execute("/etc/init.d/machome enabled") ~= 0 then os.execute("/etc/init.d/machome enable"); done[#done + 1] = "sampler auto-start" end
         os.execute("/usr/sbin/machome-vpn-rps fix >/dev/null 2>&1")
-        local https = trim(sh("uci -q get oui-httpd.main.redirect_https")) ~= "1"
+        local https = base.https == true and trim(sh("uci -q get oui-httpd.main.redirect_https")) ~= "1"
         if https then done[#done + 1] = "HTTPS-only needs re-enabling on the router's Security page" end
         flog("restore hardening: " .. (#done > 0 and table.concat(done, ", ") or "nothing to change"))
         return { ok = true, changed = done, msg = #done > 0 and ("Restored: " .. table.concat(done, ", ") .. ".") or "Everything was already in place." }

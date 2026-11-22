@@ -17,13 +17,41 @@ function W.load_cfg() local s = readf(W.CFG); local ok, v = pcall(cjson.decode, 
 function W.save_cfg(c) os.execute("mkdir -p " .. EDIR); writef(W.CFG, cjson.encode(c)) end
 
 -- ---------------------------------------------------------------- data
-function W.geocode(zip)
-    if type(zip) ~= "string" or not zip:match("^%d%d%d%d%d$") then return nil, "Enter a 5-digit US ZIP code" end
-    local r = jget("https://geocoding-api.open-meteo.com/v1/search?name=" .. zip .. "&count=1&countryCode=US")
-    local g = r and r.results and r.results[1]
-    if not g then return nil, "Couldn't find ZIP " .. zip end
-    return { zip = zip, place = g.name .. (g.admin1 and (", " .. (g.admin1_code or g.admin1)) or ""), lat = g.latitude, lon = g.longitude }
+-- Location (2.6.7: worldwide, users asked): a 5-digit US ZIP code (as before), or a place anywhere: "London",
+-- "London, GB", "London, Canada", "Springfield, IL", "75001, FR". Open-Meteo's geocoding finds city names everywhere;
+-- postal codes outside the US work only in some countries, so the error suggests the city name.
+local function urlenc(s) return (tostring(s):gsub("[^%w%-%._~]", function(ch) return string.format("%%%02X", ch:byte()) end)) end
+local function geo(name, cc) local r = jget("https://geocoding-api.open-meteo.com/v1/search?count=10&language=en&format=json&name=" .. urlenc(name) .. (cc and ("&countryCode=" .. cc) or "")); return (r and type(r.results) == "table") and r.results or {} end
+function W.geocode(q)
+    q = tostring(q or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if q == "" or #q > 80 or q:find("[%c<>\"'`;|&$\\]") then return nil, "Enter a US ZIP code or a city, e.g. London or London, GB" end
+    local g
+    if q:match("^%d%d%d%d%d$") then
+        g = geo(q, "US")[1]
+        if not g then return nil, "Couldn't find ZIP " .. q .. ". Outside the US, enter your city (e.g. Paris, FR)" end
+    else
+        local name, where = q:match("^(.-)%s*,%s*([^,]-)%s*$")
+        if not name or name == "" then name, where = q, nil end
+        local lw = where and where:lower() or nil
+        -- US state abbreviations ("Springfield, IL"): Open-Meteo only returns the full state name
+        local ST = { al = "alabama", ak = "alaska", az = "arizona", ar = "arkansas", ca = "california", co = "colorado", ct = "connecticut", de = "delaware", dc = "district of columbia",
+            fl = "florida", ga = "georgia", hi = "hawaii", id = "idaho", il = "illinois", ["in"] = "indiana", ia = "iowa", ks = "kansas", ky = "kentucky", la = "louisiana", me = "maine",
+            md = "maryland", ma = "massachusetts", mi = "michigan", mn = "minnesota", ms = "mississippi", mo = "missouri", mt = "montana", ne = "nebraska", nv = "nevada", nh = "new hampshire",
+            nj = "new jersey", nm = "new mexico", ny = "new york", nc = "north carolina", nd = "north dakota", oh = "ohio", ok = "oklahoma", ["or"] = "oregon", pa = "pennsylvania", ri = "rhode island",
+            sc = "south carolina", sd = "south dakota", tn = "tennessee", tx = "texas", ut = "utah", vt = "vermont", va = "virginia", wa = "washington", wv = "west virginia", wi = "wisconsin", wy = "wyoming", pr = "puerto rico" }
+        local function fits(x) return lw == nil or tostring(x.country_code or ""):lower() == lw or tostring(x.country or ""):lower() == lw
+            or tostring(x.admin1 or ""):lower() == lw or tostring(x.admin1_code or ""):lower() == lw
+            or (ST[lw] ~= nil and x.country_code == "US" and tostring(x.admin1 or ""):lower() == ST[lw]) end
+        if where and where:match("^%a%a$") then g = geo(name, where:upper())[1] end            -- "London, GB"
+        if not g then for _, x in ipairs(geo(name)) do if fits(x) then g = x; break end end end -- "London, Canada" / "Springfield, IL"
+        if not g then return nil, "Couldn't find \"" .. q .. "\". Try the city name, e.g. London or London, GB" end
+    end
+    local cc = tostring(g.country_code or "")
+    local place = g.name .. ((g.admin1 and g.admin1 ~= g.name) and (", " .. ((cc == "US" and g.admin1_code) or g.admin1)) or "") .. ((cc ~= "" and cc ~= "US") and (", " .. cc) or "")
+    return { zip = q, place = place, lat = g.latitude, lon = g.longitude, cc = cc }
 end
+-- temperature unit (2.6.7): Control Center → Temperature unit, /etc/machome/prefs.json; °F by default
+function W.unit() local ok, p = pcall(cjson.decode, readf(EDIR .. "/prefs.json") or ""); return (ok and type(p) == "table" and p.temp_unit == "C") and "C" or "F" end
 
 local CODES = {
     [0] = { "Clear", 1 }, [1] = { "Mostly clear", 4 }, [2] = { "Partly cloudy", 4 }, [3] = { "Cloudy", 3 },
@@ -42,8 +70,10 @@ W.cond = cond
 
 function W.fetch(c)
     if not (c and c.lat and c.lon) then return nil end
+    local U = W.unit()
     local r = jget(string.format("https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,is_day,wind_speed_10m" ..
-        "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=4", c.lat, c.lon))
+        "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&temperature_unit=%s&wind_speed_unit=%s&timezone=auto&forecast_days=4", c.lat, c.lon,
+        U == "C" and "celsius" or "fahrenheit", U == "C" and "kmh" or "mph"))
     if not (r and r.current and r.daily) then return nil end
     local cur, d = r.current, r.daily
     local text, icon = cond(cur.weather_code, cur.is_day)
@@ -53,7 +83,7 @@ function W.fetch(c)
         local _, ic = cond(d.weather_code[i], 1)
         days[#days + 1] = { date = d.time[i], hi = d.temperature_2m_max[i], lo = d.temperature_2m_min[i], cond = t, icon = ic, rain = d.precipitation_probability_max and d.precipitation_probability_max[i] or cjson.null }
     end
-    return { time = os.time(), place = c.place, zip = c.zip, temp = cur.temperature_2m, feels = cur.apparent_temperature, humidity = cur.relative_humidity_2m,
+    return { time = os.time(), place = c.place, zip = c.zip, unit = U, wind_unit = U == "C" and "km/h" or "mph", temp = cur.temperature_2m, feels = cur.apparent_temperature, humidity = cur.relative_humidity_2m,
         wind = cur.wind_speed_10m, code = cur.weather_code, is_day = cur.is_day, cond = text, icon = icon,
         hi = days[1] and days[1].hi, lo = days[1] and days[1].lo, days = days }
 end

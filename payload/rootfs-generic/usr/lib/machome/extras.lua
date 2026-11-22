@@ -20,6 +20,12 @@ local function sh(c) local p = io.popen(c .. " 2>/dev/null"); if not p then retu
 local function jread(p, def) local s = readf(p); if not s or s == "" then return def end; local ok, v = pcall(cjson.decode, s); if ok and type(v) == "table" then return v end; return def end
 local function exists(p) local f = io.open(p, "r"); if f then f:close(); return true end; return false end
 local function cf(c) return math.floor(c * 9 / 5 + 32 + 0.5) end
+-- temperature unit for messages (2.6.7, users asked): Control Center → Temperature unit, saved in /etc/machome/prefs.json.
+-- °F by default. Limits stay stored in °F (temp_f); only the text changes.
+local tunit, tunit_t = "F", 0
+local function TU() if os.time() - tunit_t > 60 then tunit_t = os.time(); local p = jread(EDIR .. "/prefs.json", {}); tunit = (p.temp_unit == "C") and "C" or "F" end; return tunit end
+local function tdeg(c) if TU() == "C" then return math.floor(c + 0.5) .. "°C" end; return cf(c) .. "°F" end         -- from °C
+local function tdegF(f) if TU() == "C" then return math.floor((f - 32) * 5 / 9 + 0.5) .. "°C" end; return math.floor(f + 0.5) .. "°F" end   -- from °F
 local function fmtdur(s) s = math.floor(s); if s < 90 then return s .. " s" elseif s < 5400 then return math.floor(s / 60 + 0.5) .. " min" else return string.format("%.1f h", s / 3600) end end
 local function mbps(v) if not v or v == cjson.null then return "—" end; if v >= 1000 then return string.format("%.2f Gbps", v / 1000) end; return string.format("%.0f Mbps", v) end
 -- VPN client tunnels: WireGuard (wgclientN) and OpenVPN (ovpnclientN). Since 2026-11-17 both get every check, alert,
@@ -1029,6 +1035,12 @@ local WXKEY = EDIR .. "/wx_screen_key"
 local function weather_tick(now, online)
     if not WX then local ok, W = pcall(dofile, "/usr/lib/machome/weather.lua"); if not ok then return end; WX = W end
     local c = WX.load_cfg()
+    -- weather turned off (2.6.7, Control Center → Weather → Off): no downloads; the touchscreen gets its own wallpaper back
+    if c.off == true then
+        wx_key = wx_key or trim(readf(WXKEY) or "")
+        if exists("/etc/init.d/gl_screen") and wx_key ~= "" and wx_key ~= "off" then WX.restore_screen(); wx_key = "off"; writef(WXKEY, "off") end
+        return
+    end
     if not c.lat then return end
     local force = exists(DIR .. "/wx_force")
     if force then os.remove(DIR .. "/wx_force") end
@@ -1252,8 +1264,8 @@ local function fan_tick(now)
         if not fan_fs then
             fan_fs = true; writef(DIR .. "/fan_failsafe", tostring(now))
             os.execute("/etc/init.d/gl_fan start >/dev/null 2>&1")
-            alert("temp", "🌀 Fan failsafe: back to automatic", string.format("CPU reached **%d°F** (warning level %d°F) with the fan on manual %d%%. GL's automatic control is back on until it cools to %d°F.",
-                cf(t), cf(warn), tonumber(c.pct) or 0, cf(warn - 8)), "orange")
+            alert("temp", "🌀 Fan failsafe: back to automatic", string.format("CPU reached **%s** (warning level %s) with the fan on manual %d%%. GL's automatic control is back on until it cools to %s.",
+                tdeg(t), tdeg(warn), tonumber(c.pct) or 0, tdeg(warn - 8)), "orange")
         end
         return
     end
@@ -1360,7 +1372,7 @@ function X.tick(ctx)
     if ctx.maxT then
         local f = cf(ctx.maxT)
         if f >= X.cfg.temp_f then tempcnt = tempcnt + 1; X.tempsince = X.tempsince or now else tempcnt = 0; X.tempsince = nil; if f < X.cfg.temp_f - 5 then tempfired = false end end
-        if tempcnt >= 30 and not tempfired then tempfired = true; alert("temp", "🌡 Router is running hot", "Hottest sensor at **" .. f .. "°F** for 5+ minutes (limit " .. X.cfg.temp_f .. "°F).", "orange") end
+        if tempcnt >= 30 and not tempfired then tempfired = true; alert("temp", "🌡 Router is running hot", "Hottest sensor at **" .. tdegF(f) .. "** for 5+ minutes (limit " .. tdegF(X.cfg.temp_f) .. ").", "orange") end
     end
     if now - last_min >= 60 then
         last_min = now
@@ -1382,7 +1394,8 @@ function X.tick(ctx)
             end
             prev_sec = ctx.sec
             X.secsince = X.secsince or {}
-            for _, c in ipairs(ctx.sec) do if c.ok then X.secsince[c.id] = nil else X.secsince[c.id] = X.secsince[c.id] or now end end
+            -- recommendations (checks that never passed on this router, 2.6.7) aren't incidents
+            for _, c in ipairs(ctx.sec) do if c.ok or c.rec then X.secsince[c.id] = nil else X.secsince[c.id] = X.secsince[c.id] or now end end
         end
         -- new devices
         if ctx.newmacs and #ctx.newmacs > 0 then

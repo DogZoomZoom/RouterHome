@@ -1,4 +1,4 @@
-﻿ROUTER HOME - Home tab for GL.iNet routers
+ROUTER HOME - Home tab for GL.iNet routers
 ==========================================
 (What every feature does: see FEATURE GUIDE.txt. What's new in each version: see CHANGELOG.txt)
 
@@ -69,7 +69,7 @@ OPTIONAL SECURITY / CLEANUP (asked one at a time, all off unless you say yes)
   working again.
 
 OPTIONAL SETUP (inside the Home tab)
-  - Weather: enter your ZIP when the Home tab asks.
+  - Weather: enter a US ZIP code or your city when the Home tab asks (or turn weather off in Settings).
   - Discord alerts: Control Center > Settings > Discord alerts (paste your own Discord
     webhook there).
   - NAS backup: Control Center > Settings > NAS backup.

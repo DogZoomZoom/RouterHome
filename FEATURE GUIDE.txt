@@ -1,4 +1,4 @@
-﻿ROUTER HOME - FEATURE GUIDE
+ROUTER HOME - FEATURE GUIDE
 ===========================
 What every part of the Home tab does, what runs in the background, and where to change
 things. For installing, see READ ME FIRST.txt. For what's new, see CHANGELOG.txt.
@@ -78,7 +78,7 @@ GREETING
     settings" button opens the ZIP / touchscreen settings.
 
 SYSTEM
-  - Gauges: CPU, memory, temperature (°F), connections, fan speed on models with a
+  - Gauges: CPU, memory, temperature (°F or °C), connections, fan speed on models with a
     fan, and DHCP pool: how many of the router's DHCP addresses are handed out (active
     leases inside the pool, e.g. 28 of 150; hover for the range). The DHCP gauge only
     appears when the router runs DHCP itself (not in access-point mode).
@@ -273,6 +273,14 @@ NETWORK HEALTH
 SECURITY
   - 11 live checks, re-run every minute: SSH login type, admin page HTTPS, VPN key file
     permissions, unused firewall openings, remote access, UPnP, disabled services, etc.
+  - Checks vs. recommendations: a check only counts as "failed" (red alert, "Restore
+    settings") if it passed on your router before; that catches settings that were
+    undone. Checks that never passed, for example GL's defaults when you chose "Home tab
+    only" in the installer, are listed under "Recommended · optional" instead: no
+    alert, a short explanation, and "Turn on" where one click is safe (SSH key-only,
+    HTTPS-only, locking the VPN key files, closing unused IPsec openings). Each asks
+    first and saves an undo script in /root/machome-backup/. SSH key-only is refused
+    until an SSH key is installed, so you can't lock yourself out.
   - "Firmware-upgrade safe": whether your Home tab and settings will survive a
     firmware upgrade.
   - KNOWN VULNERABILITIES: the colored panel at the top of the card (green = none
@@ -303,14 +311,14 @@ SECURITY
     signs" doesn't prove a router was never attacked.
   - Whether Discord alerts are working.
 
-SENSORS            Every temperature sensor in °F.
+SENSORS            Every temperature sensor (°F or °C, see Settings).
 LAST 24 HOURS      Temperature and internet traffic charts. Kept across reboots.
 SERVICES           On/off state of every router service.
 
 GL.INET UTILITIES TOOLKIT  (the last card on the page)
   Point-and-click tools inspired by phantasm22's GL.iNet Utilities Toolkit
   (github.com/phantasm22/GL-iNet_utils), rebuilt from scratch for Router Home.
-  - Hardware: CPU type and clock, memory, storage, temperatures (°F), network ports,
+  - Hardware: CPU type and clock, memory, storage, temperatures (°F or °C), network ports,
     Wi-Fi radios (band, channel, width, power), and a VPN crypto check: whether AES
     instructions, NEON, a hardware crypto engine and fast ChaCha20 (WireGuard's cipher)
     are active.
@@ -526,7 +534,13 @@ AdGuard on my NAS
              (On the AdGuard card, not in Settings.) Connects the AdGuard card to an
              AdGuard Home running elsewhere (address with port, plus its login).
 
-Weather      Enter a US ZIP code. Weather comes from Open-Meteo (free, no account).
+Temperature unit
+             °F or °C for the whole Home tab, the weather and Discord alerts. Saved on
+             the router, so every browser shows the same unit.
+
+Weather      Enter a US ZIP code or a city anywhere ("London", "London, GB", "Paris, TX").
+             Weather comes from Open-Meteo (free, no account). "Show weather" off
+             removes it from the Home tab and stops the downloads.
              On models with a touchscreen, the forecast can also appear on the screen's
              sleep display.
              Radar background (touchscreen models): a live radar map behind the weather
@@ -864,7 +878,7 @@ installer out, so it couldn't update or remove the Home tab later.
     Windows'/macOS's own SSH program.
   - Nothing is sent anywhere except:
       Discord        (if you add a webhook)
-      Open-Meteo     (weather, if you set a ZIP)
+      Open-Meteo     (weather, if you set a location)
       Iowa State     (radar map for the touchscreen, if that switch is on; the router
                       asks for a map of your area, about 4 MB a day)
       Ventusky       (only from YOUR browser, only while the radar window is open)

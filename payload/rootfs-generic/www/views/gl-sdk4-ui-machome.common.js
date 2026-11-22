@@ -895,7 +895,8 @@ var SETK = {
   'NAS backup': 'nas backup backups ftp ftps webdav scp ssh restore verify schedule copy synology',
   'Cable modem': 'cable modem xfinity the ISP gateway signal snr power docsis uncorrectable errors 10.0.0.1',
   'ISP report card': 'isp report card internet provider plan speed uptime outages monthly copy',
-  'Weather': 'weather zip code forecast radar temperature screen location town',
+  'Weather': 'weather zip code postal city country forecast radar temperature screen location town off hide remove',
+  'Temperature unit': 'temperature unit celsius fahrenheit metric degrees c f °c °f',
   'Wake a computer': 'wake on lan wol computer pc desktop turn on power on'
 };
 /* Auto-heal switches (Settings > Auto-heal). k = settings key, d = on by default, g = group, l/s = label/description,
@@ -957,6 +958,12 @@ function rate(bps){ var b = (Number(bps) || 0) * 8; if (b >= 1e9) return [(b/1e9
 function dur(s){ s = Math.floor(Number(s) || 0); var d = Math.floor(s/86400), h = Math.floor(s%86400/3600), m = Math.floor(s%3600/60); return (d ? d + 'd ' : '') + (d || h ? h + 'h ' : '') + m + 'm'; }
 function pct(a,b){ return b ? Math.max(0, Math.min(100, a / b * 100)) : 0; }
 function cf(c){ return Math.round(c * 9 / 5 + 32); }
+/* Temperature unit (2.6.7, users asked): Control Center → Temperature unit; saved on the router (rpc set_prefs) and
+   cached in this browser so the first paint is right. cf() stays °F for limits and math; these are for DISPLAY. */
+var TU = 'F'; try { if (localStorage.getItem('machome-tu') === 'C') TU = 'C'; } catch (e) {}
+function tconv(c){ return TU === 'C' ? Math.round(c) : Math.round(c * 9 / 5 + 32); }                       /* °C reading → number in the chosen unit */
+function tdisp(c){ return c == null ? '—' : tconv(c) + '°' + TU; }                                        /* °C reading → "77°F" / "25°C" */
+function tdispF(f){ return TU === 'C' ? Math.round((f - 32) * 5 / 9) + '°C' : Math.round(f) + '°F'; }       /* a °F number → text in the chosen unit */
 function loadColor(p){ return p < 60 ? 'var(--mh-green)' : p < 80 ? 'var(--mh-yellow)' : p < 90 ? 'var(--mh-orange)' : 'var(--mh-red)'; }
 function tempColor(t){ return t < 60 ? 'var(--mh-green)' : t < 75 ? 'var(--mh-yellow)' : t < 85 ? 'var(--mh-orange)' : 'var(--mh-red)'; }
 function rpc(o, m, p){ try { return Promise.resolve(window.$rpcRequest('call', ['sid', o, m, p || {}])).catch(function(){ return null; }); } catch (e) { return Promise.resolve(null); } }
@@ -1022,7 +1029,7 @@ var DOCK = [
   ['lanip','Network','net','indigo'],'|',['overview','System','gear','gray'],['upgrade','Upgrade','up','pink'],['@dnshub','DNS','dnsq','red']
 ];
 
-var MH_VERSION = '2.6.6', MH_BUILD = '2026-11-22';
+var MH_VERSION = '2.6.7', MH_BUILD = '2026-11-22';
 var MH_REPO = 'https://github.com/xDarkHawkx/RouterHome';   /* updates come from this repo's GitHub Releases */
 var MH_CREDIT = 'Made by DogZoomZoom &amp; Claude AI (the bot)';
 /* "About Home" guide (Control Center > About Home): [section, intro, [[feature, how it works / how to use], ...]] */
@@ -1042,7 +1049,7 @@ var ABOUT = [
   ['Dismiss / It’s mine', 'Dismiss hides an alert for a while (1 h for red, 24 h for orange). “It’s mine” on a new-device alert marks the device as known for good. “↻ Clear” on a packet-loss alert starts the 10-minute loss check fresh (handy right after changing a VPN server): the alert only comes back if new loss shows up. “Mute” silences that kind of alert (banner and Discord) for 1 hour, the rest of today or a week; it’s still listed in Recent events. “Clear all” under the alerts restarts the VPN, packet-loss and high-ping checks from scratch and hides the rest like Dismiss.'],
   ['How VPN pings are checked', 'Each VPN tunnel keeps one steady ping running to Cloudflare and one to Quad9 (one a second each, like ping -t on a PC), instead of starting new pings every check. Tested 11-20 side by side: some VPN servers (Nord, Surfshark) pause answers for ~30 s when one client starts many new pings, while a steady ping, and your devices, lost nothing. When pings do stop, a web page is loaded through the tunnel: if it loads, it is a ping-only blip (not counted as down, loss or a stall anywhere); if it fails too, it is a real drop and devices move to another tunnel.'],
   ['Updates', 'Control Center → Router Home updates: checks the Router Home GitHub page (github.com/xDarkHawkx/RouterHome) for a newer release, shows what’s new, and installs it with one click in about a minute. Only updates signed with the Router Home release key install, so a fake or tampered download is refused. The current version is saved first and put back automatically if anything goes wrong; “Go back to it” restores it later. Your settings, history and alerts are kept. Under “Everything is running smoothly” the page shows “Router Home is up to date” or “Router Home needs an update” with an Update now button (checked when the page opens, at most once an hour). It never installs by itself. The router also checks GitHub once a day on its own and sends one Discord message per new version (alert type “New Router Home version”).'],
-  ['GL.inet Utilities Toolkit','The last card on the page: point-and-click tools inspired by phantasm22’s GL.iNet Utilities Toolkit (github.com/phantasm22/GL-iNet_utils), rebuilt from scratch for Router Home. Hardware: CPU, memory, storage, temperatures (°F), network ports, Wi-Fi radios and a VPN crypto acceleration check. Benchmarks: CPU thermal stress (stops at 203 °F), VPN & crypto speed, storage, memory and DNS latency; results stay until the router restarts. Network: MTU check and per-device speed limits (below). Zram & system: zram size and compression, package system check (leftover lock, refresh lists). SSH keys: list, add and remove; the last key can’t be removed while password sign-in is off.'],
+  ['GL.inet Utilities Toolkit','The last card on the page: point-and-click tools inspired by phantasm22’s GL.iNet Utilities Toolkit (github.com/phantasm22/GL-iNet_utils), rebuilt from scratch for Router Home. Hardware: CPU, memory, storage, temperatures (°F or °C), network ports, Wi-Fi radios and a VPN crypto acceleration check. Benchmarks: CPU thermal stress (stops at 203 °F / 95 °C), VPN & crypto speed, storage, memory and DNS latency; results stay until the router restarts. Network: MTU check and per-device speed limits (below). Zram & system: zram size and compression, package system check (leftover lock, refresh lists). SSH keys: list, add and remove; the last key can’t be removed while password sign-in is off.'],
   ['MTU check','Toolkit → Network → “Check MTU”: measures the biggest packet the internet path (and the path to each VPN server) carries without being split up, then shows the best size for each WireGuard tunnel (path minus 60 bytes for WireGuard’s own wrapping, 80 for an IPv6 server). Nothing changes while it measures. “Use N” changes that tunnel’s size and tests it for a minute: if websites or full-size packets stop getting through, the old size comes back by itself. Only the server the tunnel uses now is changed (other saved servers keep their size); an undo script is kept in /root/machome-backup/. OpenVPN tunnels aren’t changed.'],
   ['Speed limits','Toolkit → Network → Speed limits: cap a device’s download and upload speed (Mbps). This uses GL’s own speed limiter, the same one as Clients → Speed limit, so limits show there too and stay after a restart. Remove a limit with “Remove”. Set limits on the main router; an access point passes its devices’ traffic to the main router, which limits them there.'],
   ['Known vulnerabilities','Security card → “Known vulnerabilities”: checks this router against published security problems, with plain rules (no AI). Source 1: GL.iNet security notices, turned into a signed list on the Router Home GitHub page (which models/firmware, what to look for on the router: a process, file, setting, service or open port, and which fix applies). The router only accepts a list signed with the Router Home release key; a copy ships built in. Source 2: the National Vulnerability Database (NVD), published CVEs for this exact model matched to this firmware version. Also reads GL.iNet’s own news feeds (Security Updates and the blog) once a day: a security post the list doesn’t cover yet shows as “New notice, not checked yet” and sends one Discord alert. Downloaded once a day; the on-router checks repeat every 10 minutes. Results: Not affected, Exposed (a risky setting is on), Suspicious file, Signs of infection, or Firmware update needed. Fixes come from a short fixed list (stop a process and delete its file, keeping a copy as evidence; change one setting; turn off a service; tighten file permissions), always ask first and leave an undo script in /root/machome-backup/ where that makes sense. Firmware upgrades are never automatic: you get a button to the Upgrade page. New findings send one Discord alert (type “Vulnerability”). It only knows what has been published, and “no signs” doesn’t prove a router was never attacked.'],
@@ -1063,10 +1070,10 @@ var ABOUT = [
   ['DNS easter egg', 'The red DNS button at the end of the dock opens “It’s always DNS, Hub”: a verdict (is it DNS?), how a lookup travels (your devices → AdGuard → its upstream → who answers; the router; each VPN tunnel’s DNS), every DNS setting in one place (WAN, LAN, GL DNS page, overrides, rebind protection, IPv6, AdGuard on the router and on your NAS with DNSSEC and today’s blocked share), who has answered your lookups over the last 48 hours, and a DNS Race: type a name and every resolver (AdGuard, this router, Quad9, Cloudflare, Google, and each VPN tunnel’s DNS) looks it up at once, with medals. Below it, the Lookup map: type a name (e.g. weather.com) to see every step it took: your DNS (blocked? remembered? which upstream answered and how fast, from AdGuard’s own log), then the full trail from a root server to the .com servers to the site’s own servers, and the answer with how long it’s remembered. Read-only. Plus the haiku and a DNS fact.'],
   ['Radar easter egg','Click the weather widget: a live Ventusky radar opens, centered on your ZIP. It only loads when opened and is removed completely when closed (X, Esc or click outside), so it uses no memory afterwards. “Weather settings” in its top bar opens the ZIP settings.']]],
  ['Cards', 'Every card can be moved, resized or hidden: Control Center > Settings > Layout > Edit.', [
-  ['System', 'Gauges for CPU, memory, zram (when on), temperature (°F), connections, fan (models with a fan) and DHCP pool, plus per-core load, model, firmware, uptime, storage, MAC, thermal throttling, hardware acceleration, bufferbloat grade and the last NAS backup.'],
+  ['System', 'Gauges for CPU, memory, zram (when on), temperature (°F or °C), connections, fan (models with a fan) and DHCP pool, plus per-core load, model, firmware, uptime, storage, MAC, thermal throttling, hardware acceleration, bufferbloat grade and the last NAS backup.'],
   ['Connections gauge', 'How many network connections pass through the router right now, out of the most it can track. Each web page, app, stream or game uses several, so a few hundred to a couple of thousand is normal. If it fills up, new connections fail; you’re alerted and the router looks after it.'],
   ['DHCP pool gauge', 'How many of the router’s DHCP addresses are handed out (active leases in the pool, e.g. 28 of 150). Hover for the range. Only shown when the router hands out addresses itself (not in access-point mode).'],
-  ['Fan (models with a fan)', 'Click the fan gauge: Auto (set the start temperature in °F) or Manual (fixed speed) with a failsafe that switches back to Auto if it gets too hot.'],
+  ['Fan (models with a fan)', 'Click the fan gauge: Auto (set the start temperature) or Manual (fixed speed) with a failsafe that switches back to Auto if it gets too hot.'],
   ['Internet', 'Online/offline, live download/upload with graphs, how the router gets internet (cable, Wi-Fi repeater, tethering, cellular), public IP and gateway (eye to reveal), WAN DNS (the DNS servers set on the internet connection), LAN DNS (what your devices are told to use, e.g. AdGuard on a NAS; "From main router" in access-point mode), link speed and data totals. WAN ping (2026-11-17): Cloudflare 1.1.1.1, Google 8.8.8.8 and Quad9 9.9.9.9 pinged directly over the internet connection (not the VPN) every 10 s, with a 24-hour graph and, per server, ping now, averages over 10 min / 1 h / 24 h, jitter, packet loss (1 h / 24 h) and the 24-hour range.'],
   ['Wi-Fi Uplink (travel routers)', 'When the router gets internet over Wi-Fi: the network name, signal bars and dBm (Excellent/Good/Fair/Weak), band, channel, Wi-Fi generation, security, link speed, retry rate, IP, gateway, DNS, the router’s MAC on that network, MAC type and how long it’s been connected. On these routers it takes the VPN card’s place near the top.'],
   ['Choose network', 'Button on the Wi-Fi Uplink card. Saved networks connect with one click (no password needed). Nearby networks come from a ~20-second scan, strongest first, with band and security. “Join a hidden network” for networks that don’t broadcast. Business (802.1X) networks: use GL’s Internet page. While it switches (up to a minute) the router’s own Wi-Fi stays up but internet pauses.'],
@@ -1107,7 +1114,8 @@ var ABOUT = [
   ['Auto-heal', 'Settings > Auto-heal (moved out of Discord alerts): the switches for every repair the router does by itself, grouped VPN / Internet, DNS & Wi-Fi / Last resort (see  to your NAS (FTP, FTPS, WebDAV or SCP), with how many to keep. The password is stored on the router only. After every backup a restore check downloads the newest copy back into the router’s memory, makes sure it’s complete and contains the router’s settings, then deletes the temporary copy (“Verify now” runs it any time).'],
   ['NAS backup', 'Scheduled settings backups to your NAS (FTP, FTPS, WebDAV or SCP), with how many to keep. The password is stored on the router only. After every backup a restore check downloads the newest copy back into the router’s memory, makes sure it’s complete and contains the router’s settings, then deletes the temporary copy (“Verify now” runs it any time).'],
   ['ISP report card', 'Monthly uptime and outages, average and slowest speeds and how often tests reached 80% of your plan. Set your plan speeds here; “Copy as text” for your ISP.'],
-  ['Weather', 'ZIP code, and on touchscreen models: weather on the sleep screen and the radar background.']]],
+  ['Weather', 'Location: a US ZIP code or a city anywhere (add the country if there are several: London, GB). “Show weather” off removes the weather from the Home tab and stops the downloads. On touchscreen models: weather on the sleep screen and the radar background (radar covers the US only).'],
+  ['Temperature unit', '°F or °C for the whole Home tab, the weather and Discord alerts. Saved on the router, so every browser shows the same. Alert limits keep working the same way; they’re just shown in your unit.']]],
  ['Things it does by itself', 'Switches are in Control Center > Settings > Auto-heal. Each fix happens at most once per problem with a cool-down, sends a Discord message when it acts, and tells you if it didn’t help.', [
   ['Background checks', 'Every ~10 seconds: pings, DNS, VPN check-ins and temperature. Every minute: security checks, new devices, history and the self-care below.'],
   ['VPN failover', 'If a tunnel stops working for ~30 seconds its devices move to another working tunnel (never off the VPN) and move back once it has been healthy for a minute. WireGuard and OpenVPN tunnels are treated the same and can cover for each other.'],
@@ -1268,6 +1276,8 @@ return {
     rpc('system','get_info').then(function(r){ self.mh.info = r; self.paint(); if (r && r.hardware_feature && (r.hardware_feature.wifi_type || r.hardware_feature.fan)) self.slow(); });
     this.fast(); this.slow(); this.history(); this.speed();
     rpc('machome', 'get_alerts').then(function(a){ if (a) self.mh.alerts = a; });
+    /* temperature unit saved on the router (2.6.7): a new browser picks it up; repaint only if it differs */
+    rpc('machome', 'get_prefs').then(function(p){ if (!p || !p.temp_unit || p.temp_unit === TU) return; TU = p.temp_unit === 'C' ? 'C' : 'F'; try { localStorage.setItem('machome-tu', TU); } catch (e) {} if (self.mh.alive) self.paint(); });
     this.weather();
     this.mh.timers.push(setInterval(function(){ if (!document.hidden) self.weather(); }, 300000));
     this.mh.timers.push(setInterval(function(){ if (!document.hidden) self.fast(); }, 3000));
@@ -1720,7 +1730,8 @@ return {
       var adgOn = !!(m.adg && m.adg.enabled);
       var cliTot = this.clientTotals();
       var L = s.live || {}, now = L.time || s.time || Math.floor(Date.now() / 1000);
-      var secList = L.sec || [], secBad = secList.filter(function(c){ return !c.ok; });
+      /* rec = a check that never passed on this router (2.6.7): a recommendation, not a failure */
+      var secList = L.sec || [], secBad = secList.filter(function(c){ return !c.ok && !c.rec; });
       var seen = L.seen || {};
       var arrAll = this.clientsArr() || [];
       var isNew = function(c){ var ts = c && c.mac && seen[String(c.mac).toUpperCase()]; return ts > 0 && now - ts < 86400; };
@@ -1755,7 +1766,7 @@ return {
           ? ['adguardhome', m.nasAdg.ok && m.nasAdg.protection ? 'var(--mh-green)' : 'var(--mh-orange)', 'AdGuard on NAS' + (m.nasAdg.ok ? (m.nasAdg.protection ? '' : ' · paused') : ' · unreachable')]
           : ['adguardhome', adgOn ? 'var(--mh-green)' : 'var(--mh-text3)', 'AdGuard ' + (m.adg ? (adgOn ? 'on' : 'disabled') : '…')],
         ['clients', 'var(--mh-blue)', cliTot.total + ' clients'],
-        ['overview', maxT ? tempColor(maxT) : 'var(--mh-text3)', maxT ? cf(maxT) + '°F' : 'Temp …'],
+        ['overview', maxT ? tempColor(maxT) : 'var(--mh-text3)', maxT ? tdisp(maxT) : 'Temp …'],
         ['firewallview', !secList.length ? 'var(--mh-text3)' : secBad.length ? 'var(--mh-orange)' : 'var(--mh-green)',
           !secList.length ? 'Security …' : secBad.length ? secBad.length + ' security alert' + (secBad.length > 1 ? 's' : '') : 'Security OK']
       ];
@@ -1797,7 +1808,7 @@ return {
           zg.title = this.zramTip(zr);
         }
       }
-      if (maxT) this.gaugeSet('temp', maxT, tempColor(maxT), cf(maxT) + '°F', 'hottest sensor');
+      if (maxT) this.gaugeSet('temp', maxT, tempColor(maxT), tdisp(maxT), 'hottest sensor');
       /* fan dial (models with a PWM fan): power %, RPM, manual / failsafe state */
       var fg = this.$el.querySelector('.mh-fang');
       if (fg){
@@ -1965,10 +1976,10 @@ return {
 
       /* sensors */
       var sh = temps.length ? '<div class="mh-rows">' + temps.map(function(t){
-        return '<div class="mh-r" style="flex-wrap:wrap"><div class="m" style="display:flex;justify-content:space-between;align-items:center;width:100%"><b>' + esc(SENSOR_NAMES[t.name] || t.name) + '</b><span style="font-weight:600;font-variant-numeric:tabular-nums;color:' + tempColor(t.temp) + '">' + cf(t.temp) + '°F</span></div>' +
+        return '<div class="mh-r" style="flex-wrap:wrap"><div class="m" style="display:flex;justify-content:space-between;align-items:center;width:100%"><b>' + esc(SENSOR_NAMES[t.name] || t.name) + '</b><span style="font-weight:600;font-variant-numeric:tabular-nums;color:' + tempColor(t.temp) + '">' + tdisp(t.temp) + '</span></div>' +
           '<div class="mh-bar" style="width:100%;margin-top:6px"><i style="width:' + Math.min(100, t.temp) + '%;background:' + tempColor(t.temp) + '"></i></div></div>';
       }).join('') + '</div>' : '<div class="mh-empty">Waiting for sensor data…</div>';
-      if (info.hardware_feature && info.hardware_feature.fan === false) sh += '<div class="mh-empty" style="margin-top:8px;font-size:11px">Passively cooled (no fan). Brume 3 normally runs warm; sustained readings above 185°F are worth a look.</div>';
+      if (info.hardware_feature && info.hardware_feature.fan === false) sh += '<div class="mh-empty" style="margin-top:8px;font-size:11px">Passively cooled (no fan). Brume 3 normally runs warm; sustained readings above ' + tdispF(185) + ' are worth a look.</div>';
       this.set('sen', sh);
 
       /* services */
@@ -2218,13 +2229,13 @@ return {
       var temps = s.temps || [], maxT = temps.reduce(function(a, t){ return Math.max(a, t.temp || 0); }, 0), lim = inc.temp_limit || 185;
       if (maxT){
         var f = cf(maxT);
-        if (f >= lim + 10) add({ id: 'temp', lvl: 'crit', icon: 'therm', title: 'Router is overheating: ' + f + '°F', detail: 'Well above your ' + lim + '°F limit. Improve airflow or reduce the load.', since: inc.temp_since, route: 'overview', rl: 'Open System' });
-        else if (f >= lim) add({ id: 'temp', lvl: 'warn', icon: 'therm', title: 'Router is running hot: ' + f + '°F', detail: 'Above your ' + lim + '°F alert limit.', since: inc.temp_since, route: 'overview', rl: 'Open System' });
+        if (f >= lim + 10) add({ id: 'temp', lvl: 'crit', icon: 'therm', title: 'Router is overheating: ' + tdispF(f), detail: 'Well above your ' + tdispF(lim) + ' limit. Improve airflow or reduce the load.', since: inc.temp_since, route: 'overview', rl: 'Open System' });
+        else if (f >= lim) add({ id: 'temp', lvl: 'warn', icon: 'therm', title: 'Router is running hot: ' + tdispF(f), detail: 'Above your ' + tdispF(lim) + ' alert limit.', since: inc.temp_since, route: 'overview', rl: 'Open System' });
       }
       var th = (s.cooling || []).filter(function(c){ return /cpufreq/.test(c.type); })[0];
       if (th && th.cur > 0) add({ id: 'throttle', lvl: 'warn', icon: 'cpu', title: 'CPU is being throttled to cool down', detail: 'Thermal throttling level ' + th.cur + ' of ' + th.max + '. Speeds may be reduced.', route: 'overview', rl: 'Open System' });
       var CRIT = { ssh: 1, keys: 1, wanfw: 1, pf: 1, remote: 1, upnp: 1, https: 1 };
-      (L.sec || []).forEach(function(c){ if (!c.ok) add({ id: 'sec-' + c.id, lvl: CRIT[c.id] ? 'crit' : 'warn', icon: 'shield', title: 'Security: ' + c.label + ' failed',
+      (L.sec || []).forEach(function(c){ if (!c.ok && !c.rec) add({ id: 'sec-' + c.id, lvl: CRIT[c.id] ? 'crit' : 'warn', icon: 'shield', title: 'Security: ' + c.label + ' failed',
         detail: String(c.detail), since: inc.sec_since && inc.sec_since[c.id], route: 'firewallview', rl: 'Open Security' }); });
       var seen = L.seen || {};
       (this.clientsArr() || []).forEach(function(c){
@@ -2254,7 +2265,7 @@ return {
         if (mm) i.fix = { action: 'vpn', target: mm[2], label: 'Restart tunnel', what: 'Restart ' + lab(mm[2]) + '? Devices on it lose internet for a few seconds while it reconnects.' };
         else if (i.id === 'wan') i.fix = { action: 'wan', label: 'Renew connection', what: 'Renew the internet connection? This restarts the router’s WAN link. It can’t power-cycle your modem.' };
         else if (i.id === 'dns') i.fix = { action: 'dns', label: 'Fix DNS', what: 'Check your DNS server and restart the router’s DNS service? If the NAS itself is down, you’ll need to fix it there.' };
-        else if (/^sec-/.test(i.id)) i.fix = { action: 'harden', label: 'Restore settings', what: 'Re-apply your security and optimization settings (SSH key-only, VPN key file, IPsec rules, disabled services)?' };
+        else if (/^sec-/.test(i.id)) i.fix = { action: 'harden', label: 'Restore settings', what: 'Put back the security settings this router had before (only the ones it had; SSH key-only only if an SSH key is installed)?' };
       });
       /* muted alert types (Mute on a banner, 2026-11-18) are left out everywhere (banner, top bar) until the mute ends */
       var mu = (x.alerts && x.alerts.mutes) || {}, nMu = 0;
@@ -2535,7 +2546,7 @@ return {
           '<p style="text-align:left;font-size:11px;margin-top:6px">In Discord: <b>Server Settings → Integrations → Webhooks → New Webhook</b>, choose the channel, then <b>Copy Webhook URL</b>. It’s stored on the router (root-only) and never shown here again.</p></div>' +
           '<div class="mh-mgrp" data-k="alert alerts notify notification message type"><h4>Alert me about</h4>' + T.map(function(t){ return sw('t-' + t[0], a.types[t[0]] !== false, t[1]); }).join('') + '</div>' +
           '<div class="mh-mgrp" data-k="threshold schedule time when"><h4>Thresholds &amp; schedule</h4>' +
-            '<label class="mh-mrow"><span><b>Temperature limit</b><small>Alert after 5 minutes above this</small></span><span><input type="number" id="mh-tf" min="120" max="220" value="' + a.temp_f + '" style="width:76px"> °F</span></label>' +
+            '<label class="mh-mrow"><span><b>Temperature limit</b><small>Alert after 5 minutes above this</small></span><span><input type="number" id="mh-tf" min="' + (TU === 'C' ? 49 : 120) + '" max="' + (TU === 'C' ? 104 : 220) + '" value="' + (TU === 'C' ? Math.round((a.temp_f - 32) * 5 / 9) : a.temp_f) + '" style="width:76px"> °' + TU + '</span></label>' +
             '<label class="mh-mrow" data-k="ping latency high wan internet lag"><span><b>High ping limit</b><small>Internet ping (best of Cloudflare, Google, Quad9) over this for 5 minutes. All clear after 10 minutes under 80% of it.</small></span><span><input type="number" id="mh-pm" min="20" max="1000" value="' + (a.ping_ms || 75) + '" style="width:76px"> ms</span></label>' +
             sw('adg_watch', a.adg_watch === true, 'Watch for unusual blocking (opt-in)', 'Off by default. Counts AdGuard’s blocked lookups per device every hour. If one device suddenly has 5x its usual blocked lookups (300+ in an hour), you get one message with the domains it was trying to reach: often a new app, sometimes malware calling home. Needs AdGuard on the NAS set up.') +
             sw('speed_daily', a.speed_daily, 'Nightly speed test', 'Internet + all VPN tunnels, about 15 GB per run') +
@@ -2569,7 +2580,7 @@ return {
         var collect = function(md){
           var g = function(f){ var i = md.querySelector('[data-f="' + f + '"]'); return !!(i && i.checked); };
           var types = {}; T.forEach(function(t){ types[t[0]] = g('t-' + t[0]); });
-          var p = { enabled: g('enabled'), types: types, temp_f: Number(md.querySelector('#mh-tf').value) || 185, ping_ms: Number(md.querySelector('#mh-pm').value) || 75, adg_watch: g('adg_watch'),
+          var p = { enabled: g('enabled'), types: types, temp_f: (function(v){ v = Number(v); if (!v) return 185; return TU === 'C' ? Math.round(v * 9 / 5 + 32) : v; })(md.querySelector('#mh-tf').value),   /* stored in °F */ ping_ms: Number(md.querySelector('#mh-pm').value) || 75, adg_watch: g('adg_watch'),
                     speed_daily: g('speed_daily'), speed_hour: Number(md.querySelector('#mh-sh').value),
                     /* the Auto-heal switches are NOT sent from here (own window now): the router keeps whatever they are */
                     wifi_report: g('wifi_report'), speed_retest: g('speed_retest'), weekly_day: Number(md.querySelector('#mh-wd').value), weekly_hour: Number(md.querySelector('#mh-wh2').value),
@@ -3063,8 +3074,29 @@ return {
       var xv = (this.mh.stats && this.mh.stats.live && this.mh.stats.live.x && this.mh.stats.live.x.vuln) || null;
       var nvb = (xv && xv.problems > 0) ? 1 : 0, nb = bad.length + nvb;   /* a vulnerability finding counts as one issue (a new, unchecked GL notice doesn't) */
       var h = '<div class="mh-big"><div class="mh-ico" style="background:' + (xv && xv.worst === 'infected' ? GRAD.red : nb ? GRAD.orange : GRAD.green) + '">' + svg('shield') + '</div><div><h3>' +
-        (nb ? nb + ' issue' + (nb > 1 ? 's' : '') + ' found' : 'All clear') + '</h3><p>' + (list.length - bad.length) + ' of ' + list.length + ' checks passed · rechecked every minute</p></div></div>';
+        (nb ? nb + ' issue' + (nb > 1 ? 's' : '') + ' found' : 'All clear') + '</h3><p>' + list.filter(function(c){ return c.ok; }).length + ' of ' + list.filter(function(c){ return !c.rec; }).length + ' checks passed' +
+        (list.some(function(c){ return c.rec; }) ? ' · ' + list.filter(function(c){ return c.rec; }).length + ' recommended' : '') + ' · rechecked every minute</p></div></div>';
       var sorted = bad.concat(list.filter(function(c){ return c.ok; }));
+      /* Recommendations (2.6.7, user report): checks that never passed on this router, e.g. GL's defaults on a router whose
+         owner chose "Home tab only" in the installer. No alert, no red: a short why + "Turn on" where one click is safe. */
+      var REC = {
+        ssh: ['Sign in to SSH with a key instead of a password. Needs an SSH key first (Toolkit → SSH keys); the Router Home installer then can’t use the password.', 1],
+        https: ['Always use encrypted HTTPS for the admin page (your browser may warn about the router’s own certificate once).', 1],
+        wgperm: ['Make the WireGuard key file readable by the admin account only. No downside.', 1],
+        ovpnperm: ['Make the OpenVPN login files readable by the admin account only. No downside.', 1],
+        ipsec: ['Close two firewall openings for IPsec VPN. Leave them if you run an IPsec VPN server on this router.', 1],
+        keys: ['More than one SSH key can sign in. Review them in Toolkit → SSH keys.', 0],
+        wanfw: ['Block unrequested traffic from the internet: GL’s Network → Firewall.', 0],
+        pf: ['Port forwards open devices to the internet. Review them in GL’s Network → Firewall.', 0],
+        upnp: ['UPnP lets devices open ports by themselves. Turn it off in GL’s Network → UPnP if you don’t need it.', 0],
+        remote: ['Cloud remote access is on (GoodCloud / remote SSH). Turn it off in GL’s Applications → GoodCloud if you don’t use it.', 0] };
+      var recs = list.filter(function(c){ return !c.ok && c.rec; });
+      var recHtml = recs.length ? '<div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mh-text3);margin:10px 2px 4px">Recommended · optional</div>' +
+        recs.map(function(c){ var r = REC[c.id] || ['', 0];
+          return '<div class="mh-ck" style="flex-wrap:wrap"><i style="background:var(--mh-blue)">i</i><b>' + esc(c.label) + '</b><small>' + esc(c.detail) + '</small>' +
+            (r[0] ? '<div style="flex-basis:100%;font-size:11.5px;color:var(--mh-text2);margin:3px 0 0 28px">' + esc(r[0]) +
+              (r[1] ? ' <button data-act="secon" data-arg="' + esc(c.id) + '" style="border:0;border-radius:7px;padding:2px 9px;font-size:11.5px;font-weight:600;cursor:pointer;background:var(--mh-blue);color:#fff;margin-left:4px">Turn on</button>' : '') + '</div>' : '') + '</div>';
+        }).join('') : '';
       var x = (this.mh.stats && this.mh.stats.live && this.mh.stats.live.x) || {}, rd = x.ready, al = x.alerts;
       var extra = '';
       /* Known vulnerabilities (2.6.5+): the card's featured panel, right under the header (owner, 11-22: "make it a stand-out
@@ -3101,21 +3133,23 @@ return {
       }
       if (al) extra += '<div class="mh-ck click" data-act="alerts" style="cursor:pointer"><i style="background:' + (al.enabled && al.configured ? 'var(--mh-green)' : 'var(--mh-text3)') + '">' + (al.enabled && al.configured ? '✓' : '–') + '</i><b>Discord alerts</b><small>' +
           (al.enabled && al.configured ? 'On' + (al.sent ? ' · ' + al.sent + ' sent' : '') + (al.queued ? ' · ' + al.queued + ' queued' : '') : al.configured ? 'Paused' : 'Not set up') + ' ›</small></div>';
-      return h + vtile + '<div class="mh-rows mh-scroll">' + sorted.map(function(c){
-        return '<div class="mh-ck"><i style="background:' + (c.ok ? 'var(--mh-green)' : 'var(--mh-orange)') + '">' + (c.ok ? '✓' : '!') + '</i><b>' + esc(c.label) + '</b><small>' + esc(c.detail) + '</small></div>';
-      }).join('') + extra + '</div>';
+      var ckRow = function(c){ return '<div class="mh-ck"><i style="background:' + (c.ok ? 'var(--mh-green)' : 'var(--mh-orange)') + '">' + (c.ok ? '✓' : '!') + '</i><b>' + esc(c.label) + '</b><small>' + esc(c.detail) + '</small></div>'; };
+      /* order: real failures, then recommendations, then passing checks */
+      return h + vtile + '<div class="mh-rows mh-scroll">' + bad.map(ckRow).join('') + recHtml +
+        (recHtml ? '<div style="font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mh-text3);margin:10px 2px 4px">Checks</div>' : '') +
+        list.filter(function(c){ return c.ok; }).map(ckRow).join('') + extra + '</div>';
     },
     histHtml: function(){
       var h = this.mh.hist;
       if (!h) return '<div class="mh-empty">Loading history…</div>';
       if (!h.t || h.t.length < 2) return '<div class="mh-empty">Collecting data' + (h.first ? ' since ' + hhmm(h.first) : '') + '. Charts appear after about 10 minutes and fill in over the next 24 hours.</div>';
-      var temps = h.temp.map(cf), last = h.t.length - 1, dn = h.down, up = h.up;
+      var temps = h.temp.map(tconv), last = h.t.length - 1, dn = h.down, up = h.up;   /* in the chosen unit (2.6.7) */
       var peak = rate(Math.max.apply(null, dn.concat(up))), now = rate(dn[last]);
       var start = hhmm(h.t[0]), span = (h.t[last] - h.t[0]) / 3600;
       return '<div class="mh-hgrid">' +
-        '<div class="mh-chart"><div class="hd"><span>Temperature</span><b style="color:' + tempColor(h.temp[last]) + '">' + temps[last] + '°F</b></div>' +
+        '<div class="mh-chart"><div class="hd"><span>Temperature</span><b style="color:' + tempColor(h.temp[last]) + '">' + temps[last] + '°' + TU + '</b></div>' +
           chart([{ data: temps, color: '#ff9500', fill: true }], { id: 'mhht' }) +
-          '<div class="ft"><span>' + start + '</span><span>low ' + Math.min.apply(null, temps) + '°F · high ' + Math.max.apply(null, temps) + '°F</span><span>now</span></div>' +
+          '<div class="ft"><span>' + start + '</span><span>low ' + Math.min.apply(null, temps) + '°' + TU + ' · high ' + Math.max.apply(null, temps) + '°' + TU + '</span><span>now</span></div>' +
           '<div class="mh-legend"><span><i style="background:#ff9500"></i>Hottest sensor, 5-min average</span></div></div>' +
         '<div class="mh-chart"><div class="hd"><span>Internet traffic</span><b>' + now[0] + ' <small style="font-size:11px;color:var(--mh-text2)">' + now[1] + ' down</small></b></div>' +
           chart([{ data: dn, color: '#0a84ff', fill: true }, { data: up, color: '#bf5af2' }], { id: 'mhhb', zero: true }) +
@@ -3178,7 +3212,9 @@ return {
           (this.isAP() ? '' : row('Cable modem', m.watch && m.watch.modem_set ? esc(this.modemText(true) || 'Connected · reading…') : 'Not set up', go('modem'))) +
           row('ISP report card', 'Monthly uptime + speeds vs your plan', go('isp', 'Open')) + '</div>' +
         '<div class="mh-ccg"><h4>Home</h4>' +
-          row('Weather',m.wth ? (m.wth.zip ? (m.priv ? 'On' : esc(m.wth.place || m.wth.zip)) : 'Not set up') : '…', go('wth')) +
+          /* 2.6.7 (users asked): °F/°C for the whole page, Discord messages and the weather; weather can be turned off */
+          row('Temperature unit', TU === 'C' ? 'Celsius · page, alerts and weather' : 'Fahrenheit · page, alerts and weather', '<div class="mh-thm" role="group" aria-label="Temperature unit"><button data-m="go" data-arg="tunit" data-a2="F"' + (TU === 'F' ? ' class="on"' : '') + '>°F</button><button data-m="go" data-arg="tunit" data-a2="C"' + (TU === 'C' ? ' class="on"' : '') + '>°C</button></div>') +
+          row('Weather', m.wth ? (m.wth.off ? 'Off' : m.wth.zip ? (m.priv ? 'On' : esc(m.wth.place || m.wth.zip)) : 'Not set up') : '…', go('wth')) +
           (m.life && m.life.wake && Object.keys(m.life.wake).length ? '' : row('Wake a computer', 'Turn it on in a PC’s device sheet (Clients card)', '')) + '</div>' +
         '<div class="btns"><button data-m="cancel">Close</button></div>';
     },
@@ -3187,7 +3223,7 @@ return {
       var self = this, old = document.querySelector('#machome-modal .sheet'), top = keep && old ? old.scrollTop : 0;
       var oq = keep && old && old.querySelector('.mh-set-q'); if (oq) query = oq.value;
       var md = this.openModal(this.settingsHtml(), { go: function(md, b){
-        var a = b.getAttribute('data-arg'), a2 = b.getAttribute('data-a2'), stay = /^(priv|uitheme|uipal|uiacc|uilive)$/.test(a);
+        var a = b.getAttribute('data-arg'), a2 = b.getAttribute('data-a2'), stay = /^(priv|uitheme|uipal|uiacc|uilive|tunit)$/.test(a);
         if (!stay) self.closeModal();
         self.act(a, a2);
         if (stay) self.openSettings(true);
@@ -3256,6 +3292,27 @@ return {
       if (name === 'uitheme'){ try { localStorage.setItem('machome-ui', arg === 'android' ? 'android' : 'mac'); } catch (e) {} this.theme(); if (this.mh.ccOpen) this.set('cc', this.ccHtml()); return; }
       if (name === 'alerts'){ this.closeCC(); return this.openAlerts(); }
       if (name === 'ready') return this.openReadiness();
+      if (name === 'secon'){   /* Security card recommendation → "Turn on" (2.6.7). HTTPS via GL's own setting, the rest via rpc sec_apply */
+        var sid = String(arg || ''), sself = this;
+        var SW = { ssh: ['Use SSH keys only?', '<p>Password sign-in over SSH turns off; only installed SSH keys can sign in. <b>The Router Home installer signs in with the password</b>, so for updates use Control Center → Router Home updates (or turn password sign-in back on first). The router refuses this if no SSH key is installed.</p>'],
+          https: ['Use HTTPS only for the admin page?', '<p>The admin page always opens with https://. Your browser may warn once about the router’s own certificate. Turn it back off in GL’s Security page if needed.</p>'],
+          wgperm: ['Lock the WireGuard key file?', '<p>Makes /etc/config/wireguard readable by the admin account only. Nothing else changes.</p>'],
+          ovpnperm: ['Lock the OpenVPN login files?', '<p>Makes the saved OpenVPN logins readable by the admin account only, and keeps them that way when GL saves them again.</p>'],
+          ipsec: ['Close the unused IPsec openings?', '<p>Turns off two firewall rules for IPsec VPN (ESP and UDP 500). <b>Don’t</b> do this if you run an IPsec VPN server on this router.</p>'] }[sid];
+        if (!SW) return;
+        return this.confirm({ title: SW[0], icon: 'shield', grad: GRAD.blue, ok: 'Turn on', working: 'Working…', body: SW[1] + '<p style="font-size:12px">An undo script is saved in /root/machome-backup/.</p>' }, function(){
+          var p = sid === 'https' ? rpcx('local-access', 'set_config', { redirect_https: true }, 20000).then(function(){ return { ok: true, done: 'Admin page is HTTPS-only' }; })
+            : rpcx('machome', 'sec_apply', { id: sid }, 20000);
+          return p.then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'didn’t work'); setTimeout(function(){ sself.fast(); }, 4000); return r.done + ' · the card updates within a minute'; });
+        });
+      }
+      if (name === 'tunit'){   /* °F / °C (2.6.7): this browser right away, the router (alerts, weather) in the background */
+        var nu = arg === 'C' ? 'C' : 'F', tself = this; if (nu === TU) return;
+        TU = nu; try { localStorage.setItem('machome-tu', nu); } catch (e) {}
+        this.paint(); this.tkPaint();
+        rpcx('machome', 'set_prefs', { temp_unit: nu }, 30000).then(function(){ tself.weather(); }).catch(function(e){ tself.toast('Couldn’t save on the router: ' + e.message); });
+        return;
+      }
       if (name === 'vuln') return this.openVuln();
       if (name === 'vulnchk'){ var vself = this; return rpcx('machome', 'vuln_check', {}, 15000).then(function(){ vself.toast('Checking for known vulnerabilities… the card updates within a minute'); })
         .catch(function(e){ vself.toast('Couldn’t start the check: ' + e.message); }); }
@@ -3304,17 +3361,17 @@ return {
       var self = this;
       rpc('machome', 'get_fan').then(function(f){
         if (!f || !f.supported){ self.toast('This router has no controllable fan'); return; }
-        var tf = function(c){ return c == null ? '—' : Math.round(c * 9 / 5 + 32); };
+        var tf = function(c){ return c == null ? '—' : tconv(c); };   /* chosen unit (2.6.7); GL's target is still sent in °F */
         var manual = f.mode === 'manual';
         var html = '<div class="hic" style="background:linear-gradient(160deg,#5ac8fa,#30b0c7)">' + svg('fan') + '</div><h2>Fan</h2>' +
-          '<p data-fnow>CPU ' + tf(f.temp_c) + '°F · fan ' + (f.rpm > 0 ? Math.round(f.rpm).toLocaleString() + ' RPM (' + f.pct + '%)' : 'off') + (f.failsafe ? ' · <b style="color:var(--mh-red)">failsafe active</b>' : '') + '</p>' +
+          '<p data-fnow>CPU ' + tf(f.temp_c) + '°' + TU + ' · fan ' + (f.rpm > 0 ? Math.round(f.rpm).toLocaleString() + ' RPM (' + f.pct + '%)' : 'off') + (f.failsafe ? ' · <b style="color:var(--mh-red)">failsafe active</b>' : '') + '</p>' +
           '<div class="mh-seg" role="radiogroup"><button data-m="mauto" class="' + (manual ? '' : 'on') + '">Auto</button><button data-m="mman" class="' + (manual ? 'on' : '') + '">Manual</button></div>' +
           '<div data-pa' + (manual ? ' style="display:none"' : '') + '>' +
-            '<label for="mh-ft">Turn the fan on at</label><span class="mh-fin"><input id="mh-ft" type="number" min="104" max="185" step="1" value="' + tf(f.target_c) + '"> °F</span>' +
-            '<p style="text-align:left;font-size:11px;margin-top:6px">GL’s controller speeds the fan up to hold the CPU near this temperature, so a lower number means the fan runs more often (and a little louder). Default 158°F. Your CPU idles around ' + tf(f.temp_c) + '°F, so anything below that keeps the fan running.</p></div>' +
+            '<label for="mh-ft">Turn the fan on at</label><span class="mh-fin"><input id="mh-ft" type="number" min="' + (TU === 'C' ? 40 : 104) + '" max="' + (TU === 'C' ? 85 : 185) + '" step="1" value="' + tf(f.target_c) + '"> °' + TU + '</span>' +
+            '<p style="text-align:left;font-size:11px;margin-top:6px">GL’s controller speeds the fan up to hold the CPU near this temperature, so a lower number means the fan runs more often (and a little louder). Default ' + tdispF(158) + '. Your CPU idles around ' + tf(f.temp_c) + '°' + TU + ', so anything below that keeps the fan running.</p></div>' +
           '<div data-pm' + (manual ? '' : ' style="display:none"') + '>' +
             '<label for="mh-fs">Fan speed <b data-fsv>' + f.manual_pct + '%</b></label><input id="mh-fs" type="range" min="0" max="100" step="5" value="' + f.manual_pct + '" style="width:100%">' +
-            '<p style="text-align:left;font-size:11px;margin-top:6px">Holds this speed and pauses GL’s automatic control. <b>Failsafe:</b> if the CPU reaches ' + tf(f.warn_c) + '°F, automatic control takes over until it cools to ' + tf(f.warn_c != null ? f.warn_c - 8 : null) + '°F, and you get an alert.</p></div>' +
+            '<p style="text-align:left;font-size:11px;margin-top:6px">Holds this speed and pauses GL’s automatic control. <b>Failsafe:</b> if the CPU reaches ' + tf(f.warn_c) + '°' + TU + ', automatic control takes over until it cools to ' + tf(f.warn_c != null ? f.warn_c - 8 : null) + '°' + TU + ', and you get an alert.</p></div>' +
           '<div class="err" data-e></div><div class="btns"><button data-m="cancel">Close</button><button class="pri" data-m="save">Save</button></div>';
         var mode = f.mode;
         self.openModal(html, {
@@ -3324,13 +3381,13 @@ return {
             var e = md.querySelector('[data-e]'), p = { mode: mode };
             if (mode === 'auto'){
               var v = Number(md.querySelector('#mh-ft').value);
-              if (!(v >= 104 && v <= 185)){ e.textContent = 'Choose a temperature between 104°F and 185°F.'; return; }
-              if (v !== tf(f.target_c)) p.target_f = v;
+              if (!(TU === 'C' ? (v >= 40 && v <= 85) : (v >= 104 && v <= 185))){ e.textContent = 'Choose a temperature between ' + tdispF(104) + ' and ' + tdispF(185) + '.'; return; }
+              if (v !== tf(f.target_c)) p.target_f = TU === 'C' ? Math.round(v * 9 / 5 + 32) : v;
             } else p.pct = Number(md.querySelector('#mh-fs').value);
             b.disabled = true; b.textContent = 'Saving…';
             rpcx('machome', 'set_fan', p, 20000).then(function(r){
               if (!r || !r.ok) throw new Error((r && r.err) || 'Couldn’t save');
-              self.closeModal(); self.toast(mode === 'manual' ? 'Fan set to ' + p.pct + '%' : 'Fan on automatic' + (p.target_f ? ', starts at ' + p.target_f + '°F' : ''));
+              self.closeModal(); self.toast(mode === 'manual' ? 'Fan set to ' + p.pct + '%' : 'Fan on automatic' + (p.target_f ? ', starts at ' + tdispF(p.target_f) : ''));
               self.fast();
             }).catch(function(err){ b.disabled = false; b.textContent = 'Save'; e.textContent = err.message; });
           }
@@ -3673,12 +3730,14 @@ return {
     paintWeather: function(){
       var w = this.mh.wth; if (!w) return;
       var priv = this.mh.priv;
-      /* ZIP prompt at the top until a ZIP is set (or "Not now") */
+      /* weather turned off (2.6.7, Settings → Weather): nothing on the page */
+      if (w.off){ this.set('wxz', ''); this.set('wxw', ''); return; }
+      /* location prompt at the top until one is set (or "Not now"). US ZIP or a city anywhere (2.6.7) */
       if (!w.zip && !w.dismissed){
         if (!this.q('wxz').querySelector('.mh-zip'))
-          this.set('wxz', '<div class="mh-zip">' + this.wxIcon(4) + '<div class="tx"><b>Show your local weather</b><small>Enter your ZIP code for weather on this Home screen' +
-            (w.screen_supported ? ' and on the router’s touchscreen sleep screen' : '') + '. Forecast from Open-Meteo, no account needed.</small></div>' +
-            '<input id="mh-zipin" inputmode="numeric" maxlength="5" placeholder="ZIP code" autocomplete="off"><button class="mh-btn" data-act="zip-save">Save</button>' +
+          this.set('wxz', '<div class="mh-zip">' + this.wxIcon(4) + '<div class="tx"><b>Show your local weather</b><small>Enter a US ZIP code or your city (e.g. London, GB) for weather on this Home screen' +
+            (w.screen_supported ? ' and on the router’s touchscreen sleep screen' : '') + '. Forecast from Open-Meteo, no account needed. Don’t want weather? “Not now”, or turn it off in Settings → Weather.</small></div>' +
+            '<input id="mh-zipin" maxlength="80" placeholder="ZIP or city" autocomplete="off"><button class="mh-btn" data-act="zip-save">Save</button>' +
             '<button class="mh-wxd" data-act="zip-later">Not now</button><div class="er" data-k="ziperr"></div></div>');
       } else this.set('wxz', '');
       var d = w.data;
@@ -3695,11 +3754,11 @@ return {
     zipSave: function(){
       var self = this, inp = this.$el.querySelector('#mh-zipin'), er = this.q('ziperr'), b = this.$el.querySelector('[data-act="zip-save"]');
       var z = inp ? inp.value.trim() : '';
-      if (!/^\d{5}$/.test(z)){ if (er) er.textContent = 'Enter a 5-digit ZIP code'; return; }
+      if (!z || z.length > 80){ if (er) er.textContent = 'Enter a US ZIP code or your city'; return; }
       if (b){ b.disabled = true; b.textContent = 'Saving…'; }
-      rpcx('machome', 'set_weather', { zip: z }, 30000).then(function(r){
+      rpcx('machome', 'set_weather', { place: z }, 30000).then(function(r){
         if (!r || !r.ok) throw new Error((r && r.err) || 'Couldn’t save');
-        self.toast('Weather set for ' + (self.mh.priv ? 'your ZIP' : (r.place || z)));
+        self.toast('Weather set for ' + (self.mh.priv ? 'your location' : (r.place || z)));
         self.weather();
       }).catch(function(e){ if (b){ b.disabled = false; b.textContent = 'Save'; } if (er) er.textContent = e.message; });
     },
@@ -3735,6 +3794,7 @@ return {
           'style="position:absolute;top:0;left:0;width:100%;height:100%;border:0" loading="eager" referrerpolicy="no-referrer"></iframe>';
       };
       if (m.radarLoc) return show(m.radarLoc[0], m.radarLoc[1], 7);
+      if (w.lat != null && w.lon != null) return show(w.lat, w.lon, 7);   /* saved location, anywhere (2.6.7) */
       if (!w.zip || !/^\d{5}$/.test(String(w.zip)) || !window.fetch) return show(39.8, -98.6, 4);   /* no ZIP: whole US */
       fetch('https://geocoding-api.open-meteo.com/v1/search?name=' + w.zip + '&count=1&countryCode=US', { referrerPolicy: 'no-referrer' })
         .then(function(r){ return r.json(); })
@@ -3750,19 +3810,29 @@ return {
       var self = this, w = this.mh.wth || {};
       var html = '<div class="hic" style="background:' + GRAD.blue + '">' + this.wxIcon(4) + '</div><h2>Weather</h2>' +
         '<p>Forecast from Open-Meteo, refreshed every 20 minutes by the router.</p>' +
-        '<label for="mh-wzip">ZIP code</label><input id="mh-wzip" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="' + (w.zip ? (this.mh.priv ? 'Saved' : esc(w.zip)) : '5-digit ZIP') + '">' +
+        '<div class="mh-mgrp"><label class="mh-mrow"><span><b>Show weather</b><small>Off: no weather on the Home tab and no forecast downloads' + (w.screen_supported ? '; the touchscreen gets its own wallpaper back' : '') + '.</small></span>' +
+          '<input type="checkbox" class="mh-msw" data-f="on"' + (w.off ? '' : ' checked') + '></label></div>' +
+        '<label for="mh-wzip">Location: US ZIP code or a city</label><input id="mh-wzip" maxlength="80" autocomplete="off" placeholder="' + (w.zip ? (this.mh.priv ? 'Saved' : esc(w.place || w.zip)) : 'e.g. 60601, London, Toronto, CA') + '">' +
+        '<p style="font-size:11px;text-align:left;margin:4px 0 0">Outside the US, use your city name; add the country if there are several (London, GB · London, CA). Temperatures follow Settings → Temperature unit.</p>' +
         (w.screen_supported ? '<div class="mh-mgrp"><h4>Touchscreen</h4><label class="mh-mrow"><span><b>Weather on sleep screen</b><small>Replaces the sleep-screen wallpaper with a weather background (the clock stays). Turning this off restores your wallpaper.</small></span>' +
           '<input type="checkbox" class="mh-msw" data-f="screen"' + (w.screen !== false ? ' checked' : '') + '></label>' +
-          '<label class="mh-mrow"><span><b>Radar background</b><small>Live weather radar map behind the weather (refreshed every 15 minutes, from Iowa State University / National Weather Service). With no rain nearby it shows a sun, or a moon and stars at night.</small></span>' +
+          '<label class="mh-mrow"><span><b>Radar background</b><small>Live weather radar map behind the weather (refreshed every 15 minutes, from Iowa State University / National Weather Service; covers the US only, elsewhere it shows the sky). With no rain nearby it shows a sun, or a moon and stars at night.</small></span>' +
           '<input type="checkbox" class="mh-msw" data-f="radar"' + (w.radar !== false ? ' checked' : '') + '></label></div>' : '') +
         '<div class="err" data-e></div><div class="btns"><button data-m="cancel">Close</button><button class="pri" data-m="save">Save</button></div>';
       this.openModal(html, {
         save: function(md, b){
-          var p = {}, z = md.querySelector('#mh-wzip').value.trim(), sc = md.querySelector('[data-f="screen"]');
-          if (z){ if (!/^\d{5}$/.test(z)){ md.querySelector('[data-e]').textContent = 'Enter a 5-digit ZIP code'; return; } p.zip = z; }
+          var p = {}, z = md.querySelector('#mh-wzip').value.trim(), sc = md.querySelector('[data-f="screen"]'), on = md.querySelector('[data-f="on"]').checked;
+          if (!on){   /* turn weather off (2.6.7) */
+            b.disabled = true; b.textContent = 'Saving…';
+            return rpcx('machome', 'set_weather', { off: true }, 30000).then(function(){ self.closeModal(); self.toast('Weather turned off'); self.weather(); })
+              .catch(function(e){ b.disabled = false; b.textContent = 'Save'; md.querySelector('[data-e]').textContent = e.message; });
+          }
+          if (w.off) p.off = false;
+          if (z){ if (z.length > 80){ md.querySelector('[data-e]').textContent = 'Enter a US ZIP code or a city'; return; } p.place = z; }
+          if (w.off && !z && !w.zip){ md.querySelector('[data-e]').textContent = 'Enter a US ZIP code or a city to turn weather on'; return; }
           if (sc) p.screen = sc.checked;
           var rd = md.querySelector('[data-f="radar"]'); if (rd) p.radar = rd.checked;
-          if (!p.zip && p.screen === undefined && p.radar === undefined){ self.closeModal(); return; }
+          if (!p.place && p.off === undefined && p.screen === undefined && p.radar === undefined){ self.closeModal(); return; }
           b.disabled = true; b.textContent = 'Saving…';
           rpcx('machome', 'set_weather', p, 30000).then(function(r){
             if (!r || !r.ok) throw new Error((r && r.err) || 'Couldn’t save');
@@ -4890,7 +4960,7 @@ return {
         var kind = a[1], secs = Number(a[2]) || 60;
         var go = function(){ return rpcx('machome', 'tk_job_start', { kind: kind, secs: secs }, 15000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'not started'); t.job = { running: true, kind: kind, pct: 0, step: 'Starting…' }; self.tkPaint(); return ''; }); };
         if (kind === 'cpu') return this.confirm({ title: 'Run the CPU stress test?', icon: 'cpu', grad: GRAD.orange, ok: 'Start', working: 'Starting…',
-          body: '<p>All ' + ((t.info && t.info.cores && t.info.cores.length) || '') + ' CPU cores run at full load for ' + (secs >= 120 ? '2 minutes' : secs + ' seconds') + ' while the temperature is recorded. Internet and VPN keep working but can be a little slower during the test.</p><p>It stops by itself if the router reaches 203 °F.</p>' }, go);
+          body: '<p>All ' + ((t.info && t.info.cores && t.info.cores.length) || '') + ' CPU cores run at full load for ' + (secs >= 120 ? '2 minutes' : secs + ' seconds') + ' while the temperature is recorded. Internet and VPN keep working but can be a little slower during the test.</p><p>It stops by itself if the router reaches ' + tdispF(203) + '.</p>' }, go);
         if (kind === 'disk') return this.confirm({ title: 'Run the storage speed test?', icon: 'cpu', grad: GRAD.blue, ok: 'Start', working: 'Starting…',
           body: '<p>Writes 64 MB of test data to the router’s flash storage, reads it back and deletes it. Takes about 10 seconds; a one-off test like this doesn’t wear the flash in any meaningful way.</p>' }, go);
         return go().catch(function(e){ self.toast('Couldn’t start it: ' + e.message); });
@@ -4969,7 +5039,7 @@ return {
     tkPaint: function(){
       if (!this.q('tk')) return;
       var t = this.mh.tk || { tab: 'hw' }, tab = t.tab, job = t.job || {}, R = t.results || {}, self = this;
-      var F = function(c){ return c == null ? '—' : Math.round(c * 9 / 5 + 32) + ' °F'; };
+      var F = function(c){ return c == null ? '—' : tconv(c) + ' °' + TU; };
       var yes = function(b, y, n){ return '<span style="color:' + (b ? 'var(--mh-green)' : 'var(--mh-orange)') + '">' + (b ? '✓ ' : '✗ ') + esc(b ? y : n) + '</span>'; };
       var tabs = [['hw', 'Hardware'], ['bench', 'Benchmarks'], ['net', 'Network'], ['sys', 'Zram & system'], ['ssh', 'SSH keys']];
       var h = '<div class="mh-seg2" style="margin-bottom:12px">' + tabs.map(function(x){ return '<button data-act="tk" data-arg="tab:' + x[0] + '" class="' + (tab === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>';
@@ -5016,9 +5086,9 @@ return {
           return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:240px;height:40px;display:block;margin-top:6px"><polyline fill="none" stroke="var(--mh-orange)" stroke-width="2" points="' + s.map(function(v, j){ return (j * W / (s.length - 1)).toFixed(1) + ',' + (H - (v - lo) / (hi - lo) * H).toFixed(1); }).join(' ') + '"/></svg>'; };
         var rc = R.cpu && R.cpu.r, rk = R.crypto && R.crypto.r, rd = R.disk && R.disk.r, rm = R.mem && R.mem.r, rn = R.dns && R.dns.r;
         h += running;
-        h += item('CPU thermal stress', 'Runs every CPU core at full load and records how hot the router gets and whether it slows itself down (throttles). Stops by itself at 203 °F.',
+        h += item('CPU thermal stress', 'Runs every CPU core at full load and records how hot the router gets and whether it slows itself down (throttles). Stops by itself at ' + tdispF(203) + '.',
           btn('cpu', '30 s', '30') + btn('cpu', '1 min', '60') + btn('cpu', '2 min', '120'), 'cpu',
-          rc ? '<p style="margin:6px 0 0">Peak <b>' + F(rc.peak_c) + '</b> (started at ' + F(rc.start_c) + ', back to ' + F(rc.end_c) + ') over ' + rc.secs + ' s on ' + rc.cores + ' cores · CPU ' + (rc.throttled ? '<span style="color:var(--mh-orange)">slowed to ' + rc.low_mhz + ' MHz (throttled)</span>' : 'stayed at ' + ((rc.low_mhz && rc.max_mhz && rc.low_mhz < rc.max_mhz) ? rc.low_mhz + '–' + rc.max_mhz : (rc.max_mhz || rc.avg_mhz || '—')) + ' MHz (no throttling)') + (rc.note ? ' · ' + esc(rc.note) : '') + '</p>' + spark((rc.series || []).map(function(c){ return c * 9 / 5 + 32; })) : '');
+          rc ? '<p style="margin:6px 0 0">Peak <b>' + F(rc.peak_c) + '</b> (started at ' + F(rc.start_c) + ', back to ' + F(rc.end_c) + ') over ' + rc.secs + ' s on ' + rc.cores + ' cores · CPU ' + (rc.throttled ? '<span style="color:var(--mh-orange)">slowed to ' + rc.low_mhz + ' MHz (throttled)</span>' : 'stayed at ' + ((rc.low_mhz && rc.max_mhz && rc.low_mhz < rc.max_mhz) ? rc.low_mhz + '–' + rc.max_mhz : (rc.max_mhz || rc.avg_mhz || '—')) + ' MHz (no throttling)') + (rc.note ? ' · ' + esc(rc.note) : '') + '</p>' + spark((rc.series || []).map(tconv)) : '');
         h += item('VPN & crypto speed', 'How fast one CPU core encrypts with OpenSSL: ChaCha20 (what WireGuard uses) and AES-GCM (OpenVPN and most HTTPS), plus RSA handshakes. Takes about 40 seconds. WireGuard itself runs in the kernel and can use several cores.',
           btn('crypto', 'Run'), 'crypto',
           rk ? tbl(['Cipher', 'Speed (one core)', 'Used by'], (rk.ciphers || []).map(function(c){ return ['<b>' + esc(c.name) + '</b>', c.mbs != null ? c.mbs + ' MB/s <small>(' + Math.round(c.mbs * 8.39) + ' Mbps)</small>' : '—', esc(c.what)]; })) +
@@ -5538,7 +5608,7 @@ return {
       if (s && s.fan_rpm && s.fan_rpm.length){
         var rpm = Math.max.apply(null, s.fan_rpm);
         if (rpm > 0) return Math.round(rpm).toLocaleString() + ' RPM';
-        if (info && info.hardware_feature && info.hardware_feature.fan) return 'Off' + (fc && fc.temperature ? ' · starts at ' + cf(fc.temperature) + '°F' : '');
+        if (info && info.hardware_feature && info.hardware_feature.fan) return 'Off' + (fc && fc.temperature ? ' · starts at ' + tdisp(fc.temperature) : '');
       }
       if (info && info.hardware_feature && info.hardware_feature.fan === false) return 'None (passive cooling)';
       return s ? 'Not detected' : null;

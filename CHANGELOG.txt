@@ -6,6 +6,25 @@ installer again and choose 1. Your settings (Discord webhook, weather ZIP, NAS b
 etc.) are kept either way.
 
 
+VERSION 2.6.7  (2026-11-22)
+-------------------------
+  - Security card: no more red "failed" alerts for settings your router never had. If
+    you kept GL's defaults (for example chose "Home tab only" in the installer), checks
+    like "SSH key-only login" or "HTTPS-only admin panel" now show under "Recommended ·
+    optional" with a short explanation and a "Turn on" button where one click is safe.
+    A check only counts as failed if it passed on your router before. Thanks to the user
+    who reported it.
+  - "Restore settings" only puts back what your router had before, and never switches
+    SSH to key-only unless an SSH key is installed (it could have locked you out of SSH).
+    Router Home also no longer re-locks OpenVPN login files on routers where you didn't
+    lock them yourself.
+  - New in Settings: Temperature unit (°F or °C) for the whole Home tab, the weather and
+    Discord alerts.
+  - Weather works outside the US: enter a US ZIP code or a city ("London", "London, GB",
+    "Toronto", "Paris, TX"). Weather can also be turned off completely (Settings >
+    Weather > Show weather).
+
+
 VERSION 2.6.6  (2026-11-22)
 -------------------------
   - New GL.iNet security notices: the router also reads GL.iNet's own news feeds

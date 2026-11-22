@@ -47,6 +47,8 @@ save()
 if kind == "cpu" then
     local ncore = tonumber(sh("grep -c ^processor /proc/cpuinfo"):match("%d+")) or 1
     local LIMIT = 95   -- °C (203 °F): stop early above this
+    -- the unit the owner picked (2.6.7: Control Center → Temperature unit), for the progress text only
+    local celsius = (readf("/etc/machome/prefs.json") or ""):find('"temp_unit":"C"', 1, true) ~= nil
     -- one busy loop per core; each ends by itself after the test time (+10 s) even if this script dies
     for _ = 1, ncore do os.execute("(timeout " .. (secs + 10) .. " sh -c 'while :; do :; done') >/dev/null 2>&1 &") end
     local t0, series, start = now(), {}, maxtemp()
@@ -56,8 +58,8 @@ if kind == "cpu" then
         local t = maxtemp(); local fa, fl = freqs()
         if t then series[#series + 1] = math.floor(t * 10 + 0.5) / 10; if t > peak then peak = t end end
         if fa then sumf = sumf + fa; n = n + 1 end; if fl and (not lowf or fl < lowf) then lowf = fl end
-        progress((now() - t0) * 100 / secs, string.format("Stressing %d cores · %.0f °F", ncore, (t or 0) * 9 / 5 + 32))
-        if t and t >= LIMIT then why = "stopped early: the router reached 203 °F"; break end
+        progress((now() - t0) * 100 / secs, string.format("Stressing %d cores · %s", ncore, celsius and string.format("%.0f °C", t or 0) or string.format("%.0f °F", (t or 0) * 9 / 5 + 32)))
+        if t and t >= LIMIT then why = "stopped early: the router reached " .. (celsius and "95 °C" or "203 °F"); break end
         if stopped() then why = "stopped early from the Home tab"; break end
     end
     -- stop the load loops (the timeout wrappers and the shells inside them)
