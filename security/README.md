@@ -66,7 +66,7 @@ Firmware upgrades are never automatic.
 
 | ID | Notice | Checks |
 |---|---|---|
-| GL-2026-11-20 | [GL.iNet Security Notice 2026-11-20](https://www.gl-inet.com/en-gb/blogs/blog/glinet-security-notice-2026-11-20): cloud remote management exploited to install malware | The process `crond -i /tmp/.log` (GL's sign of infection), the file `/tmp/.log`, and whether GoodCloud remote management is on |
+| GL-2026-11-20 | [GL.iNet Security Notice 2026-11-20](https://www.gl-inet.com/en-gb/blogs/blog/glinet-security-notice-2026-11-20): cloud remote management exploited to install malware | The process `crond -i /tmp/.log` (GL's sign of infection), the file `/tmp/.log`, whether GoodCloud remote management is on, and the firmware version: fixed in **4.9.1** (Brume 3, GL-MT5000) and **4.10.2** (Flint 3, GL-BE9300) per GL's release notes, which also list kernel patches for CVE-2026-98432 and CVE-2026-99288. Other models: version not confirmed yet (list version 2, 2026-11-22). |
 
 ## Entry format
 
