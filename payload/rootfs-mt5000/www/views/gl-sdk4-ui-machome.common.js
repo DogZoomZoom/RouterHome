@@ -841,6 +841,7 @@ var ICONS = {
   devices:'<rect x="2" y="4" width="14" height="10" rx="2"/><path d="M6 18h6M9 14v4"/><rect x="17.5" y="8" width="4.5" height="11" rx="1.3"/>',
   lock:'<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><rect x="9" y="11" width="6" height="5" rx="1"/><path d="M10 11V9.5a2 2 0 014 0V11"/>',
   shield:'<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+  shieldx:'<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M12 8v5M12 16.2v.01"/>',
   apps:'<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
   gear:'<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M2.5 12h3M18.5 12h3M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/>',
   up:'<path d="M12 16V4M7 9l5-5 5 5M5 20h14"/>',
@@ -1014,7 +1015,7 @@ var DOCK = [
   ['lanip','Network','net','indigo'],'|',['overview','System','gear','gray'],['upgrade','Upgrade','up','pink'],['@dnshub','DNS','dnsq','red']
 ];
 
-var MH_VERSION = '2.6.5', MH_BUILD = '2026-11-22';
+var MH_VERSION = '2.6.6', MH_BUILD = '2026-11-22';
 var MH_REPO = 'https://github.com/xDarkHawkx/RouterHome';   /* updates come from this repo's GitHub Releases */
 var MH_CREDIT = 'Made by DogZoomZoom &amp; Claude AI (the bot)';
 /* "About Home" guide (Control Center > About Home): [section, intro, [[feature, how it works / how to use], ...]] */
@@ -1037,7 +1038,7 @@ var ABOUT = [
   ['GL.inet Utilities Toolkit','The last card on the page: point-and-click tools inspired by phantasm22’s GL.iNet Utilities Toolkit (github.com/phantasm22/GL-iNet_utils), rebuilt from scratch for Router Home. Hardware: CPU, memory, storage, temperatures (°F), network ports, Wi-Fi radios and a VPN crypto acceleration check. Benchmarks: CPU thermal stress (stops at 203 °F), VPN & crypto speed, storage, memory and DNS latency; results stay until the router restarts. Network: MTU check and per-device speed limits (below). Zram & system: zram size and compression, package system check (leftover lock, refresh lists). SSH keys: list, add and remove; the last key can’t be removed while password sign-in is off.'],
   ['MTU check','Toolkit → Network → “Check MTU”: measures the biggest packet the internet path (and the path to each VPN server) carries without being split up, then shows the best size for each WireGuard tunnel (path minus 60 bytes for WireGuard’s own wrapping, 80 for an IPv6 server). Nothing changes while it measures. “Use N” changes that tunnel’s size and tests it for a minute: if websites or full-size packets stop getting through, the old size comes back by itself. Only the server the tunnel uses now is changed (other saved servers keep their size); an undo script is kept in /root/machome-backup/. OpenVPN tunnels aren’t changed.'],
   ['Speed limits','Toolkit → Network → Speed limits: cap a device’s download and upload speed (Mbps). This uses GL’s own speed limiter, the same one as Clients → Speed limit, so limits show there too and stay after a restart. Remove a limit with “Remove”. Set limits on the main router; an access point passes its devices’ traffic to the main router, which limits them there.'],
-  ['Known vulnerabilities','Security card → “Known vulnerabilities”: checks this router against published security problems, with plain rules (no AI). Source 1: GL.iNet security notices, turned into a signed list on the Router Home GitHub page (which models/firmware, what to look for on the router: a process, file, setting, service or open port, and which fix applies). The router only accepts a list signed with the Router Home release key; a copy ships built in. Source 2: the National Vulnerability Database (NVD), published CVEs for this exact model matched to this firmware version. Downloaded once a day; the on-router checks repeat every 10 minutes. Results: Not affected, Exposed (a risky setting is on), Suspicious file, Signs of infection, or Firmware update needed. Fixes come from a short fixed list (stop a process and delete its file, keeping a copy as evidence; change one setting; turn off a service; tighten file permissions), always ask first and leave an undo script in /root/machome-backup/ where that makes sense. Firmware upgrades are never automatic: you get a button to the Upgrade page. New findings send one Discord alert (type “Vulnerability”). It only knows what has been published, and “no signs” doesn’t prove a router was never attacked.'],
+  ['Known vulnerabilities','Security card → “Known vulnerabilities”: checks this router against published security problems, with plain rules (no AI). Source 1: GL.iNet security notices, turned into a signed list on the Router Home GitHub page (which models/firmware, what to look for on the router: a process, file, setting, service or open port, and which fix applies). The router only accepts a list signed with the Router Home release key; a copy ships built in. Source 2: the National Vulnerability Database (NVD), published CVEs for this exact model matched to this firmware version. Also reads GL.iNet’s own news feeds (Security Updates and the blog) once a day: a security post the list doesn’t cover yet shows as “New notice, not checked yet” and sends one Discord alert. Downloaded once a day; the on-router checks repeat every 10 minutes. Results: Not affected, Exposed (a risky setting is on), Suspicious file, Signs of infection, or Firmware update needed. Fixes come from a short fixed list (stop a process and delete its file, keeping a copy as evidence; change one setting; turn off a service; tighten file permissions), always ask first and leave an undo script in /root/machome-backup/ where that makes sense. Firmware upgrades are never automatic: you get a button to the Upgrade page. New findings send one Discord alert (type “Vulnerability”). It only knows what has been published, and “no signs” doesn’t prove a router was never attacked.'],
   ['Zram gauge','System card, next to Memory: zram is memory the router compresses instead of running out of RAM (GL’s zram-swap package; about half the RAM, set up automatically at boot). The gauge shows how full it is; hover for the compression ratio, the real RAM it uses and the peak since the last restart. Orange from 60% full, red from 85%. Shown only when zram is on. A GL firmware upgrade removes the zram-swap package; Router Home reinstalls it by itself once the internet is back (only on a router that had it) and sends an “upgrade” alert.'],
   ['VPN outage log','VPN Health card → “Outage log”: every REAL VPN outage (30 s or more with no pings and no web page through the tunnel) of the last 7, 30 or 60 days, with server, length, why, where devices went and whether auto-heal restarted it. Filter by provider, then “Copy as text” or “Send to Discord” for the VPN provider’s support. Ping-only blips aren’t listed. Recording since 11-20 evening; kept for 60 days.'],
   ['Phone view','The 📱 button in the menu bar switches to a compact page for phones: overall status, internet grade and speed, VPN tunnels with on/off switches, devices online, and big buttons (speed test, test VPN, clear alerts, recent events, DNS hub, outage log, settings). It turns on by itself on small screens; your choice is remembered in that browser. “Full page” goes back.'],
@@ -3026,18 +3027,39 @@ return {
     secHtml: function(list, bad){
       if (!list.length) return '<div class="mh-empty">Running security checks… results within a minute.</div>';
       var xv = (this.mh.stats && this.mh.stats.live && this.mh.stats.live.x && this.mh.stats.live.x.vuln) || null;
-      var nvb = (xv && xv.worst && xv.worst !== 'ok') ? 1 : 0, nb = bad.length + nvb;   /* a vulnerability finding counts as one issue */
+      var nvb = (xv && xv.problems > 0) ? 1 : 0, nb = bad.length + nvb;   /* a vulnerability finding counts as one issue (a new, unchecked GL notice doesn't) */
       var h = '<div class="mh-big"><div class="mh-ico" style="background:' + (xv && xv.worst === 'infected' ? GRAD.red : nb ? GRAD.orange : GRAD.green) + '">' + svg('shield') + '</div><div><h3>' +
         (nb ? nb + ' issue' + (nb > 1 ? 's' : '') + ' found' : 'All clear') + '</h3><p>' + (list.length - bad.length) + ' of ' + list.length + ' checks passed · rechecked every minute</p></div></div>';
       var sorted = bad.concat(list.filter(function(c){ return c.ok; }));
       var x = (this.mh.stats && this.mh.stats.live && this.mh.stats.live.x) || {}, rd = x.ready, al = x.alerts;
       var extra = '';
-      /* known vulnerabilities (2.6.5): signed GL notice list + NVD, checked by vulncheck.lua; details in openVuln() */
-      var vu = x.vuln, VW = { infected: ['var(--mh-red)', '!', 'Signs of infection'], exposed: ['var(--mh-orange)', '!', 'Exposed'], update: ['var(--mh-orange)', '↑', 'Firmware update needed'], suspicious: ['var(--mh-orange)', '?', 'Suspicious file'] };
-      var vw = vu && VW[vu.worst];
-      var vrow = '<div class="mh-ck click" data-act="vuln" style="cursor:pointer"><i style="background:' + (!vu ? 'var(--mh-text3)' : vw ? vw[0] : 'var(--mh-green)') + '">' + (!vu ? '…' : vw ? vw[1] : '✓') + '</i><b>Known vulnerabilities</b><small>' +
-        (!vu ? 'First check within a few minutes' : vw ? vu.problems + ' to look at · ' + vw[2] : 'None found · ' + (vu.n_gl || 0) + ' GL notice' + (vu.n_gl === 1 ? '' : 's') + ' + ' + (vu.n_nvd || 0) + ' NVD') + ' ›</small></div>';
-      if (!vw) extra += vrow;   /* a finding goes to the top of the list instead (below) */
+      /* Known vulnerabilities (2.6.5+): the card's featured panel, right under the header (owner, 11-22: "make it a stand-out
+         feature"). Signed GL notice list + NVD + GL's news feeds, checked by vulncheck.lua; details in openVuln(). */
+      var vu = x.vuln, VS = {
+        infected:   ['#ff3b30', 'rgba(255,59,48,.13)',  'Signs of infection', 'shieldx'],
+        exposed:    ['#ff9500', 'rgba(255,149,0,.13)',  'Exposed', 'shieldx'],
+        update:     ['#ff9500', 'rgba(255,149,0,.13)',  'Firmware update needed', 'shieldx'],
+        suspicious: ['#ff9500', 'rgba(255,149,0,.13)',  'Suspicious file found', 'shieldx'],
+        notice:     ['#007aff', 'rgba(0,122,255,.11)',  'New GL.iNet security notice', 'shieldx'],
+        ok:         ['#28a745', 'rgba(40,167,69,.11)',  'No known vulnerabilities', 'shield'] };
+      var vs = vu ? (VS[vu.worst] || VS.ok) : ['#8e8e93', 'rgba(127,127,127,.10)', 'Checking for known vulnerabilities…', 'shield'];
+      var vtop = vu && vu.top, vmodel = vu && vu.model ? 'GL-' + String(vu.model).toUpperCase() : 'this router';
+      var vhead = vs[2] + (vu && vu.worst !== 'ok' && vu.worst !== 'notice' && vu.problems > 1 ? ' · ' + vu.problems + ' findings' : vu && vu.worst === 'notice' && vu.notices > 1 ? 's (' + vu.notices + ')' : '');
+      var vsub = !vu ? 'The first check runs a few minutes after the router starts.'
+        : vu.worst === 'ok' ? 'Checked ' + vmodel + (vu.fw ? ' on firmware ' + vu.fw : '') + ' against ' + (vu.n_gl || 0) + ' GL.iNet notice' + (vu.n_gl === 1 ? '' : 's') + ' and ' + (vu.n_nvd || 0) + ' published CVE' + (vu.n_nvd === 1 ? '' : 's') + ' for this model.'
+        : vu.worst === 'notice' ? (vtop ? '“' + vtop.title + '”: not checked on this router yet.' : 'Not checked on this router yet.')
+        : vtop ? (vtop.found || vtop.title) : '';
+      var vbtn = function(act, label, solid){ return '<button data-act="' + act + '" style="border:0;border-radius:8px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;' +
+        (solid ? 'background:' + vs[0] + ';color:#fff' : 'background:rgba(127,127,127,.16);color:inherit') + '">' + label + '</button>'; };
+      var vtile = '<div data-act="vuln" style="cursor:pointer;display:flex;gap:12px;align-items:flex-start;margin:10px 0 12px;padding:12px 14px;border-radius:14px;background:' + vs[1] + ';box-shadow:inset 4px 0 0 ' + vs[0] + '">' +
+        '<div style="flex:none;width:40px;height:40px;border-radius:11px;background:' + vs[0] + ';display:grid;place-items:center">' +
+          svg(vs[3]).replace('<svg ', '<svg style="width:24px;height:24px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round" ') + '</div>' +
+        '<div style="flex:1;min-width:0"><div style="font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:' + vs[0] + '">Known vulnerabilities</div>' +
+          '<div style="font-size:15px;font-weight:700;margin:1px 0 2px">' + esc(vhead) + '</div>' +
+          (vsub ? '<div style="font-size:12px;color:var(--mh-text2)">' + esc(vsub) + '</div>' : '') +
+          '<div style="font-size:11px;color:var(--mh-text3);margin-top:4px">GL.iNet notices (signed) · NVD · GL news feeds' + (vu && vu.t ? ' · checked ' + ago(Math.floor(Date.now() / 1000) - vu.t) : '') + '</div>' +
+          '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">' +
+            vbtn('vuln', vu && vu.worst !== 'ok' ? (vtop && vtop.fix ? 'Review & fix ›' : 'Review ›') : 'Details ›', vu && vu.worst !== 'ok') + vbtn('vulnchk', 'Check now', false) + '</div></div></div>';
       if (rd){
         var lost = (rd.lost || []).length, rev = (rd.revert || []).length;
         extra += '<div class="mh-ck click" data-act="ready" style="cursor:pointer"><i style="background:' + (lost ? 'var(--mh-orange)' : 'var(--mh-blue)') + '">' + (lost ? '!' : 'i') + '</i><b>Firmware-upgrade safe</b><small>' +
@@ -3045,7 +3067,7 @@ return {
       }
       if (al) extra += '<div class="mh-ck click" data-act="alerts" style="cursor:pointer"><i style="background:' + (al.enabled && al.configured ? 'var(--mh-green)' : 'var(--mh-text3)') + '">' + (al.enabled && al.configured ? '✓' : '–') + '</i><b>Discord alerts</b><small>' +
           (al.enabled && al.configured ? 'On' + (al.sent ? ' · ' + al.sent + ' sent' : '') + (al.queued ? ' · ' + al.queued + ' queued' : '') : al.configured ? 'Paused' : 'Not set up') + ' ›</small></div>';
-      return h + '<div class="mh-rows mh-scroll">' + (vw ? vrow : '') + sorted.map(function(c){
+      return h + vtile + '<div class="mh-rows mh-scroll">' + sorted.map(function(c){
         return '<div class="mh-ck"><i style="background:' + (c.ok ? 'var(--mh-green)' : 'var(--mh-orange)') + '">' + (c.ok ? '✓' : '!') + '</i><b>' + esc(c.label) + '</b><small>' + esc(c.detail) + '</small></div>';
       }).join('') + extra + '</div>';
     },
@@ -3201,6 +3223,8 @@ return {
       if (name === 'alerts'){ this.closeCC(); return this.openAlerts(); }
       if (name === 'ready') return this.openReadiness();
       if (name === 'vuln') return this.openVuln();
+      if (name === 'vulnchk'){ var vself = this; return rpcx('machome', 'vuln_check', {}, 15000).then(function(){ vself.toast('Checking for known vulnerabilities… the card updates within a minute'); })
+        .catch(function(e){ vself.toast('Couldn’t start the check: ' + e.message); }); }
       if (name === 'wx-dis') return this.wxDismiss(arg);
       if (name === 'wx-ack') return this.wxAck(arg);
       if (name === 'wx-ackall') return this.wxAck(null);
@@ -4634,7 +4658,7 @@ return {
         if (!r || !r.ok){ self.openModal(shell('<p>Couldn’t read the results from the router.</p>'), self.vulnHandlers()); return; }
         var now = Math.floor(Date.now() / 1000), items = r.items || [];
         var ST = { infected: ['var(--mh-red)', 'Signs of infection'], exposed: ['var(--mh-orange)', 'Exposed'], update: ['var(--mh-orange)', 'Firmware update needed'],
-                   suspicious: ['var(--mh-orange)', 'Suspicious file'], ok: ['var(--mh-green)', 'Not affected'] };
+                   suspicious: ['var(--mh-orange)', 'Suspicious file'], notice: ['var(--mh-blue)', 'New notice, not checked yet'], ok: ['var(--mh-green)', 'Not affected'] };
         var SEV = { critical: 'var(--mh-red)', high: 'var(--mh-orange)', medium: 'var(--mh-yellow)', low: 'var(--mh-text2)' };
         var model = String(r.model || '').toUpperCase();
         var h = (msg && msg.trim() ? '<p style="color:var(--mh-green)">' + esc(msg) + '</p>' : '') +
@@ -4642,12 +4666,12 @@ return {
           (r.t ? 'checked ' + ago(now - r.t) : 'not checked yet') + (r.running ? ' · <b>checking now…</b>' : '') + '</p>';
         var probs = items.filter(function(i){ return i.status !== 'ok'; }), oks = items.filter(function(i){ return i.status === 'ok'; });
         var card = function(i){
-          var st = ST[i.status] || ST.ok, src = i.kind === 'nvd' ? 'NVD' : 'GL.iNet notice';
+          var st = ST[i.status] || ST.ok, src = i.kind === 'nvd' ? 'NVD' : i.kind === 'notice' ? 'GL.iNet news feed' : 'GL.iNet notice';
           return '<div class="mh-vh" style="text-align:left;margin:8px 0"><b>' + esc(i.title) + '</b>' +
-            '<div style="font-size:12px;margin:3px 0"><span style="color:' + st[0] + ';font-weight:600">' + st[1] + '</span> · <span style="color:' + (SEV[i.severity] || 'var(--mh-text2)') + '">' + esc(i.severity || 'unknown') + (i.score ? ' ' + esc(i.score) : '') + '</span> · ' + esc(src) + (i.published ? ' · ' + esc(i.published) : '') +
+            '<div style="font-size:12px;margin:3px 0"><span style="color:' + st[0] + ';font-weight:600">' + st[1] + '</span>' + (i.kind === 'notice' ? '' : ' · <span style="color:' + (SEV[i.severity] || 'var(--mh-text2)') + '">' + esc(i.severity || 'unknown') + (i.score ? ' ' + esc(i.score) : '') + '</span>') + ' · ' + esc(src) + (i.published ? ' · ' + esc(i.published) : '') +
             (i.link ? ' · <a href="' + esc(i.link) + '" target="_blank" rel="noopener" style="color:var(--mh-blue)">details ›</a>' : '') + '</div>' +
             ((i.found || []).length ? '<ul style="margin:4px 0 4px 18px;font-size:12px">' + i.found.map(function(f){ return '<li>' + esc(f) + '</li>'; }).join('') + '</ul>' : '') +
-            (i.status !== 'ok' && i.summary ? '<details style="font-size:12px;margin:4px 0"><summary>What it is</summary>' + esc(i.summary) + '</details>' : '') +
+            (i.status === 'notice' ? '<p style="text-align:left;font-size:12px;margin:4px 0">' + esc(i.summary) + '</p>' : i.status !== 'ok' && i.summary ? '<details style="font-size:12px;margin:4px 0"><summary>What it is</summary>' + esc(i.summary) + '</details>' : '') +
             (i.advice ? '<p style="text-align:left;font-size:12px;margin:4px 0">' + esc(i.advice) + '</p>' : '') +
             (i.firmware_note ? '<p style="text-align:left;font-size:12px;margin:4px 0;color:var(--mh-text2)">Firmware: ' + esc(i.firmware_note) + '</p>' : '') +
             (i.fixed_in ? '<p style="text-align:left;font-size:12px;margin:4px 0">Fixed in firmware ' + esc(i.fixed_in) + '.</p>' : '') +
@@ -4659,13 +4683,15 @@ return {
         if (oks.length) h += '<details style="text-align:left;font-size:12px;margin:6px 0"><summary>Checked and not affected (' + oks.length + ')</summary>' + oks.map(card).join('') + '</details>';
         var adv = r.adv || {}, nvd = r.nvd || {};
         h += '<p style="font-size:12px;color:var(--mh-text2);text-align:left;margin-top:8px">Sources: <b>GL.iNet notices</b>: ' + (adv.n || 0) + ' in the signed list (' + (adv.source === 'github' ? 'from GitHub' : 'built-in copy') + (adv.updated ? ', updated ' + esc(adv.updated) : '') + ')' + (adv.err ? ' · ' + esc(adv.err) : '') +
-          '. <b>NVD</b>: ' + (nvd.err ? 'couldn’t check (' + esc(nvd.err) + ')' : (nvd.n || 0) + ' published vulnerabilit' + (nvd.n === 1 ? 'y' : 'ies') + ' for this model' + (nvd.t ? ', downloaded ' + ago(now - nvd.t) : '')) + '.</p>';
+          '. <b>NVD</b>: ' + (nvd.err ? 'couldn’t check (' + esc(nvd.err) + ')' : (nvd.n || 0) + ' published vulnerabilit' + (nvd.n === 1 ? 'y' : 'ies') + ' for this model' + (nvd.t ? ', downloaded ' + ago(now - nvd.t) : '')) + '. <b>GL news feeds</b> (new notices): ' +
+          (r.feed && r.feed.err ? 'couldn’t check (' + esc(r.feed.err) + ')' : r.feed && r.feed.t ? 'read ' + ago(now - r.feed.t) + (r.notices ? ', ' + r.notices + ' not in the list yet' : ', nothing new') : 'not read yet') + '.</p>';
         h += '</div>';
         h += '<details style="text-align:left;font-size:12px;margin:8px 0"><summary><b>How this works</b></summary><div style="text-align:left">' +
           '<p>Two sources, checked with plain rules (no AI):</p>' +
           '<p><b>1. GL.iNet security notices.</b> When GL posts a notice, it’s turned into an entry in a list on the Router Home GitHub page: which models and firmware it affects, what to look for on the router (a running process, a file, a setting, a service, an open port), and which fix applies. The list is signed with the Router Home release key, the same one updates use, and the router ignores any copy whose signature doesn’t match, so nobody can slip in fake checks or fixes. A copy ships with Router Home, so it works offline too.</p>' +
           '<p><b>2. The National Vulnerability Database (NVD).</b> Published vulnerabilities (CVEs) for this exact model, matched against this router’s firmware version. NVD can take days or weeks to list something new, and many GL models have no entries.</p>' +
-          '<p><b>When:</b> both are downloaded once a day; the checks on the router repeat every 10 minutes. A new finding sends one Discord alert (type “Vulnerability”).</p>' +
+          '<p><b>New GL notices:</b> the router also reads GL.iNet’s own news feeds (Security Updates and the blog) once a day. A security post from the last 90 days that the list doesn’t cover yet shows here as “New notice, not checked yet” and sends one Discord alert, so you hear about it the same day. It isn’t checked on the router until the signed list on GitHub is updated.</p>' +
+          '<p><b>When:</b> all of this is downloaded once a day; the checks on the router repeat every 10 minutes. A new finding sends one Discord alert (type “Vulnerability”).</p>' +
           '<p><b>Fixes</b> only come from a short fixed list: stop a process and delete its file (a copy is kept as evidence), change one setting, turn off a service, tighten a file’s permissions. Each asks first and leaves an undo script in /root/machome-backup/ where undoing makes sense. Firmware upgrades are never automatic: you get a button to the Upgrade page.</p>' +
           '<p><b>Limits:</b> it only knows what has been published. It can’t find unknown problems, and “no signs” doesn’t prove a router was never attacked.</p></div></details>';
         self.openModal(shell(h, r.running), self.vulnHandlers());

@@ -275,8 +275,11 @@ SECURITY
     permissions, unused firewall openings, remote access, UPnP, disabled services, etc.
   - "Firmware-upgrade safe": whether your Home tab and settings will survive a
     firmware upgrade.
-  - "Known vulnerabilities" (click it): checks this router against published security
-    problems. No AI; two sources checked with plain rules:
+  - KNOWN VULNERABILITIES: the colored panel at the top of the card (green = none
+    known, orange/red = something found and what it is, blue = a new GL notice not
+    checked yet). "Review & fix" / "Details" opens everything; "Check now" re-checks.
+    It checks this router against published security problems. No AI; these sources,
+    checked with plain rules:
       1. GL.iNet security notices, turned into a list of checks on the Router Home
          GitHub page: which models/firmware, what to look for on the router (a running
          process, a file, a setting, a service, an open port) and which fix applies.
@@ -284,9 +287,13 @@ SECURITY
          the router ignores a copy whose signature doesn't match. A copy ships built in.
       2. The National Vulnerability Database (NVD): published vulnerabilities (CVEs)
          for this exact model, compared with this router's firmware version.
+      3. GL.iNet's own news feeds (Security Updates and the blog): a security post from
+         the last 90 days that the list doesn't cover yet shows as "New notice, not
+         checked yet" and sends one Discord alert, so you hear about it the same day.
+         It isn't checked on the router until the signed list on GitHub is updated.
     Downloaded once a day; the checks on the router repeat every 10 minutes.
     Results: Not affected, Exposed (a risky setting is on), Suspicious file, Signs of
-    infection, or Firmware update needed, with GL's advice and a link to the notice.
+    infection, Firmware update needed, or New notice, with GL's advice and a link.
     Fix buttons only use a short fixed list: stop a process and delete its file (a copy
     is kept as evidence), change one setting, turn off a service, tighten a file's
     permissions. Each asks first and leaves an undo script in /root/machome-backup/

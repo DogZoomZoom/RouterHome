@@ -130,6 +130,41 @@ function V.fetch_nvd(model, fw)
     return r
 end
 
+-- ---------------------------------------------------------------- GL.iNet's own news feeds: new notices not in the list yet
+-- GL publishes Atom feeds (public, meant for feed readers): "Security Updates" (CVE advisories) and the main blog
+-- (where notices like 2026-11-20 appear). Security posts from the last 90 days that no entry in the signed list
+-- covers show up as "new notice, not checked yet" (+ one Discord alert via extras.lua). Nothing is run from them.
+local FEED_CACHE = EDIR .. "/gl_notices.json"
+local FEEDS = { { url = "https://www.gl-inet.com/blogs/security-updates.atom", all = true }, { url = "https://www.gl-inet.com/blogs/blog.atom", all = false } }
+local function unent(s) return (tostring(s or ""):gsub("&amp;", "&"):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&quot;", '"'):gsub("&#39;", "'"):gsub("&#x27;", "'")) end
+function V.linkkey(u)   -- "https://www.gl-inet.com/en-gb/blogs/blog/x?country=GB" -> "/blogs/blog/x"
+    local p = tostring(u or ""):gsub("^https?://[^/]+", ""):gsub("[?#].*$", ""):gsub("/$", "")
+    return (p:gsub("^/%a%a%-%a%a/", "/"):gsub("^/%a%a/", "/"))
+end
+function V.fetch_feeds()
+    local list, seen, errs = {}, {}, {}
+    for _, f in ipairs(FEEDS) do
+        local out = sh("curl -s -m 30 -A RouterHome-vulncheck -w '\\n%{http_code}' " .. q(f.url))
+        local body, code = out:match("^(.*)\n(%d%d%d)%s*$")
+        if code ~= "200" or not (body or ""):find("<feed", 1, true) then errs[#errs + 1] = "GL's feed answered " .. (code or "nothing")
+        else
+            for e in body:gmatch("<entry>(.-)</entry>") do
+                local title = unent(e:match("<title[^>]*>(.-)</title>"))
+                local link = e:match('<link[^>]-rel="alternate"[^>]-href="([^"]+)"') or e:match('<link[^>]-href="([^"]+)"')
+                local pub = (e:match("<published>(.-)</published>") or e:match("<updated>(.-)</updated>") or ""):sub(1, 10)
+                local tl = title:lower()
+                local sec = f.all or tl:find("security", 1, true) or tl:find("vulnerab", 1, true) or tl:find("cve", 1, true) or tl:find("advisor", 1, true) or tl:find("exploit", 1, true) or tl:find("malware", 1, true)
+                if link and title ~= "" and sec and not seen[V.linkkey(link)] then
+                    seen[V.linkkey(link)] = true; list[#list + 1] = { title = title:sub(1, 200), link = unent(link), published = pub }
+                end
+            end
+        end
+    end
+    local r = { t = os.time(), list = list, err = (#errs == #FEEDS) and errs[1] or cjson.null }
+    if #errs < #FEEDS then writef(FEED_CACHE, cjson.encode(r)) end
+    return r
+end
+
 -- ---------------------------------------------------------------- checks on the router
 local SAFE_PATH = function(p) p = tostring(p or ""); return p:match("^/[%w%._%-/]+$") ~= nil and not p:find("..", 1, true) end
 local procs_cache = nil
@@ -178,7 +213,7 @@ local function applies(a, model, fw)
     if a.fw_min and cmp(fw, a.fw_min) < 0 then return false end
     return true
 end
-local RANK = { infected = 4, exposed = 3, update = 2, suspicious = 2, ok = 1, na = 0 }
+local RANK = { infected = 4, exposed = 3, update = 2, suspicious = 2, notice = 1.5, ok = 1, na = 0 }
 V.RANK = RANK
 function V.check_adv(a, model, fw)
     local r = { id = a.id, kind = "gl", title = a.title, severity = a.severity or "unknown", link = a.link or cjson.null, published = a.published or cjson.null,
@@ -209,11 +244,12 @@ end
 function V.run(mode)
     local model, fw = V.model(), V.firmware()
     local res = { t = os.time(), mode = mode, model = model, fw = fw, items = {}, problems = 0, worst = "ok" }
-    local adv_err, nvd = nil, nil
+    local adv_err, nvd, feeds = nil, nil, nil
     if mode == "run" then
         adv_err = V.fetch_adv()
         nvd = V.fetch_nvd(model, fw)
-        res.fetch_ok = (adv_err == nil or adv_err:match("^no list")) and nvd.err == cjson.null
+        feeds = V.fetch_feeds()
+        res.fetch_ok = (adv_err == nil or adv_err:match("^no list")) and nvd.err == cjson.null and feeds.err == cjson.null
     end
     local adv, src = V.load_adv()
     res.adv = { source = src, version = adv and adv.version or cjson.null, updated = adv and adv.updated or cjson.null,
@@ -231,6 +267,25 @@ function V.run(mode)
         res.items[#res.items + 1] = { id = c.id, kind = "nvd", title = c.id, severity = c.severity, score = c.score, link = c.link, published = c.published,
             summary = c.summary, fixed_in = c.fixed_in, status = still and "update" or "ok", found = {}, fix = cjson.null, upgrade = still and true or false, advice = cjson.null }
     end
+    -- GL security posts from the last 90 days that no list entry covers (matched by the notice's link)
+    feeds = feeds and feeds.err == cjson.null and feeds or jread(FEED_CACHE) or feeds or {}
+    local covered = {}
+    for _, a in ipairs(adv and type(adv.advisories) == "table" and adv.advisories or {}) do
+        if a.link then covered[V.linkkey(a.link)] = true end
+        for _, l in ipairs(type(a.also_covers) == "table" and a.also_covers or {}) do covered[V.linkkey(l)] = true end
+    end
+    local since = os.date("!%Y-%m-%d", os.time() - 90 * 86400)
+    res.feed = { t = feeds.t or cjson.null, err = feeds.err or cjson.null, n = 0 }
+    res.notices = 0
+    for _, n in ipairs(type(feeds.list) == "table" and feeds.list or {}) do
+        if (n.published or "") >= since and not covered[V.linkkey(n.link)] then
+            res.notices = res.notices + 1
+            res.items[#res.items + 1] = { id = "notice:" .. V.linkkey(n.link), kind = "notice", title = n.title, severity = "unknown", link = n.link, published = n.published,
+                summary = "GL.iNet posted this security notice, and Router Home's vulnerability list doesn't cover it yet, so this router hasn't been checked for it. Read the notice; once the list on GitHub is updated, the router checks itself within a day (or press Check now).",
+                status = "notice", found = {}, fix = cjson.null, upgrade = false, advice = cjson.null }
+        end
+    end
+    res.feed.n = type(feeds.list) == "table" and #feeds.list or 0
     for _, it in ipairs(res.items) do
         if RANK[it.status] >= RANK.update then res.problems = res.problems + 1 end
         if RANK[it.status] > RANK[res.worst] then res.worst = it.status end

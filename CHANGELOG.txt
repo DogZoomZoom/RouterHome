@@ -6,6 +6,19 @@ installer again and choose 1. Your settings (Discord webhook, weather ZIP, NAS b
 etc.) are kept either way.
 
 
+VERSION 2.6.6  (2026-11-22)
+-------------------------
+  - New GL.iNet security notices: the router also reads GL.iNet's own news feeds
+    (Security Updates and the blog) once a day. A new security post that the
+    vulnerability list doesn't cover yet shows on the Security card as "New notice, not
+    checked yet" and sends a Discord alert the same day, so you never have to go looking.
+    Once the signed list on GitHub is updated, the router checks itself for it.
+  - Known vulnerabilities is now a featured panel at the top of the Security card: green
+    "No known vulnerabilities" (with the model, firmware and how many notices/CVEs were
+    checked), orange or red when something is found (it names what was found), blue for
+    a new GL notice. Buttons: Review & fix (or Details) and Check now.
+
+
 VERSION 2.6.5  (2026-11-22)
 -------------------------
   - Known vulnerabilities, on the Security card: checks the router against published

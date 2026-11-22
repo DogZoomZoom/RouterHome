@@ -17,7 +17,11 @@ There's no AI on the router. It checks two kinds of structured data with plain r
    - which fix applies, chosen from a short fixed list (below)
 2. **The National Vulnerability Database (NVD).** The router asks NVD for published vulnerabilities (CVEs) for its exact model and compares them with its firmware version.
 
-Once a day, each router downloads this list and asks NVD. The checks on the router run again every 10 minutes.
+3. **GL.iNet's own news feeds**, used to spot new notices. The router reads GL's public Security Updates feed and blog feed. Any security post from the last 90 days that this list doesn't cover yet shows on the Security card as "New notice, not checked yet" and sends one Discord alert, so you hear about it the day it's posted. Nothing on the router changes because of a feed post. Real checks only arrive when this signed list is updated.
+
+Once a day, each router downloads this list, asks NVD and reads GL's feeds. The checks on the router run again every 10 minutes.
+
+**Keeping the list current:** when a router reports a new GL notice, the maintainer adds an entry here, the build signs the list, and the updated `security` folder is uploaded. Routers pick it up within a day, or straight away with **Check now**. No new Router Home version is needed.
 
 Each entry ends up in one of these states:
 
@@ -28,6 +32,7 @@ Each entry ends up in one of these states:
 | Suspicious file | A known malware file name exists, but nothing proves an infection |
 | Signs of infection | GL's sign of compromise was found |
 | Firmware update needed | This firmware version is listed as affected |
+| New notice, not checked yet | GL posted a security notice that this list doesn't cover yet |
 
 A new finding sends one Discord alert (alert type "Vulnerability").
 

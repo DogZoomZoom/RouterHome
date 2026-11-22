@@ -945,7 +945,7 @@ end
 -- green one when an infection or exposure is gone. State: /etc/machome/vuln_state.json (written only on changes).
 local VSTATE, VOUT = EDIR .. "/vuln_state.json", DIR .. "/vuln.json"
 local vst, vu_local, vu_seen = nil, 0, 0
-local VWORDS = { infected = "🚨 Signs of infection", exposed = "⚠ Exposed", update = "⬆ Firmware update needed", suspicious = "⚠ Suspicious file" }
+local VWORDS = { infected = "🚨 Signs of infection", exposed = "⚠ Exposed", update = "⬆ Firmware update needed", suspicious = "⚠ Suspicious file", notice = "📰 New GL.iNet security notice" }
 local function vuln_tick(now, online)
     vst = vst or jread(VSTATE, {}); if type(vst) ~= "table" then vst = {} end
     vst.notified = type(vst.notified) == "table" and vst.notified or {}
@@ -962,7 +962,9 @@ local function vuln_tick(now, online)
         vu_seen = r.t
         -- a full run whose downloads failed: try again in an hour instead of tomorrow
         if r.mode == "run" and r.fetch_ok == false and not vst.retry then vst.fetched = now - 86400 + 3600; vst.retry = true; changed = true end
-        X.vuln_sum = { problems = r.problems or 0, worst = r.worst or "ok", t = r.t, fetched = r.fetched or cjson.null, n_gl = r.adv and r.adv.n or 0, n_nvd = r.nvd and r.nvd.n or 0 }
+        X.vuln_sum = { problems = r.problems or 0, worst = r.worst or "ok", t = r.t, fetched = r.fetched or cjson.null, n_gl = r.adv and r.adv.n or 0, n_nvd = r.nvd and r.nvd.n or 0, notices = r.notices or 0,
+            model = r.model or cjson.null, fw = r.fw or cjson.null, feed_t = r.feed and r.feed.t or cjson.null,
+            top = (r.items[1] and r.items[1].status ~= "ok") and { title = r.items[1].title, status = r.items[1].status, found = (type(r.items[1].found) == "table" and r.items[1].found[1]) or cjson.null, fix = type(r.items[1].fix) == "table" } or cjson.null }
         local now_bad = {}
         for _, it in ipairs(r.items) do
             if VWORDS[it.status] then
@@ -971,7 +973,7 @@ local function vuln_tick(now, online)
                     local found = (type(it.found) == "table" and #it.found > 0) and ("\n• " .. table.concat(it.found, "\n• ")) or ""
                     alert("vuln", VWORDS[it.status] .. ": " .. tostring(it.title),
                         tostring(it.summary or ""):sub(1, 300) .. found .. "\n" .. (type(it.fix) == "table" and ("**Fix:** Security card → Known vulnerabilities → " .. tostring(it.fix.label)) or it.upgrade and "**Fix:** install the firmware update (Upgrade page)." or ""),
-                        (it.status == "infected") and "red" or "orange", { { name = "Details", value = tostring(it.link or "Security card on the Home tab"), inline = false } })
+                        (it.status == "infected") and "red" or (it.status == "notice") and "blue" or "orange", { { name = "Details", value = tostring(it.link or "Security card on the Home tab"), inline = false } })
                     vst.notified[it.id] = it.status; changed = true
                 end
             end
