@@ -297,9 +297,24 @@ GL.INET UTILITIES TOOLKIT  (the last card on the page)
       Memory speed: RAM and the RAM disk.
       DNS latency: 10 popular sites at your devices' DNS, the router's DNS, Cloudflare,
         Quad9 and Google.
+  - Network:
+      MTU check: measures the biggest packet that gets through your internet path and
+        the path to each VPN server without being split up (about 10 seconds; nothing
+        changes while it measures), then shows the best size for every WireGuard tunnel
+        (path minus 60 bytes for WireGuard's own wrapping, 80 for an IPv6 server).
+        "Use N" changes that tunnel's size right away (no reconnect) and tests it for a
+        minute: if websites or full-size packets stop getting through, the old size
+        comes back by itself. Only the server the tunnel uses now is changed. An undo
+        script is kept in /root/machome-backup/. OpenVPN tunnels aren't changed.
+      Speed limits: cap one device's download and/or upload speed in Mbps. Uses GL's own
+        speed limiter (the same as Clients > Speed limit), so limits also show there and
+        stay after a restart. Change or Remove from the list. On an access point, set
+        limits on the main router instead.
   - Zram & system: change zram's size and compression (zram restarts in a few seconds;
     "Back to defaults" undoes it), and check the package system (remove a leftover lock
     from an unfinished install, refresh the package lists).
+    A GL firmware upgrade removes the zram-swap package; Router Home reinstalls it by
+    itself once the internet is back (only if the router had it) and sends an alert.
   - SSH keys: see, add and remove the keys that can sign in as root. The last key can't
     be removed while password sign-in is off, so SSH can't be locked out by accident.
 
@@ -417,6 +432,19 @@ Restart modem
              is connected (Settings > Cable modem). At most once every 10 minutes.
 
 Wake ...     One row per computer you enabled Wake-on-LAN for; press Wake to turn it on.
+
+Router Home updates
+             Check looks for a newer Router Home on its GitHub page
+             (github.com/xDarkHawkx/RouterHome) and shows what's new. Install takes about
+             a minute and keeps your settings, history and alerts. Only updates signed
+             with the Router Home release key install, so a fake or tampered download is
+             refused. The current version is saved first and put back automatically if
+             anything goes wrong; "Go back to it" restores it later. The home screen
+             also shows it under "Everything is running smoothly": "Router Home is up
+             to date", or "Router Home needs an update" with an Update now button
+             (checked when the page opens, at most once an hour; it never installs by
+             itself). The router also checks once a day on its own and sends one
+             Discord message per new version (alert type "New Router Home version").
 
 Settings     Everything below opens in one SETTINGS window (Control Center > Settings
              > Open), grouped:

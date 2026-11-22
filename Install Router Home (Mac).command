@@ -81,7 +81,7 @@ say "  2) Remove the Home tab"
 say "  3) Undo the optional security/cleanup changes made by this installer"
 say "  4) Quit"
 while :; do
-  choice=$(ask "  Choose" "1")
+  choice=$(ask "  Choose" "1") || exit 1   # Ctrl+D / closed input: stop instead of looping
   case "$choice" in
     1|2|3) break ;;
     4) exit 0 ;;
@@ -90,7 +90,7 @@ while :; do
 done
 
 while :; do
-  ip=$(ask "  Router IP address (the address you open the admin page with)" "192.168.8.1")
+  ip=$(ask "  Router IP address (the address you open the admin page with)" "192.168.8.1") || exit 1
   valid_ip "$ip" && break
   yel "  That isn't a valid IPv4 address like 192.168.8.1"
 done

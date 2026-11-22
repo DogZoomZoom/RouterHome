@@ -160,11 +160,15 @@ local CP_TARGETS = { "1.1.1.1", "9.9.9.9" }
 local cp = {}                       -- "iface|target" -> { pid, t0, rcv, sum, t }
 local cp_seen = {}                  -- keys started at least once in this run
 local cp_rs, cp_note = {}, {}       -- restart times per key (last hour); last log note per tunnel
+local is_ap, ap_t = false, nil      -- access-point mode (re-read every minute)
 local function cp_file(ifc, tgt) return DIR .. "/cp_" .. ifc .. "_" .. tgt end
+-- 2.6.2: also the INTERNET check of an access point (its traffic goes through the main router and, there, a VPN
+-- tunnel: one-shot pings every 10 s made Nord ignore it now and then, so the Flint showed "1.7% no answer")
+local CP_WAN_TARGETS = { "1.1.1.1", "9.9.9.9", "8.8.8.8" }
 local function cp_kill_all(keep)
-    -- continuous pingers look exactly like "ping -I wgclientN 1.1.1.1" (one-shot checks always have -c)
+    -- continuous pingers look exactly like "ping -I <iface> 1.1.1.1" (one-shot checks always start "ping -q -c")
     for line in sh("ps w"):gmatch("[^\n]+") do
-        local pid, ifc, tgt = line:match("^%s*(%d+)%s.-%sping %-I (%a+client%d+) (%d+%.%d+%.%d+%.%d+)%s*$")
+        local pid, ifc, tgt = line:match("^%s*(%d+)%s.-%sping %-I (%S+) (%d+%.%d+%.%d+%.%d+)%s*$")
         if pid and not (keep and keep[ifc .. "|" .. tgt]) then os.execute("kill " .. pid .. " >/dev/null 2>&1") end
     end
 end
@@ -178,10 +182,11 @@ local function cp_start(ifc, tgt, now)
 end
 local function cp_alive(e) return e and e.pid and readf("/proc/" .. e.pid .. "/stat") ~= nil end
 cp_kill_all(nil)                    -- leftovers from before a restart
--- one tunnel's result in the same shape as pings(): { ms, loss, iface, each = { Cloudflare, Quad9 } }
-local function cp_tunnel(ifc, now)
-    local each, bl, bm = {}, 101, nil
-    for i, tgt in ipairs(CP_TARGETS) do
+-- one interface's result in the same shape as pings(): { ms, loss, iface, each = { one per server } }
+local function cp_tunnel(ifc, now, targets)
+    local each, bl, bm, bi, fresh = {}, 101, nil, 1, 0
+    targets = targets or CP_TARGETS
+    for i, tgt in ipairs(targets) do
         local k = ifc .. "|" .. tgt
         local e = cp[k]
         local loss, ms
@@ -199,6 +204,7 @@ local function cp_tunnel(ifc, now)
                     os.execute("logger -t machome 'continuous pings: the " .. ifc .. " pinger stopped " .. #rs .. " times in the last hour (the tunnel keeps going away; restarted each time)'")
                 end
             end
+            if not (e and cp_seen[k]) then fresh = fresh + 1 end   -- first start only; a restart after dying stays 100% loss
             cp_seen[k] = true
             cp_start(ifc, tgt, now)
         else
@@ -211,16 +217,21 @@ local function cp_tunnel(ifc, now)
             e.rcv, e.sum, e.t = n, s, now
         end
         each[i] = { loss = loss, ms = ms or cjson.null }
-        if loss < bl then bl, bm = loss, ms end
+        if loss < bl then bl, bm, bi = loss, ms, i end
     end
-    return { ms = bm or cjson.null, loss = bl, iface = ifc, each = each, cont = true }
+    -- alt = the answer came from a backup server, like pings() reports for the internet check
+    -- nodata: every pinger of this interface was only just started, so there's no reply YET (not a failure).
+    -- Recorders skip it; it used to show up as one "no answer" after every service restart (2026-11-22).
+    return { ms = bm or cjson.null, loss = bl, iface = ifc, each = each, cont = true, alt = (bi > 1) or nil,
+             nodata = (fresh == #targets) or nil }
 end
-local function cp_tick(vifs, now)
+-- entries: { { key = result key, ifc = interface, targets = servers }, ... }
+local function cp_tick(entries, now)
     local want, res = {}, {}
-    for _, v in ipairs(vifs) do
-        for _, tgt in ipairs(CP_TARGETS) do want[v .. "|" .. tgt] = true end
-        local ok, r = pcall(cp_tunnel, v, now)
-        if ok then res[v] = r end
+    for _, en in ipairs(entries) do
+        for _, tgt in ipairs(en.targets) do want[en.ifc .. "|" .. tgt] = true end
+        local ok, r = pcall(cp_tunnel, en.ifc, now, en.targets)
+        if ok then res[en.key] = r end
     end
     -- tunnels that are gone: stop their pingers
     for k in pairs(cp) do if not want[k] then cp[k] = nil end end
@@ -606,7 +617,10 @@ while true do
 
     -- internet check: Cloudflare + Quad9 (owner's choice 2026-11-13) + Google (2026-11-17, for the Internet card's
     -- ping stats) at once; "down" only when none of them answers
-    local targets = { { key = "wan", iface = wan, alt = "9.9.9.9", alt2 = "8.8.8.8" } }
+    -- Access point (2.6.2): the internet check uses continuous pingers too (see CP_WAN_TARGETS); router mode keeps
+    -- the one-shot pings straight out of the WAN port (no VPN in that path, so nothing to trip)
+    if not ap_t or now - ap_t >= 60 then ap_t = now; is_ap = trim(sh("uci -q get glconfig.general.mode")) == "ap" end
+    local targets = is_ap and {} or { { key = "wan", iface = wan, alt = "9.9.9.9", alt2 = "8.8.8.8" } }
     -- VPN tunnels: continuous pingers since 2026-11-20 (cp_tick below), not a new ping every check
     -- the modem / upstream gateway too (Network Health "where is the problem", 2026-11-17); taken out of p right away
     local gwip = modem_host(wan, now)
@@ -614,7 +628,10 @@ while true do
     if gwip then targets[#targets + 1] = { key = "gw", iface = wan, host = gwip } end
     local p = pings(targets)
     local gwr = p.gw; p.gw = nil
-    local okc, cpr = pcall(cp_tick, vifs, socket.gettime())
+    local cpe = {}
+    for _, v in ipairs(vifs) do cpe[#cpe + 1] = { key = v, ifc = v, targets = CP_TARGETS } end
+    if is_ap then cpe[#cpe + 1] = { key = "wan", ifc = wan, targets = CP_WAN_TARGETS } end
+    local okc, cpr = pcall(cp_tick, cpe, socket.gettime())
     if okc then for k, r in pairs(cpr) do p[k] = r end
     else os.execute("logger -t machome 'continuous pings: " .. tostring(cpr):gsub("'", ""):sub(1, 150) .. "'") end
     -- "Clear" on a packet-loss warning, a tunnel change or "Clear all VPN alerts" (2026-11-16): start that
@@ -629,6 +646,7 @@ while true do
         os.execute("logger -t machome 'packet-loss history cleared: " .. (rs:gsub("%s+", " "):gsub("[^%w ]", "")) .. "'")
     end
     for k, r in pairs(p) do
+      if not r.nodata then   -- a pinger that only just started has no reply yet: nothing to record (2026-11-22)
         ph[k] = ph[k] or {}
         local a = ph[k]
         a[#a + 1] = (r.ms ~= cjson.null) and r.ms or -1
@@ -637,11 +655,13 @@ while true do
         local b = pl[k]
         b[#b + 1] = r.loss or 100
         while #b > PH_MAX do table.remove(b, 1) end
+      end
     end
     for k in pairs(ph) do if not p[k] then ph[k] = nil; pl[k] = nil end end
-    if p.wan then pcall(wp_add, now, p.wan.each) end
+    local wan_nodata = p.wan and p.wan.nodata
+    if p.wan and not wan_nodata then pcall(wp_add, now, p.wan.each) end
     local okwp, wps = pcall(wp_summary, now)
-    pcall(wh_add, now, p.wan, gwr)
+    if not wan_nodata then pcall(wh_add, now, p.wan, gwr) end
     local okwh, whs = pcall(wh_summary, now, wan, X and X.wan_since or nil)
     if not okwh and now % 600 < 10 then os.execute("logger -t machome 'wan health: " .. tostring(whs):gsub("'", ""):sub(1, 150) .. "'") end
 

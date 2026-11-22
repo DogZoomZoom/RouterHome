@@ -883,13 +883,13 @@ var ICONS = {
 };
 /* extra search words for each Settings-window row (Settings search box + the page search bar) */
 var SETK = {
-  'Privacy mode': 'privacy hide hidden private screenshot share sharing eye mac address ip names personal',
+  'Privacy mode':'privacy hide hidden private screenshot share sharing eye mac address ip names personal',
   'Look': 'look theme style macos mac android appearance design dark light',
   'Accent color': 'accent color colour theme palette tint blue purple pink red orange yellow green graphite',
   'Colors': 'colors colour theme palette material you playful ocean forest sunset grape rose citrus mint slate',
   'Live wallpaper': 'live wallpaper background animated animation moving morphing colors motion battery',
   'Layout': 'layout cards move resize hide show arrange order rearrange edit size',
-  'Discord alerts': 'discord alerts notifications notify webhook messages vpn upload temperature speed test weekly monthly report offline',
+  'Discord alerts': 'discord alerts notifications notify webhook messages vpn upload temperature speed test weekly monthly report offline router home update updates new version github firmware upgrade zram',
   'Auto-heal': 'auto-heal autoheal auto fix autofix self-heal self heal repair fixes automatic restart reboot failover tunnel vpn server switch wifi band internet renew dns tailscale',
   'NAS backup': 'nas backup backups ftp ftps webdav scp ssh restore verify schedule copy synology',
   'Cable modem': 'cable modem xfinity the ISP gateway signal snr power docsis uncorrectable errors 10.0.0.1',
@@ -950,7 +950,7 @@ function alertKind(id){
 var DIGEST_TYPES = ['newdev', 'config', 'login', 'presence', 'schedule', 'devwatch', 'wifi', 'upload', 'speed', 'backup', 'health', 'isp', 'data', 'firmware'];
 var KIND_NAMES = { vpn: 'VPN', wan: 'Internet', dns: 'DNS', ping: 'High ping', newdev: 'New device', security: 'Security', temp: 'Temperature', firmware: 'Firmware', upgrade: 'Firmware upgrade',
   speed: 'Speed test', login: 'Sign-in', weekly: 'Weekly report', backup: 'NAS backup', health: 'Router health', config: 'Settings changed', isp: 'Internet speed',
-  wifi: 'Wi-Fi report', schedule: 'Schedule', presence: 'Who’s home', data: 'Data cap', upload: 'Unusual upload', devwatch: 'Watched device', monthly: 'Monthly summary', travel: 'Travel', adspike: 'Unusual blocking' };
+  wifi: 'Wi-Fi report', schedule: 'Schedule', presence: 'Who’s home', data: 'Data cap', upload: 'Unusual upload', devwatch: 'Watched device', monthly: 'Monthly summary', travel: 'Travel', adspike: 'Unusual blocking', rhupdate: 'Router Home update' };
 function bytes(n){ n = Number(n) || 0; var u = ['B','KB','MB','GB','TB','PB'], i = 0; while (n >= 1024 && i < u.length - 1){ n /= 1024; i++; } return (i ? n.toFixed(n < 10 ? 2 : n < 100 ? 1 : 0) : n) + ' ' + u[i]; }
 function rate(bps){ var b = (Number(bps) || 0) * 8; if (b >= 1e9) return [(b/1e9).toFixed(2),'Gbps']; if (b >= 1e6) return [(b/1e6).toFixed(b >= 1e8 ? 0 : 1),'Mbps']; if (b >= 1e3) return [(b/1e3).toFixed(0),'Kbps']; return [b.toFixed(0),'bps']; }
 function dur(s){ s = Math.floor(Number(s) || 0); var d = Math.floor(s/86400), h = Math.floor(s%86400/3600), m = Math.floor(s%3600/60); return (d ? d + 'd ' : '') + (d || h ? h + 'h ' : '') + m + 'm'; }
@@ -1021,7 +1021,8 @@ var DOCK = [
   ['lanip','Network','net','indigo'],'|',['overview','System','gear','gray'],['upgrade','Upgrade','up','pink'],['@dnshub','DNS','dnsq','red']
 ];
 
-var MH_VERSION = '2.5', MH_BUILD = '2026-11-14';
+var MH_VERSION = '2.6.4', MH_BUILD = '2026-11-22';
+var MH_REPO = 'https://github.com/xDarkHawkx/RouterHome';   /* updates come from this repo's GitHub Releases */
 var MH_CREDIT = 'Made by DogZoomZoom &amp; Claude AI (the bot)';
 /* "About Home" guide (Control Center > About Home): [section, intro, [[feature, how it works / how to use], ...]] */
 var ABOUT = [
@@ -1039,8 +1040,11 @@ var ABOUT = [
   ['Fix buttons', 'One-click fixes on some alerts (Restart tunnel, Renew connection, Fix DNS, Restore settings), always with a confirmation first.'],
   ['Dismiss / It’s mine', 'Dismiss hides an alert for a while (1 h for red, 24 h for orange). “It’s mine” on a new-device alert marks the device as known for good. “↻ Clear” on a packet-loss alert starts the 10-minute loss check fresh (handy right after changing a VPN server): the alert only comes back if new loss shows up. “Mute” silences that kind of alert (banner and Discord) for 1 hour, the rest of today or a week; it’s still listed in Recent events. “Clear all” under the alerts restarts the VPN, packet-loss and high-ping checks from scratch and hides the rest like Dismiss.'],
   ['How VPN pings are checked', 'Each VPN tunnel keeps one steady ping running to Cloudflare and one to Quad9 (one a second each, like ping -t on a PC), instead of starting new pings every check. Tested 11-20 side by side: some VPN servers (Nord, Surfshark) pause answers for ~30 s when one client starts many new pings, while a steady ping, and your devices, lost nothing. When pings do stop, a web page is loaded through the tunnel: if it loads, it is a ping-only blip (not counted as down, loss or a stall anywhere); if it fails too, it is a real drop and devices move to another tunnel.'],
-  ['GL.inet Utilities Toolkit', 'The last card on the page: point-and-click tools inspired by phantasm22’s GL.iNet Utilities Toolkit (github.com/phantasm22/GL-iNet_utils), rebuilt from scratch for Router Home. Hardware: CPU, memory, storage, temperatures (°F), network ports, Wi-Fi radios and a VPN crypto acceleration check. Benchmarks: CPU thermal stress (stops at 203 °F), VPN & crypto speed, storage, memory and DNS latency; results stay until the router restarts. Zram & system: zram size and compression, package system check (leftover lock, refresh lists). SSH keys: list, add and remove; the last key can’t be removed while password sign-in is off.'],
-  ['Zram gauge','System card, next to Memory: zram is memory the router compresses instead of running out of RAM (GL’s zram-swap package; about half the RAM, set up automatically at boot). The gauge shows how full it is; hover for the compression ratio, the real RAM it uses and the peak since the last restart. Orange from 60% full, red from 85%. Shown only when zram is on.'],
+  ['Updates', 'Control Center → Router Home updates: checks the Router Home GitHub page (github.com/xDarkHawkx/RouterHome) for a newer release, shows what’s new, and installs it with one click in about a minute. Only updates signed with the Router Home release key install, so a fake or tampered download is refused. The current version is saved first and put back automatically if anything goes wrong; “Go back to it” restores it later. Your settings, history and alerts are kept. Under “Everything is running smoothly” the page shows “Router Home is up to date” or “Router Home needs an update” with an Update now button (checked when the page opens, at most once an hour). It never installs by itself. The router also checks GitHub once a day on its own and sends one Discord message per new version (alert type “New Router Home version”).'],
+  ['GL.inet Utilities Toolkit','The last card on the page: point-and-click tools inspired by phantasm22’s GL.iNet Utilities Toolkit (github.com/phantasm22/GL-iNet_utils), rebuilt from scratch for Router Home. Hardware: CPU, memory, storage, temperatures (°F), network ports, Wi-Fi radios and a VPN crypto acceleration check. Benchmarks: CPU thermal stress (stops at 203 °F), VPN & crypto speed, storage, memory and DNS latency; results stay until the router restarts. Network: MTU check and per-device speed limits (below). Zram & system: zram size and compression, package system check (leftover lock, refresh lists). SSH keys: list, add and remove; the last key can’t be removed while password sign-in is off.'],
+  ['MTU check','Toolkit → Network → “Check MTU”: measures the biggest packet the internet path (and the path to each VPN server) carries without being split up, then shows the best size for each WireGuard tunnel (path minus 60 bytes for WireGuard’s own wrapping, 80 for an IPv6 server). Nothing changes while it measures. “Use N” changes that tunnel’s size and tests it for a minute: if websites or full-size packets stop getting through, the old size comes back by itself. Only the server the tunnel uses now is changed (other saved servers keep their size); an undo script is kept in /root/machome-backup/. OpenVPN tunnels aren’t changed.'],
+  ['Speed limits','Toolkit → Network → Speed limits: cap a device’s download and upload speed (Mbps). This uses GL’s own speed limiter, the same one as Clients → Speed limit, so limits show there too and stay after a restart. Remove a limit with “Remove”. Set limits on the main router; an access point passes its devices’ traffic to the main router, which limits them there.'],
+  ['Zram gauge','System card, next to Memory: zram is memory the router compresses instead of running out of RAM (GL’s zram-swap package; about half the RAM, set up automatically at boot). The gauge shows how full it is; hover for the compression ratio, the real RAM it uses and the peak since the last restart. Orange from 60% full, red from 85%. Shown only when zram is on. A GL firmware upgrade removes the zram-swap package; Router Home reinstalls it by itself once the internet is back (only on a router that had it) and sends an “upgrade” alert.'],
   ['VPN outage log','VPN Health card → “Outage log”: every REAL VPN outage (30 s or more with no pings and no web page through the tunnel) of the last 7, 30 or 60 days, with server, length, why, where devices went and whether auto-heal restarted it. Filter by provider, then “Copy as text” or “Send to Discord” for the VPN provider’s support. Ping-only blips aren’t listed. Recording since 11-20 evening; kept for 60 days.'],
   ['Phone view','The 📱 button in the menu bar switches to a compact page for phones: overall status, internet grade and speed, VPN tunnels with on/off switches, devices online, and big buttons (speed test, test VPN, clear alerts, recent events, DNS hub, outage log, settings). It turns on by itself on small screens; your choice is remembered in that browser. “Full page” goes back.'],
   ['Outage & lag log', 'In the ISP report card (and the Network Health “Log” link): every outage with its likely cause, lag episode, modem restart and slow speed test from the last 30 days, plus a per-day table (ping, evening ping, lag spikes, no answer). “Copy as text” or “Send to Discord”, ready for your ISP.'],
@@ -1176,7 +1180,7 @@ function skeleton(){
     '<div data-k="wxz"></div>' +
     '<div data-k="wx"></div>' +
     '<div class="mh-pv" data-k="phone"></div>' +
-    '<div class="mh-hero"><div class="l"><div><h1 data-k="greet">Welcome</h1><p data-k="summary">Gathering status…</p></div><div data-k="wxw"></div></div><div class="mh-chips" data-k="chips"></div></div>' +
+    '<div class="mh-hero"><div class="l"><div><h1 data-k="greet">Welcome</h1><p data-k="summary">Gathering status…</p><p class="mh-updl" data-k="updline" style="display:none;margin-top:4px"></p></div><div data-k="wxw"></div></div><div class="mh-chips" data-k="chips"></div></div>' +
     '<div data-k="fwb"></div>' +
     '<div class="mh-grid">' +
       win('sys', 'System', {ic:[['cpu','gray']], wide:true, route:'overview', delay:0, body:'<div class="mh-gauges">' + gauge('cpu','CPU') + gauge('mem','Memory') + '<div class="mh-zramg" style="display:none">' + gauge('zram','Zram') + '</div>' + gauge('temp','Temperature') + gauge('conn','Connections') +
@@ -1268,7 +1272,7 @@ return {
     this.mh.timers.push(setInterval(function(){ if (!document.hidden) self.slow(); }, 15000));
     this.mh.timers.push(setInterval(function(){ if (!document.hidden) self.history(); }, 60000));
     this.mh.timers.push(setInterval(function(){ self.clock(); self.theme(); self.vwTick(); }, 1000));
-    this.layApply(); this.lifeLoad(); this.tkLoad();
+    this.layApply(); this.lifeLoad(); this.tkLoad(); this.updAuto();
     this.mh.timers.push(setInterval(function(){ if (!document.hidden) self.lifeLoad(); }, 30000));
     /* toolkit: follow a running test every 2 s */
     this.mh.timers.push(setInterval(function(){ var t = self.mh.tk; if (!document.hidden && t && t.job && t.job.running) self.tkJob(); }, 2000));
@@ -2514,7 +2518,7 @@ return {
         self.mh.alerts = a;
         var T = [['vpn','VPN tunnel down or stale'],['wan','Internet outage (sent when it’s back)'],['ping','High internet ping (over your limit for 5 min; at most 1 alert an hour if it keeps bouncing)'],['dns','DNS server not responding'],['newdev','New device joins'],
                  ['security','Security check changes'],['temp','Router running hot'],['firmware','New firmware + upgrade checklist'],['upgrade','After an upgrade: what broke'],['speed','Nightly speed test results'],
-                 ['login','Admin sign-ins (web + SSH) and failed SSH attempts'],['weekly','Weekly summary report'],['backup','NAS backup failures'],['health','Router health: auto-reboot, stuck services, clock, storage/memory, cable speed'],['config','Router settings changed'],['isp','Internet slower than your plan 3 nights in a row'],['wifi','Weekly Wi-Fi channel report'],['schedule','Device schedules (paused / back online)'],['presence','Who’s home (arrive / leave)'],['data','Data cap (80% and 100%)'],['upload','Unusual upload from a device (possible hacked device or runaway backup)'],['devwatch','Watched device goes offline / comes back (pick devices in their device sheet)'],['monthly','Monthly summary (1st of the month)'],['travel','Travel router: hotel sign-in page, can’t reach home, daily data limit'],['adspike','Unusual blocking for one device (needs “Watch for unusual blocking” below)']];
+                 ['login','Admin sign-ins (web + SSH) and failed SSH attempts'],['weekly','Weekly summary report'],['backup','NAS backup failures'],['health','Router health: auto-reboot, stuck services, clock, storage/memory, cable speed'],['config','Router settings changed'],['isp','Internet slower than your plan 3 nights in a row'],['wifi','Weekly Wi-Fi channel report'],['schedule','Device schedules (paused / back online)'],['presence','Who’s home (arrive / leave)'],['data','Data cap (80% and 100%)'],['upload','Unusual upload from a device (possible hacked device or runaway backup)'],['devwatch','Watched device goes offline / comes back (pick devices in their device sheet)'],['monthly','Monthly summary (1st of the month)'],['travel','Travel router: hotel sign-in page, can’t reach home, daily data limit'],['adspike','Unusual blocking for one device (needs “Watch for unusual blocking” below)'],['rhupdate','New Router Home version on GitHub (checked once a day; never installs by itself)']];
         var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
         var dayOpts = days.map(function(d, i){ return '<option value="' + i + '"' + (i === a.weekly_day ? ' selected' : '') + '>' + d + '</option>'; }).join('');
         var whours = ''; for (var wh = 0; wh < 24; wh++) whours += '<option value="' + wh + '"' + (wh === a.weekly_hour ? ' selected' : '') + '>' + ((wh % 12) || 12) + ':00 ' + (wh < 12 ? 'AM' : 'PM') + '</option>';
@@ -3107,7 +3111,10 @@ return {
         /* router mode only, and only once the cable modem is connected (gateway password saved in Settings → Cable modem) */
         (!this.isAP() && m.watch && m.watch.modem_set ? '<button class="mh-ccbtn" data-act="modemrs" style="grid-column:1/-1"><span class="ic" style="background:' + GRAD.orange + '">' + svg('power') + '</span>Restart modem</button>' : '') + '</div>' +
         (hasWake ? '<div class="mh-ccg" style="margin-top:8px">' + this.wakeCC() + '</div>' : '') +
-        '<div class="mh-ccg" style="margin-top:8px"><div class="mh-ccr"><div class="m"><b>Settings</b><small>Privacy, look, layout, alerts, backups, modem, weather</small></div><button class="mh-btn" style="margin:0" data-act="settings">Open</button></div></div>' +
+        '<div class="mh-ccg" style="margin-top:8px">' +
+          /* Router Home updates from GitHub (owner, 2026-11-22: in the Control Center) */
+          '<div class="mh-ccr"><div class="m"><b>Router Home updates</b><small>' + (m.updAvail ? '<span style="color:var(--mh-blue)">Version ' + esc(m.updAvail) + ' is available</span>' : 'Version ' + esc(MH_VERSION) + ' · checks GitHub for a newer one') + '</small></div><button class="mh-btn" style="margin:0" data-act="updates">' + (m.updAvail ? 'Update' : 'Check') + '</button></div>' +
+          '<div class="mh-ccr"><div class="m"><b>Settings</b><small>Privacy, look, layout, alerts, backups, modem, weather</small></div><button class="mh-btn" style="margin:0" data-act="settings">Open</button></div></div>' +
         '<p class="mh-ccnote">Every change asks you to confirm first.</p>';
     },
     /* Settings window (Control Center > Settings): everything that used to be listed under the two big buttons.
@@ -3140,7 +3147,7 @@ return {
           (this.isAP() ? '' : row('Cable modem', m.watch && m.watch.modem_set ? esc(this.modemText(true) || 'Connected · reading…') : 'Not set up', go('modem'))) +
           row('ISP report card', 'Monthly uptime + speeds vs your plan', go('isp', 'Open')) + '</div>' +
         '<div class="mh-ccg"><h4>Home</h4>' +
-          row('Weather', m.wth ? (m.wth.zip ? (m.priv ? 'On' : esc(m.wth.place || m.wth.zip)) : 'Not set up') : '…', go('wth')) +
+          row('Weather',m.wth ? (m.wth.zip ? (m.priv ? 'On' : esc(m.wth.place || m.wth.zip)) : 'Not set up') : '…', go('wth')) +
           (m.life && m.life.wake && Object.keys(m.life.wake).length ? '' : row('Wake a computer', 'Turn it on in a PC’s device sheet (Clients card)', '')) + '</div>' +
         '<div class="btns"><button data-m="cancel">Close</button></div>';
     },
@@ -3194,6 +3201,7 @@ return {
       if (name === 'vpnclear') return this.doVpnClear();
       if (name === 'vpnlog') return this.openVpnLog(30, '');
       if (name === 'tk') return this.tkAct(arg);
+      if (name === 'updates'){ this.closeCC(); return this.openUpdates(); }
       if (name === 'lossclr') return this.doLossClear(arg);
       if (name === 'dnshub') return this.openDnsHub();
       if (name === 'adg') return this.doAdg();
@@ -4615,6 +4623,100 @@ return {
         } });
       load(md);
     },
+    /* ---- Router Home updates from GitHub (owner, 2026-11-22): Control Center → Router Home updates (rpc upd_*).
+       Only packages signed with the Router Home release key install; a failed update rolls itself back. */
+    updAuto: function(){
+      /* on page load (at most once an hour per browser): ask the router to check GitHub. Shows the line under
+         "Everything is running smoothly" (2.6.1) and, once a day, a toast; it never installs by itself. */
+      var self = this, m = this.mh, last = 0, cached = null;
+      try { last = Number(localStorage.getItem('machome-updchk') || 0); cached = localStorage.getItem('machome-updavail'); } catch (e) {}
+      if (Date.now() - last < 3600000 && cached !== null){ m.updAvail = cached || null; m.updChecked = true; return this.updLine(); }
+      rpc('machome', 'upd_check').then(function(r){
+        if (!r || !r.ok) return;
+        var told = 0; try { told = Number(localStorage.getItem('machome-updtold') || 0); } catch (e) {}
+        try { localStorage.setItem('machome-updchk', String(Date.now())); localStorage.setItem('machome-updavail', r.newer ? r.latest : ''); } catch (e) {}
+        m.updAvail = r.newer ? r.latest : null; m.updChecked = true;
+        self.updLine();
+        if (r.newer && Date.now() - told > 86400000){ try { localStorage.setItem('machome-updtold', String(Date.now())); } catch (e) {} self.toast('Router Home ' + r.latest + ' is available'); }
+      });
+    },
+    /* the line under "Everything is running smoothly" (owner, 2026-11-22, v2.6.1) */
+    updLine: function(){
+      var el = this.q('updline'), m = this.mh; if (!el || !m.updChecked) return;
+      el.style.display = '';
+      el.innerHTML = m.updAvail
+        ? '<span style="color:var(--mh-orange)">⬆ Router Home needs an update: version ' + esc(m.updAvail) + ' is available.</span> <button class="mh-btn" data-act="updates" style="margin:0 0 0 6px;padding:3px 10px;font-size:12px">Update now</button>'
+        : '<span style="color:var(--mh-green)">✓ Router Home is up to date</span> <span style="color:var(--mh-text2)">(' + esc(MH_VERSION) + ')</span>';
+    },
+    openUpdates: function(){
+      var self = this, m = this.mh;
+      var shell = function(inner, btns){ return '<div class="hic" style="background:' + GRAD.indigo + '">' + svg('cc') + '</div><h2>Router Home updates</h2>' + inner +
+        '<div class="err" data-e></div><div class="btns">' + (btns || '<button data-m="cancel">Close</button>') + '</div>'; };
+      var notes = function(t){ return '<div style="max-height:220px;overflow:auto;text-align:left;font-size:12px;white-space:pre-wrap;background:var(--mh-fill,rgba(127,127,127,.08));border-radius:10px;padding:8px 10px;margin:8px 0">' + esc(String(t || 'No release notes.')).slice(0, 6000) + '</div>'; };
+      this.openModal(shell('<p>Installed: <b>Router Home ' + esc(MH_VERSION) + '</b>. Checking GitHub…</p>'), {});
+      rpc('machome', 'upd_status').then(function(st){
+        if (st && st.running) return self.updProgress();
+        return rpc('machome', 'upd_check').then(function(r){
+          if (!document.getElementById('machome-modal')) return;
+          if (!r || !r.ok){ self.openModal(shell('<p>Couldn’t check for updates: ' + esc((r && r.err) || 'no answer from the router') + '.</p>' + self.updRollbackRow(st)), self.updHandlers()); return; }
+          try { localStorage.setItem('machome-updchk', String(Date.now())); localStorage.setItem('machome-updavail', r.newer ? r.latest : ''); } catch (e) {}
+          m.updAvail = r.newer ? r.latest : null; m.updChecked = true; self.updLine();
+          var src ='<p style="font-size:12px;color:var(--mh-text2)">From <a href="' + MH_REPO + '/releases" target="_blank" rel="noopener" style="color:var(--mh-blue)">GitHub · xDarkHawkx/RouterHome</a>. Only updates signed with the Router Home release key can install.</p>';
+          if (r.none) return self.openModal(shell('<p>Installed: <b>Router Home ' + esc(r.current) + '</b>.</p><p>' + esc(r.msg) + '</p>' + src + self.updRollbackRow(st)), self.updHandlers());
+          if (!r.newer) return self.openModal(shell('<p>✓ You’re up to date: <b>Router Home ' + esc(r.current) + '</b> (latest on GitHub: ' + esc(r.latest) + ').</p>' + src + self.updRollbackRow(st)), self.updHandlers());
+          var when = r.published ? new Date(r.published).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+          var body = '<p>A new version is available: <b>Router Home ' + esc(r.latest) + '</b>' + (when ? ' (' + esc(when) + ')' : '') + '. You have ' + esc(r.current) + '.</p>' + notes(r.notes) +
+            (r.installable ? '<p style="font-size:12px">Installing takes about a minute. Your settings, history and alerts are kept. The current version is saved first, and if anything goes wrong it’s put back automatically.</p>'
+              : '<p style="color:var(--mh-orange)">This release has no signed update package, so it can’t install from here. Download the installer from GitHub instead.</p>') + src;
+          self.openModal(shell(body, '<button data-m="cancel">Not now</button>' + (r.url ? '<a class="mh-btn sec" href="' + esc(r.url) + '" target="_blank" rel="noopener" style="margin:0 6px">View on GitHub</a>' : '') +
+            (r.installable ? '<button class="pri" data-m="install">Install ' + esc(r.latest) + '</button>' : '')), self.updHandlers());
+        });
+      });
+    },
+    updRollbackRow: function(st){
+      return (st && st.rollback) ? '<p style="font-size:12px;margin-top:10px">Saved earlier version: <b>' + esc(st.rollback) + '</b> <button class="mh-btn sec" data-m="rollback" style="margin-left:6px">Go back to it</button></p>' : '';
+    },
+    updHandlers: function(){
+      var self = this;
+      return {
+        install: function(md, b){ b.disabled = true; b.textContent = 'Starting…';
+          rpcx('machome', 'upd_install', {}, 15000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'not started'); self.updProgress(); })
+            .catch(function(e){ b.disabled = false; b.textContent = 'Install'; md.querySelector('[data-e]').textContent = 'Couldn’t start: ' + e.message; }); },
+        rollback: function(md, b){ if (!confirm('Go back to the previous version of Router Home? Your settings are kept.')) return; b.disabled = true;
+          rpcx('machome', 'upd_rollback', {}, 15000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'not started'); self.updProgress(); })
+            .catch(function(e){ b.disabled = false; md.querySelector('[data-e]').textContent = 'Couldn’t start: ' + e.message; }); }
+      };
+    },
+    /* follows the update job; nginx restarts mid-install, so failed polls just mean "wait" (up to ~3 min) */
+    updProgress: function(){
+      var self = this, misses = 0, m = this.mh;
+      var paint = function(st){
+        var html = '<div class="hic" style="background:' + GRAD.indigo + '">' + svg('cc') + '</div><h2>Updating Router Home</h2>' +
+          '<p>' + esc((st && st.step) || 'Working…') + '</p><div class="mh-bar" style="margin:10px 0"><i style="width:' + Math.max(4, (st && st.pct) || 0) + '%;background:var(--mh-blue)"></i></div>' +
+          '<p style="font-size:12px;color:var(--mh-text2)">Keep this page open. The admin page restarts during the install; that’s expected.</p>';
+        self.openModal(html, {}); m.busy = true;
+      };
+      paint({ step: 'Starting…', pct: 2 });
+      var tick = function(){
+        rpc('machome', 'upd_status').then(function(st){
+          /* rpc() answers null while nginx restarts: that's "still working", not "done" */
+          if (!st || st.ok !== true){ if (++misses < 90) return setTimeout(tick, 2000); m.busy = false; return self.toast('Lost contact with the router. Reload the page to see the result.'); }
+          misses = 0;
+          if (st.running){ paint(st); return setTimeout(tick, 2000); }
+          m.busy = false;
+          if (st.err){
+            self.openModal('<div class="hic" style="background:' + GRAD.red + '">' + svg('cc') + '</div><h2>Update not installed</h2><p>' + esc(st.err) + '.</p>' +
+              (st.log ? '<details style="text-align:left;font-size:11px"><summary>Details</summary><pre style="white-space:pre-wrap">' + esc(st.log) + '</pre></details>' : '') +
+              '<div class="btns"><button data-m="cancel">Close</button></div>', {});
+            return;
+          }
+          try { localStorage.setItem('machome-updavail', ''); } catch (e) {}
+          self.openModal('<div class="hic" style="background:' + GRAD.green + '">' + svg('cc') + '</div><h2>' + esc(st.step || 'Done') + '</h2><p>Reloading the page in a moment…</p>', {});
+          setTimeout(function(){ location.reload(); }, 3000);
+        });
+      };
+      setTimeout(tick, 1500);
+    },
     /* ---- GL.inet Utilities Toolkit (owner, 2026-11-22): point-and-click versions of the kinds of tools in
        phantasm22's GL.iNet Utilities Toolkit, rebuilt from scratch for Router Home (rpc tk_*, toolkit.lua, tk_job.lua). */
     tkLoad: function(){
@@ -4625,7 +4727,38 @@ return {
       if (tab === 'bench') this.tkJob();
       if (tab === 'sys'){ rpc('machome', 'tk_zram').then(function(r){ if (r && r.ok) t.zram = r; done(); }); rpc('machome', 'tk_pkg').then(function(r){ if (r && r.ok) t.pkg = r; done(); }); this.tkJob(); }
       if (tab === 'ssh') rpc('machome', 'tk_ssh').then(function(r){ if (r && r.ok) t.ssh = r; done(); });
+      if (tab === 'net'){ this.tkJob(); this.tkClients(); }
       this.tkPaint();
+    },
+    /* Network tab (phase 2, 2026-11-22): GL's client list carries each device's speed limit (limit_rx = download,
+       limit_tx = upload, in KB/s); limits are set with GL's own qos.set_speed_limit_rule, like GL's Clients page */
+    tkClients: function(){
+      var self = this, m = this.mh;
+      return rpc('clients', 'get_list').then(function(r){ if (r){ m.list = r; if (m.alive) self.tkPaint(); } });
+    },
+    tkBwDialog: function(mac){
+      var self = this, m = this.mh, all = (this.clientsArr() || []).filter(function(c){ return c.mac; });
+      var cur = mac ? all.filter(function(c){ return c.mac === mac; })[0] : null;
+      if (mac && !cur) return;
+      var nm = function(c, i){ return self.devName(c, i); };
+      var mb = function(kb){ return kb ? Math.round(kb * 8 / 1000 * 10) / 10 : ''; };   /* KB/s → Mbps */
+      var pick = all.map(function(c, i){ return { c: c, n: nm(c, i) }; }).sort(function(a, b){ return (b.c.online ? 1 : 0) - (a.c.online ? 1 : 0) || String(a.n).localeCompare(String(b.n)); });
+      var sel = cur ? '<p><b>' + esc(nm(cur, all.indexOf(cur))) + '</b>' + (cur.ip && !m.priv ? ' <small>' + esc(cur.ip) + '</small>' : '') + '</p>'
+        : '<label for="mh-bwdev">Device</label><select id="mh-bwdev">' + pick.map(function(x){ return '<option value="' + esc(x.c.mac) + '">' + esc(x.n) + (x.c.online ? '' : ' (offline)') + '</option>'; }).join('') + '</select>';
+      this.confirm({ title: cur ? 'Change speed limit' : 'Add a speed limit', icon: 'dl', grad: GRAD.orange, ok: 'Save limit', working: 'Saving…',
+        body: sel + '<div style="display:flex;gap:10px;margin-top:8px"><div style="flex:1"><label for="mh-bwd">Download (Mbps)</label><input id="mh-bwd" type="number" min="0" step="0.5" value="' + (cur ? mb(cur.limit_rx) : '') + '" placeholder="no limit"></div>' +
+          '<div style="flex:1"><label for="mh-bwu">Upload (Mbps)</label><input id="mh-bwu" type="number" min="0" step="0.5" value="' + (cur ? mb(cur.limit_tx) : '') + '" placeholder="no limit"></div></div>' +
+          '<p style="font-size:12px">Leave a box empty for no limit in that direction. Uses GL’s own speed limiter (Clients → Speed limit), so it stays after a restart.</p>' },
+        function(){
+          var md = document.getElementById('machome-modal');
+          var dm = cur ? cur.mac : md.querySelector('#mh-bwdev').value;
+          var d = Number(md.querySelector('#mh-bwd').value) || 0, u = Number(md.querySelector('#mh-bwu').value) || 0;
+          if (d < 0 || u < 0 || d > 10000 || u > 10000) return Promise.reject(new Error('use 0.1 to 10000 Mbps'));
+          if (!d && !u) return Promise.reject(new Error('enter a download or upload limit (or use Remove)'));
+          /* Mbps → KB/s, the unit GL's API takes */
+          return rpcx('qos', 'set_speed_limit_rule', { mac: dm, download: Math.round(d * 125), upload: Math.round(u * 125) }, 30000).then(function(){
+            return self.tkClients().then(function(){ return 'Speed limit saved'; }); });
+        });
     },
     tkJob: function(){
       var self = this, m = this.mh, t = m.tk = m.tk || { tab: 'hw' };
@@ -4638,6 +4771,12 @@ return {
           if (r.job.kind === 'zram') rpc('machome', 'tk_zram').then(function(z){ if (z && z.ok){ t.zram = z; self.tkPaint(); } });
           if (r.job.kind === 'opkg') rpc('machome', 'tk_pkg').then(function(p){ if (p && p.ok){ t.pkg = p; self.tkPaint(); } });
           self.toast(r.job.err ? 'That didn’t work: ' + r.job.err : (r.job.kind === 'zram' ? 'Zram restarted with the new settings' : 'Package lists refreshed'));
+        }
+        if (was && !r.job.running && r.job.kind === 'mtuapply'){
+          var x = r.job.result || {};
+          if (r.job.err) self.toast('MTU not changed: ' + r.job.err);
+          else if (x.undone) self.openModal('<div class="hic" style="background:' + GRAD.orange + '">' + svg('net') + '</div><h2>Size put back</h2><p>' + esc(x.name) + ' didn’t work well with ' + esc(x.mtu) + ' (' + esc(x.why || 'test failed') + '), so it went back to ' + esc(x.old) + ' by itself. Nothing else changed.</p><div class="btns"><button data-m="cancel">OK</button></div>', {});
+          else self.toast(x.name + ' now uses MTU ' + x.mtu + ' (tested for a minute)');
         }
         if (m.alive) self.tkPaint();
       });
@@ -4666,6 +4805,25 @@ return {
         function(){ return rpcx('machome', 'tk_pkg_fix', { what: a[1] }, 15000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'error');
           if (a[1] === 'update'){ t.job = { running: true, kind: 'opkg', pct: 0, step: 'Downloading package lists…' }; self.tkPaint(); return 'Refreshing package lists…'; }
           return rpc('machome', 'tk_pkg').then(function(p){ if (p && p.ok){ t.pkg = p; self.tkPaint(); } return 'Lock removed'; }); }); });
+      if (a[0] === 'mtuuse'){
+        var ifc = a[1], nmtu = Number(a[2]), tu = ((((t.results || {}).mtu || {}).r || {}).tunnels || []).filter(function(x){ return x.ifc === ifc; })[0];
+        if (!tu || !nmtu) return;
+        return this.confirm({ title: 'Change ' + (tu.name || ifc) + ' to ' + nmtu + '?', icon: 'net', grad: GRAD.blue, ok: 'Change & test', working: 'Starting…',
+          body: '<p>The tunnel’s packet size (MTU) goes from <b>' + esc(tu.cur) + '</b> to <b>' + nmtu + '</b> right away; no reconnect needed.</p>' +
+            '<p>For the next minute the router checks that websites load and full-size packets get through this tunnel. If either fails twice, <b>' + esc(tu.cur) + ' comes back by itself</b>.</p>' +
+            '<p style="font-size:12px">Only the server this tunnel uses now (' + esc(tu.name || ifc) + ') is changed; other saved servers keep their size. GL’s VPN page shows the new size too. Undo script: /root/machome-backup/.</p>' },
+          function(){ return rpcx('machome', 'tk_mtu_apply', { ifc: ifc, mtu: nmtu }, 15000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'error');
+            t.job = { running: true, kind: 'mtuapply', pct: 0, step: 'Starting…' }; self.tkPaint(); return 'Testing the new size…'; }); });
+      }
+      if (a[0] === 'bwadd') return this.tkBwDialog(null);
+      if (a[0] === 'bwedit') return this.tkBwDialog(a.slice(1).join(':'));
+      if (a[0] === 'bwrm'){
+        var bmac = a.slice(1).join(':'), all = this.clientsArr() || [], bc = all.filter(function(c){ return c.mac === bmac; })[0];
+        if (!bc) return;
+        return this.confirm({ title: 'Remove the speed limit?', icon: 'dl', grad: GRAD.orange, ok: 'Remove limit', working: 'Removing…',
+          body: '<p><b>' + esc(this.devName(bc, all.indexOf(bc))) + '</b> goes back to full speed.</p>' },
+          function(){ return rpcx('qos', 'remove_speed_limit_rule', { mac: bmac }, 30000).then(function(){ return self.tkClients().then(function(){ return 'Limit removed'; }); }); });
+      }
       if (a[0] === 'sshadd') return this.tkSshAdd();
       if (a[0] === 'sshrm'){
         var fp = a.slice(1).join(':'), k = ((t.ssh && t.ssh.keys) || []).filter(function(x){ return x.fp === fp; })[0];
@@ -4712,12 +4870,12 @@ return {
       var t = this.mh.tk || { tab: 'hw' }, tab = t.tab, job = t.job || {}, R = t.results || {}, self = this;
       var F = function(c){ return c == null ? '—' : Math.round(c * 9 / 5 + 32) + ' °F'; };
       var yes = function(b, y, n){ return '<span style="color:' + (b ? 'var(--mh-green)' : 'var(--mh-orange)') + '">' + (b ? '✓ ' : '✗ ') + esc(b ? y : n) + '</span>'; };
-      var tabs = [['hw', 'Hardware'], ['bench', 'Benchmarks'], ['sys', 'Zram & system'], ['ssh', 'SSH keys']];
+      var tabs = [['hw', 'Hardware'], ['bench', 'Benchmarks'], ['net', 'Network'], ['sys', 'Zram & system'], ['ssh', 'SSH keys']];
       var h = '<div class="mh-seg2" style="margin-bottom:12px">' + tabs.map(function(x){ return '<button data-act="tk" data-arg="tab:' + x[0] + '" class="' + (tab === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>';
       var sec = function(s){ return '<div class="mh-sec">' + s + '</div>'; };
       var tbl = function(head, rows){ return '<div class="mh-isp"><table><thead><tr>' + head.map(function(x){ return '<th>' + x + '</th>'; }).join('') + '</tr></thead><tbody>' + rows.map(function(r){ return '<tr>' + r.map(function(c){ return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>'; };
-      var running = job.running ? '<div class="mh-vh" style="margin-bottom:10px"><b>' + esc(({ cpu: 'CPU stress test', crypto: 'VPN & crypto test', disk: 'Storage test', mem: 'Memory test', dns: 'DNS test', zram: 'Zram', opkg: 'Package lists' })[job.kind] || 'Test') + ': ' + esc(job.step || '…') +
-        '</b><div class="mh-bar" style="margin:8px 0"><i style="width:' + Math.max(3, job.pct || 0) + '%;background:var(--mh-blue)"></i></div>' + (job.kind !== 'zram' && job.kind !== 'opkg' ? '<button class="mh-btn sec" data-act="tk" data-arg="stop">Stop</button>' : '') + '</div>' : '';
+      var running = job.running ? '<div class="mh-vh" style="margin-bottom:10px"><b>' + esc(({ cpu: 'CPU stress test', crypto: 'VPN & crypto test', disk: 'Storage test', mem: 'Memory test', dns: 'DNS test', zram: 'Zram', opkg: 'Package lists', mtu: 'MTU check', mtuapply: 'MTU change' })[job.kind] || 'Test') + ': ' + esc(job.step || '…') +
+        '</b><div class="mh-bar" style="margin:8px 0"><i style="width:' + Math.max(3, job.pct || 0) + '%;background:var(--mh-blue)"></i></div>' + (job.kind !== 'zram' && job.kind !== 'opkg' && job.kind !== 'mtuapply' ? '<button class="mh-btn sec" data-act="tk" data-arg="stop">Stop</button>' : '') + '</div>' : '';
       if (tab === 'hw'){
         var i = t.info;
         if (!i) h += '<p class="mh-empty">Reading the hardware…</p>';
@@ -4771,6 +4929,46 @@ return {
         h += item('DNS latency', 'Looks up 10 popular sites at your devices’ DNS, the router’s own DNS, Cloudflare, Quad9 and Google, straight from the router. Lower is better; your own DNS often wins because it caches answers.', btn('dns', 'Run'), 'dns',
           rn ? tbl(['DNS server', 'Middle', 'Average', 'Best – worst', 'Failed'], (rn.servers || []).map(function(s){ return ['<b>' + esc(s.label) + '</b> <small>' + esc(s.ip) + '</small>', s.median != null ? s.median + ' ms' : '—', s.avg != null ? s.avg + ' ms' : '—', s.best != null ? s.best + '–' + s.worst + ' ms' : '—', s.fails ? '<span style="color:var(--mh-orange)">' + s.fails + ' of ' + s.n + '</span>' : '0']; })) : '');
         h += '<p style="font-size:12px;color:var(--mh-text2)">Results stay until the router restarts. Only one test runs at a time.</p>';
+      }
+      if (tab === 'net'){
+        var rmt = R.mtu && R.mtu.r, rap = R.mtuapply && R.mtuapply.r, apm = this.isAP() || (rmt && rmt.ap);
+        h += running;
+        /* ---- MTU */
+        h += sec('MTU (packet size)') + '<p style="font-size:13px;margin:0 0 8px;color:var(--mh-text2)">The biggest packet that gets through without being split up. A VPN tunnel set too high splits packets (slower, sometimes pages hang); too low wastes a little speed. Measuring changes nothing.</p>';
+        h += '<p><button class="mh-btn' + (job.running ? ' sec' : '') + '" data-act="tk" data-arg="run:mtu"' + (job.running ? ' disabled' : '') + '>' + (rmt ? 'Check again' : 'Check MTU') + '</button>' + (R.mtu ? ' <small style="color:var(--mh-text2)">· ' + ago(Math.floor(Date.now() / 1000) - R.mtu.t) + '</small>' : '') + '</p>';
+        if (rmt){
+          h += '<div class="mh-kv">' + kv('Internet path', rmt.wan ? rmt.wan + (rmt.wan >= 1500 ? ' (full)' : '') : 'couldn’t measure') +
+            (rmt.targets || []).map(function(x){ return kv('To ' + x.name, x.mtu ? String(x.mtu) : esc(x.note || '—')); }).join('') + '</div>';
+          var ST = { best: ['var(--mh-green)', '✓ best size'], fine: ['var(--mh-green)', '✓ fine'], low: ['var(--mh-orange)', 'lower than needed'], high: ['var(--mh-red)', 'too high: packets get split'], unknown: ['var(--mh-text2)', 'couldn’t tell'] };
+          if ((rmt.tunnels || []).length){
+            h += tbl(['Tunnel', 'Now', 'Best', 'Status', ''], rmt.tunnels.map(function(x){
+              var s = ST[x.status] || ST.unknown, can = x.best && x.best !== x.cur && (x.status === 'high' || x.status === 'low');
+              return ['<b>' + esc(x.name || x.ifc) + '</b> <small>' + esc(x.ifc) + '</small>', esc(x.cur) + (x.works ? '' : ' <small style="color:var(--mh-orange)">(full-size ping failed)</small>'),
+                x.best ? esc(x.best) + ' <small>' + (x.measured ? 'path to server ' + esc(x.path) : 'from internet path') + (x.v6 ? ', IPv6' : '') + '</small>' : '—',
+                '<span style="color:' + s[0] + '">' + s[1] + '</span>',
+                can ? '<button class="mh-btn sec" data-act="tk" data-arg="mtuuse:' + esc(x.ifc) + ':' + esc(x.best) + '"' + (job.running ? ' disabled' : '') + '>Use ' + esc(x.best) + '</button>' : ''];
+            }));
+          } else h += '<p class="mh-empty" style="margin:6px 0 0">' + (apm ? 'This router is an access point: its VPN tunnels run on the main router, so check MTU there.' : 'No WireGuard tunnels are running.') + '</p>';
+          h += '<p style="font-size:12px;color:var(--mh-text2)">Best = path size − 60 bytes for WireGuard’s own wrapping (80 for an IPv6 server). “Use” tests the new size for a minute and goes back by itself if anything breaks. OpenVPN tunnels aren’t changed here.</p>';
+        }
+        if (rap) h += '<p style="font-size:12px;margin:4px 0 0">Last change: ' + esc(rap.name) + ' ' + esc(rap.old) + ' → ' + esc(rap.mtu) + (rap.undone ? ' <span style="color:var(--mh-orange)">put back automatically (' + esc(rap.why || 'test failed') + ')</span>' : ' <span style="color:var(--mh-green)">kept</span>') + ' · ' + ago(Math.floor(Date.now() / 1000) - R.mtuapply.t) + '</p>';
+        /* ---- speed limits (GL's own limiter) */
+        h += sec('Speed limits');
+        if (apm) h += '<p class="mh-empty" style="margin:0">Set speed limits on the main router: this access point passes its devices’ traffic to it, and it limits them there.</p>';
+        else {
+          var cl = this.clientsArr();
+          if (!cl) h += '<p class="mh-empty">Loading devices…</p>';
+          else {
+            var mbs = function(kb){ return kb ? (Math.round(kb * 8 / 1000 * 10) / 10) + ' Mbps' : 'no limit'; };
+            var lim = cl.map(function(c, i){ return { c: c, i: i }; }).filter(function(x){ return x.c.limit_rx || x.c.limit_tx; });
+            h += '<p style="font-size:13px;margin:0 0 8px;color:var(--mh-text2)">Cap how fast one device can download or upload. Uses GL’s own speed limiter (Clients → Speed limit), so limits stay after a restart.</p>';
+            h += lim.length ? tbl(['Device', 'Download', 'Upload', ''], lim.map(function(x){
+              return ['<b>' + esc(self.devName(x.c, x.i)) + '</b>' + (x.c.online ? '' : ' <small style="color:var(--mh-text2)">offline</small>'), mbs(x.c.limit_rx), mbs(x.c.limit_tx),
+                '<button class="mh-btn sec" data-act="tk" data-arg="bwedit:' + esc(x.c.mac) + '">Change</button> <button class="mh-btn sec" data-act="tk" data-arg="bwrm:' + esc(x.c.mac) + '">Remove</button>'];
+            })) : '<p class="mh-empty" style="margin:0 0 8px">No device has a speed limit.</p>';
+            h += '<p><button class="mh-btn" data-act="tk" data-arg="bwadd">Add a speed limit</button></p>';
+          }
+        }
       }
       if (tab === 'sys'){
         var z = t.zram, p = t.pkg;

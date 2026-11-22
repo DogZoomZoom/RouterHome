@@ -257,7 +257,7 @@ end
 -- ---------------- Discord alerts settings (webhook never returned to the page in full)
 local ALERTS = "/etc/machome/alerts.json"
 local WH_PAT = "^https://[%w%.]*discord[%w]*%.com/api/webhooks/%d+/[%w_%-]+$"
-local ALERT_TYPES = { "vpn", "dns", "wan", "newdev", "security", "temp", "firmware", "upgrade", "speed", "login", "weekly", "backup", "health", "config", "isp", "wifi", "schedule", "presence", "data", "upload", "travel", "devwatch", "monthly", "ping", "adspike" }
+local ALERT_TYPES = { "vpn", "dns", "wan", "newdev", "security", "temp", "firmware", "upgrade", "speed", "login", "weekly", "backup", "health", "config", "isp", "wifi", "schedule", "presence", "data", "upload", "travel", "devwatch", "monthly", "ping", "adspike", "rhupdate" }
 
 -- event timeline (written by extras.lua for every alert): newest first, last 100
 function M.get_events()
@@ -805,6 +805,14 @@ function M.tk_pkg_fix(a) local w = targ(a, "what"); if w ~= "lock" and w ~= "upd
 function M.tk_ssh() return tk().ssh_list() end
 function M.tk_ssh_add(a) local k = targ(a, "key"); if type(k) ~= "string" then return { ok = false, err = "bad request" } end; return tk().ssh_add(k) end
 function M.tk_ssh_remove(a) local f = targ(a, "fp"); if type(f) ~= "string" or not f:match("^SHA256:[%w%+/]+$") then return { ok = false, err = "bad request" } end; return tk().ssh_remove(f) end
+-- phase 2 (2026-11-22): change one WireGuard tunnel's MTU; tested for a minute, undone automatically if it misbehaves
+function M.tk_mtu_apply(a) local i, m = targ(a, "ifc"), tonumber(targ(a, "mtu")); if type(i) ~= "string" or not m then return { ok = false, err = "bad request" } end; return tk().mtu_apply(i, m) end
+--- Router Home updates from GitHub (owner, 2026-11-22): Settings → Router Home → Updates. Signed packages only.
+local function upd() return dofile("/usr/lib/machome/updater.lua") end
+function M.upd_check() return upd().check() end
+function M.upd_status() return upd().status() end
+function M.upd_install() return upd().install() end
+function M.upd_rollback() return upd().rollback() end
 --- one line: a Speed History series (label) or one "Past servers this week" entry (reliability key)
 function M.speedhist_remove(args)
     local P = more(); local label = type(args) == "table" and args.label

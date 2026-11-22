@@ -21,7 +21,7 @@ HOW TO INSTALL ON A MAC
   2. Open Terminal (Applications > Utilities > Terminal).
   3. Type  sh  followed by a space, drag "Install Router Home (Mac).command" into the Terminal
      window, and press Return.
-  4. Follow the same steps as below (choose 1, router IP, questions, password twice).
+  4. Follow the same steps as below (choose 1, router IP, questions, password once).
   5. Reload the router's admin page with Cmd+Shift+R.
   (Double-clicking the .command file won't work straight from the zip, because macOS blocks
   downloaded scripts. The "sh + drag" method above avoids that.)
@@ -30,7 +30,7 @@ HOW TO INSTALL ON WINDOWS
   1. Extract this whole folder (don't run it from inside the zip).
   2. Double-click "Install Router Home.cmd".
   3. Choose 1, enter the router IP, and answer the speed-test question.
-  4. Type the admin password when asked. You're asked twice, and nothing shows while you type.
+  4. Type the admin password when asked (just once). Nothing shows while you type.
   5. Open the router's admin page and press Ctrl+F5. "Home" is now at the top of the menu.
 
 WHAT IT CHANGES

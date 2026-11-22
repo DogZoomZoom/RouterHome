@@ -39,7 +39,7 @@ end
 -- ---------------------------------------------------------------- config
 local DEF = { webhook = "", enabled = false, temp_f = 185, ping_ms = 75, speed_daily = true, speed_hour = 3,
     types = { vpn = true, dns = true, wan = true, newdev = true, security = true, temp = true, firmware = true, upgrade = true, speed = true,
-              login = true, weekly = true, backup = true, health = true, config = true, isp = true, wifi = true, schedule = true, presence = true, data = true, upload = true, travel = true, devwatch = true, monthly = true, ping = true, adspike = true } }
+              login = true, weekly = true, backup = true, health = true, config = true, isp = true, wifi = true, schedule = true, presence = true, data = true, upload = true, travel = true, devwatch = true, monthly = true, ping = true, adspike = true, rhupdate = true } }
 local function load_cfg()
     local c = jread(ALERTS, {})
     local out = { webhook = c.webhook or "", enabled = c.enabled == true, temp_f = tonumber(c.temp_f) or DEF.temp_f, ping_ms = tonumber(c.ping_ms) or DEF.ping_ms,
@@ -212,8 +212,9 @@ local function readiness(now, force)
     for _, s in ipairs(opt) do
         if exists("/etc/init.d/" .. s) and os.execute("/etc/init.d/" .. s .. " enabled 2>/dev/null") ~= 0 then revert[#revert + 1] = s end
     end
-    ready = { time = now, kept = okc, lost = lost, revert = revert,
-        notes = { "VPN key file permissions may loosen; the Security card will flag it" } }
+    local notes = { "VPN key file permissions may loosen; the Security card will flag it" }
+    if exists("/etc/init.d/zram") then notes[#notes + 1] = "Zram (GL's zram-swap package) is removed by the upgrade; Router Home reinstalls it by itself once the internet is back" end
+    ready = { time = now, kept = okc, lost = lost, revert = revert, notes = notes }
     writef(DIR .. "/ready.json", cjson.encode(ready))
     return ready
 end
@@ -896,6 +897,78 @@ local function boot_check(now, sec)
             "Upgraded from " .. last .. " to " .. curv .. ". " .. fine .. " custom files intact.", (#broken > 0) and "orange" or "green", fields)
     end
     if curv ~= "" then writef(LASTVER, curv) end
+    return last ~= "" and curv ~= "" and last ~= curv
+end
+
+-- ---------------------------------------------------------------- zram after a firmware upgrade (2026-11-22, owner)
+-- A GL firmware upgrade removes the zram-swap package (its settings in /etc/config/system stay). Router Home
+-- remembers that zram was installed (/etc/machome/zram_want) and, after an upgrade, reinstalls it from GL's package
+-- server once the internet is up: in the background, up to 6 tries 10 minutes apart. It never installs zram on a
+-- router that didn't have it, and if zram-swap is removed on purpose (no upgrade in between) the marker goes too.
+local ZWANT, ZPEND, ZPID, ZLOG = EDIR .. "/zram_want", EDIR .. "/zram_reinstall", DIR .. "/zram_reinstall.pid", DIR .. "/zram_reinstall.log"
+local zr_t = 0
+local function zram_tick(now, online, upgraded)
+    local inst = exists("/etc/init.d/zram")
+    if upgraded and not inst and exists(ZWANT) and not exists(ZPEND) then
+        writef(ZPEND, cjson.encode({ since = now, tries = 0 }))
+        os.execute("logger -t machome 'zram: the firmware upgrade removed zram-swap; reinstalling it when the internet is up'")
+    end
+    local p = exists(ZPEND) and jread(ZPEND, nil) or nil
+    local pid = trim(readf(ZPID) or "")
+    local busy = pid:match("^%d+$") ~= nil and exists("/proc/" .. pid .. "/stat")
+    if inst and not busy then
+        if not exists(ZWANT) then writef(ZWANT, "zram-swap was installed on " .. os.date("%Y-%m-%d") .. "; Router Home reinstalls it after firmware upgrades\n") end
+        if p then
+            os.remove(ZPEND); os.remove(ZPID)
+            local on = (readf("/proc/swaps") or ""):match("/dev/zram0") ~= nil
+            alert("upgrade", "✅ Zram reinstalled after the firmware upgrade", "The upgrade removed GL's **zram-swap** package; Router Home put it back" .. (on and " and zram is on again." or ". It starts at the next restart."), "green")
+        end
+        return
+    end
+    if inst or busy then return end
+    if not p then if exists(ZWANT) then os.remove(ZWANT) end; return end   -- removed on purpose: forget it
+    if not online or now - zr_t < 600 or exists("/var/lock/opkg.lock") then return end
+    zr_t = now
+    p.tries = (tonumber(p.tries) or 0) + 1
+    if p.tries > 6 then
+        os.remove(ZPEND); os.remove(ZPID)
+        local why = trim(sh("tail -2 " .. ZLOG)):gsub("[`*]", ""):sub(1, 300)
+        alert("upgrade", "⚠ Zram couldn't be reinstalled", "The firmware upgrade removed GL's **zram-swap** package and 6 tries to put it back failed. Install it in **System → Plug-ins** (search for zram-swap)." .. (why ~= "" and ("\nLast message: " .. why) or ""), "orange")
+        return
+    end
+    writef(ZPEND, cjson.encode(p))
+    -- in the background: opkg can take a minute and the sampler must keep running
+    os.execute("(opkg update; opkg install zram-swap && /etc/init.d/zram enable && /etc/init.d/zram start) >" .. ZLOG .. " 2>&1 </dev/null & echo $! > " .. ZPID)
+    os.execute("logger -t machome 'zram: reinstalling zram-swap after the firmware upgrade (try " .. p.tries .. " of 6)'")
+end
+
+-- ---------------------------------------------------------------- Router Home updates: daily check (2026-11-22, owner)
+-- Once a day the router asks GitHub for the newest Router Home release (updater.lua check) and sends ONE Discord
+-- message per new version (alert type "rhupdate"). It never installs anything: that stays a click in
+-- Control Center → Router Home updates. A failed check is retried after an hour.
+local RHUPD = EDIR .. "/rhupd.json"
+local rhu = nil
+local function rhupd_tick(now)
+    rhu = rhu or jread(RHUPD, {})
+    if type(rhu) ~= "table" then rhu = {} end
+    if now - (tonumber(rhu.checked) or 0) < 86400 then return end
+    if (tonumber((readf("/proc/uptime") or ""):match("^(%d+)")) or 0) < 600 then return end   -- not right after a boot
+    local okU, U = pcall(dofile, "/usr/lib/machome/updater.lua"); if not okU or type(U) ~= "table" then return end
+    local okc, r = pcall(U.check)
+    if not okc or type(r) ~= "table" or not r.ok then
+        rhu.checked = now - 86400 + 3600
+    else
+        rhu.checked = now; rhu.latest = r.latest
+        if r.newer and r.latest and r.latest ~= "" and rhu.notified ~= r.latest then
+            local notes = tostring(r.notes or ""):gsub("\r", ""):sub(1, 900)
+            alert("rhupdate", "⬆ Router Home " .. r.latest .. " is available",
+                "This router runs " .. tostring(r.current) .. ". Install it from **Control Center → Router Home updates**; it backs up first and goes back by itself if anything fails." ..
+                (r.installable and "" or "\nThis release has no signed update package, so use the installer from GitHub instead."), "purple",
+                { { name = "What's new", value = notes ~= "" and notes or "(no notes)", inline = false } })
+            rhu.notified = r.latest
+        end
+    end
+    writef(RHUPD, cjson.encode(rhu))
 end
 
 -- ---------------------------------------------------------------- main entry points
@@ -1243,7 +1316,10 @@ function X.tick(ctx)
         last_min = now
         X.cfg = load_cfg()
         usage_tick(now)
-        if not booted then booted = true; boot_check(now, ctx.sec) end
+        local upgraded = false
+        if not booted then booted = true; local okb, u = pcall(boot_check, now, ctx.sec); upgraded = okb and u == true end
+        pcall(zram_tick, now, online, upgraded)
+        if online then pcall(rhupd_tick, now) end
         -- security transitions
         if ctx.sec and #ctx.sec > 0 then
             if prev_sec then

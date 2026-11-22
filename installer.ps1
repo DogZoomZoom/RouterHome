@@ -20,7 +20,7 @@ Say "  Tested on: Flint 3 (GL-BE9300), Brume 3 (GL-MT5000), Slate 7 Pro (GL-BE10
 Say "  It does NOT change your Wi-Fi, firewall, VPN or passwords, and it can be removed again."
 Say ""
 
-foreach ($t in "ssh", "scp", "tar") {
+foreach ($t in "ssh", "ssh-keygen", "tar") {
   if (-not (Get-Command $t -ErrorAction SilentlyContinue)) {
     Say "  '$t' wasn't found. This needs Windows 10 (1809 or newer) or Windows 11 with the built-in OpenSSH Client." Red
     Say "  Settings > Apps > Optional features > Add 'OpenSSH Client', then run this again." Yellow
@@ -33,14 +33,18 @@ Say "  1) Install or update the Home tab (then optional security/cleanup questio
 Say "  2) Remove the Home tab"
 Say "  3) Undo the optional security/cleanup changes made by this installer"
 Say "  4) Quit"
-$choice = Ask "  Choose" "1"
+# (2026-11-22, same as the Mac installer's PR #1 fixes: anything but 1-4 asks again; before, a typo went on to install)
+do {
+  $choice = Ask "  Choose" "1"
+  if ($choice -notin "1", "2", "3", "4") { Say "  Please enter 1, 2, 3, or 4." Yellow }
+} until ($choice -in "1", "2", "3", "4")
 if ($choice -eq "4") { exit 0 }
 
-# ---- router address
+# ---- router address (four numbers 0-255, no leading zeros)
 do {
   $ip = Ask "  Router IP address (the address you open the admin page with)" "192.168.8.1"
-  $okIp = $ip -match '^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$' -and (($ip.Split('.') | ForEach-Object { [int]$_ -le 255 }) -notcontains $false)
-  if (-not $okIp) { Say "  That isn't an IP address like 192.168.8.1" Yellow }
+  $okIp = $ip -match '^(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})$' -and (($ip.Split('.') | ForEach-Object { [int]$_ -le 255 }) -notcontains $false)
+  if (-not $okIp) { Say "  That isn't a valid IPv4 address like 192.168.8.1" Yellow }
 } until ($okIp)
 Say "  Checking $ip ..."
 if (-not (Port22 $ip)) {
@@ -54,11 +58,18 @@ Say "  Router found." Green
 $target = "root@$ip"
 $sshOpts = @("-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=10")
 
+# Only offer to forget the router's old key when that's really the problem (not after a mistyped password)
+function HostKeyMismatch {
+  $eap = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  try { $o = & ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 $target exit 2>&1 | Out-String } catch { $o = "" }
+  $ErrorActionPreference = $eap
+  return ($o -match '(?i)identification has changed|host key verification failed')
+}
 function HostKeyHelp {
+  if (-not (HostKeyMismatch)) { return $false }
   Say ""
-  Say "  If you saw 'REMOTE HOST IDENTIFICATION HAS CHANGED', this PC remembers a different device at $ip" Yellow
-  Say "  (for example after a router reset or a new router)." Yellow
-  if (YesNo "  Forget the old entry for $ip and try again?") { & ssh-keygen -R $ip | Out-Null; return $true }
+  Say "  This PC remembers a different device at $ip (for example after a router reset or a new router)." Yellow
+  if (YesNo "  Forget the old SSH key entry for $ip and try again?") { & ssh-keygen -R $ip | Out-Null; return $true }
   return $false
 }
 
@@ -149,26 +160,28 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "couldn't package the files" }
   }
   Copy-Item (Join-Path $Payload "install-on-router.sh") $stage
-  if ($ookla) { Set-Content (Join-Path $stage "mh-accept-ookla") "yes" -Encoding ascii }
-  $files = @((Join-Path $stage "machome-rootfs-generic.tgz"), (Join-Path $stage "machome-rootfs-mt5000.tgz"), (Join-Path $stage "install-on-router.sh"))
-  if ($ookla) { $files += (Join-Path $stage "mh-accept-ookla") }
+  $names = @("machome-rootfs-generic.tgz", "machome-rootfs-mt5000.tgz", "install-on-router.sh")
+  if ($ookla) { Set-Content (Join-Path $stage "mh-accept-ookla") "yes" -Encoding ascii; $names += "mh-accept-ookla" }
   if ($opts.Count) {
     [IO.File]::WriteAllText((Join-Path $stage "mh-options"), (($opts -join "`n") + "`n"))
     Copy-Item (Join-Path $Payload "options-on-router.sh") $stage
-    $files += (Join-Path $stage "mh-options"), (Join-Path $stage "options-on-router.sh")
+    $names += "mh-options", "options-on-router.sh"
   }
+  # ONE connection copies and installs (2026-11-22, like the Mac installer): the files go as a tar stream into the
+  # same ssh session, so the password is asked once. The pipe runs in cmd.exe: a PowerShell 5.1 pipe between two
+  # programs would corrupt the binary stream. Only single quotes in the router command (PS 5.1 / cmd strip double).
+  # Whatever happens, the helper files are removed from the router's /tmp afterwards.
+  $remote = "tar -xf - -C /tmp && { tr -d '\r' < /tmp/install-on-router.sh | sh; }; r=`$?; rm -f /tmp/install-on-router.sh /tmp/options-on-router.sh /tmp/mh-options /tmp/mh-accept-ookla /tmp/machome-rootfs*.tgz; exit `$r"
+  $send = Join-Path $stage "send.cmd"
+  [IO.File]::WriteAllText($send, "@echo off`r`ncd /d `"%~dp0`"`r`ntar --format ustar -cf - $($names -join ' ') | ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $target `"$remote`"`r`nexit /b %errorlevel%`r`n", [Text.Encoding]::ASCII)
 
   Say ""
-  Say "  You'll be asked for the router's admin password TWICE (once to copy, once to install)." Cyan
+  Say "  You'll be asked for the router's admin password ONCE." Cyan
   Say "  It's the same password you use for the router's admin page. Nothing is shown while you type." Cyan
   Say ""
-  Say "  [1/2] Copying files to the router ..."
-  $rc = Run "scp" (@("-O") + $sshOpts + $files + @("${target}:/tmp/"))
-  if ($rc -ne 0 -and (HostKeyHelp)) { $rc = Run "scp" (@("-O") + $sshOpts + $files + @("${target}:/tmp/")) }
-  if ($rc -ne 0) { Say "  Copy failed (code $rc). Check the password and try again." Red; exit 1 }
-
-  Say "  [2/2] Installing (takes about 30 seconds) ..."
-  $rc = Run "ssh" ($sshOpts + @($target, "tr -d '\r' < /tmp/install-on-router.sh | sh; r=`$?; rm -f /tmp/install-on-router.sh; exit `$r"))
+  Say "  Copying files and installing on the router (takes about 30 seconds) ..."
+  $rc = Run "cmd.exe" @("/d", "/c", $send)
+  if ($rc -eq 255 -and (HostKeyHelp)) { $rc = Run "cmd.exe" @("/d", "/c", $send) }
   Say ""
   if ($rc -eq 0) {
     Say "  ============================================" Green

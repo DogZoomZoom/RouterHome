@@ -1,11 +1,75 @@
 ROUTER HOME INSTALLER - CHANGELOG
 =================================
-Newest first. To get a newer version on your router, run the installer again and choose 1.
-Your settings (Discord webhook, weather ZIP, NAS backup, etc.) are kept.
+Newest first. To get a newer version on your router: from 2.6 on, Control Center →
+"Router Home updates" → Check (installs from GitHub in about a minute), or run the
+installer again and choose 1. Your settings (Discord webhook, weather ZIP, NAS backup,
+etc.) are kept either way.
 
 
-VERSION 2.5  (2026-11-14, updated 2026-11-20)
+VERSION 2.6.4  (2026-11-22)
 -------------------------
+  - New "Network" tab in the GL.inet Utilities Toolkit card:
+    MTU check: measures the biggest packet your internet path (and the path to each VPN
+    server) carries, and shows the best size for every WireGuard tunnel. Measuring changes
+    nothing. "Use" changes a tunnel's size and tests it for a minute; if websites or
+    full-size packets stop getting through, the old size comes back by itself.
+    Speed limits: cap a device's download and upload speed (Mbps), using GL's own speed
+    limiter (the same one as Clients > Speed limit), so limits stay after a restart.
+  - Daily update check: each router asks GitHub once a day for a newer Router Home and
+    sends one Discord message per new version (new alert type "New Router Home version";
+    it never installs by itself).
+  - Zram after firmware upgrades: a GL firmware upgrade removes the zram-swap package.
+    Router Home now reinstalls it by itself once the internet is back (only on routers
+    that had it) and sends an alert. The upgrade checklist mentions it.
+  - Update button: a release tag typed with an extra dot ("v.2.6.4") no longer makes a
+    good install roll back; the version number is read out of the tag.
+  - Mac installer (contributed on GitHub, pull request #1): the password is asked only
+    once (files are sent over the same connection as the install), stricter IP and menu
+    checks, safer temp files that are always cleaned up, and the "forget the old router
+    key" question only appears when that's really the problem.
+  - Windows installer, the same improvements: the password is asked only once, the
+    "forget the old router key" question only appears for a real key change, stricter IP
+    check, helper files are always removed from the router. Also fixed: typing anything
+    other than 1-4 at "Choose" used to go ahead with an install; it now asks again.
+
+
+VERSION 2.6.3  (2026-11-22)
+-------------------------
+  - Network Health no longer counts one false "no answer" right after the router or
+    Router Home restarts. The steady pings take a moment to send their first reply; that
+    moment is now skipped instead of recorded as a missed check.
+
+
+VERSION 2.6.2  (2026-11-22)
+-------------------------
+  - Access points (e.g. a Flint behind a main router) no longer show a false "!" on
+    Internet in Network Health. An access point's internet check goes through the main
+    router and its VPN; some VPN servers (Nord) briefly ignore a device that starts lots
+    of new pings, which looked like "no answer". The check now keeps one steady ping per
+    server running, like the VPN checks. Routers in normal router mode are unchanged.
+  - Update button fixes: installing an update no longer takes the admin page offline
+    for a few minutes (the installer reloads the web server instead of restarting it),
+    and a failed update now rolls back within about a minute.
+
+
+VERSION 2.6.1  (2026-11-22)
+-------------------------
+  - Update status on the home screen: under "Everything is running smoothly" the page
+    now says "Router Home is up to date", or "Router Home needs an update" with an
+    Update now button that opens the update window. Checked when the page opens (at
+    most once an hour); it never installs by itself.
+
+
+VERSION 2.6  (2026-11-22)
+-------------------------
+  - Updates from GitHub: Control Center → "Router Home updates" checks
+    github.com/xDarkHawkx/RouterHome for a newer release, shows what's new and installs
+    it in about a minute. Only updates signed with the Router Home release key install;
+    a tampered download is refused. The current version is saved first and put back
+    automatically if anything goes wrong ("Go back to it" restores it later). The page
+    also checks once a day and shows a note; it never installs by itself.
+  - Installer fix: on some routers the installer could stop silently partway through
+    (it depended on the order files came out of the archive). Fixed.
   - New "GL.inet Utilities Toolkit" card at the bottom of the page: point-and-click
     tools inspired by phantasm22's GL.iNet Utilities Toolkit. Hardware and VPN crypto
     details, benchmarks (CPU stress, VPN & crypto speed, storage, memory, DNS latency),
@@ -23,6 +87,10 @@ VERSION 2.5  (2026-11-14, updated 2026-11-20)
     (Nord, Surfshark) pause answers to lots of new pings, which showed up as false
     30-second "stalls" while your devices were fine. Ping-only blips no longer count
     in the 7-day reliability numbers or the 5-hour monitor.
+
+
+VERSION 2.5  (2026-11-14, updated 2026-11-18)
+-------------------------
   - Phone view: the 📱 button (automatic on small screens) shows a compact page with
     big buttons: status, internet, VPN switches, devices, speed test, clear alerts...
   - Outage & lag log (ISP report card): every outage with its likely cause, lag

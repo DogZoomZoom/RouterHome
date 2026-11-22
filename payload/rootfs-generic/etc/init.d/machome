@@ -25,7 +25,8 @@ stop_service() {
     mkdir -p $SAVE && cp -p $RAM/hist $RAM/usage-hourly.json $RAM/rel_cur.json $RAM/events.json $RAM/dnswatch.json $SAVE/ 2>/dev/null
     # "shut down normally" marker: missing at the next boot = power cut or crash (health.lua alerts once)
     date +%s > /etc/machome/clean_shutdown 2>/dev/null
-    # the sampler's continuous VPN pingers (2026-11-20): never leave them running without it
-    for p in $(ps w | awk '/ ping -I [a-z]*client[0-9]+ [0-9.]+$/ {print $1}'); do kill $p 2>/dev/null; done
+    # the sampler's continuous pingers (VPN tunnels 2026-11-20; an access point's internet check 2.6.2): never leave
+    # them running without it. They're exactly "ping -I <iface> <ip>" (one-shot checks start "ping -q -c").
+    for p in $(ps w | awk '/ ping -I [^ ]+ [0-9.]+$/ {print $1}'); do kill $p 2>/dev/null; done
     return 0
 }

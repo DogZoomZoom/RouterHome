@@ -1,6 +1,6 @@
 -- GL.inet Utilities Toolkit card: background jobs (benchmarks, zram restart, package list refresh).
 -- Written from scratch for Router Home (owner, 2026-11-22). Started by toolkit.lua job_start via start-stop-daemon.
---   lua tk_job.lua <cpu|crypto|disk|mem|dns|zram|opkg> [seconds]
+--   lua tk_job.lua <cpu|crypto|disk|mem|dns|zram|opkg|mtu|mtuapply> [seconds]   (mtuapply reads tk_mtu_req.json)
 -- Status for the page: /tmp/machome/tk_job.json. Stop early: /tmp/machome/tk_job.stop.
 local cjson = require "cjson"
 local socket = require "socket"
@@ -150,6 +150,112 @@ elseif kind == "zram" then
     local size, used = (readf("/proc/swaps") or ""):match("/dev/zram0%s+%S+%s+(%d+)%s+(%d+)")
     local algo = (readf("/sys/block/zram0/comp_algorithm") or ""):match("%[([%w%-]+)%]")
     if size then finish({ size = tonumber(size) * 1024, algo = algo or cjson.null }) else finish(nil, "zram didn't come back after the restart; check System → Plug-ins (zram-swap)") end
+
+-- ---------------------------------------------------------------- MTU check (phase 2, 2026-11-22)
+-- BusyBox ping has no "don't fragment" switch, but Linux sets DF on pings that fit the outgoing interface, so the
+-- largest ping that gets an answer = the path's size. Two ways the path can be smaller: a router on the way says
+-- "too big" (the kernel then remembers the size: "ip route get" shows "mtu N"), or it silently drops big packets
+-- (no answer: found by halving). Nothing is changed while measuring.
+elseif kind == "mtu" or kind == "mtuapply" then
+    local function pingok(args, size)
+        local out = sh("ping -c 2 -W 1 -s " .. math.floor(size) .. " " .. args)
+        return (tonumber(out:match("(%d+) packets received")) or 0) > 0
+    end
+    local function learned(ip) return tonumber(sh("ip route get " .. ip):match("mtu (%d+)")) end
+    local function path_mtu(ip)
+        local r = sh("ip route get " .. ip)
+        local dev = r:match("dev (%S+)"); if not dev or not dev:match("^[%w%.%-_@]+$") then return nil end
+        local ifm = tonumber((readf("/sys/class/net/" .. dev .. "/mtu") or ""):match("%d+")) or 1500
+        if not pingok(ip, 56) then return nil, "doesn't answer pings" end
+        local lo, hi = 1172, ifm - 28                      -- payload sizes: 1200 … interface size
+        if hi <= lo then return ifm end
+        if pingok(ip, hi) then local l = learned(ip); return (l and l < ifm) and l or ifm end
+        local l = learned(ip); if l and l < ifm then return l end
+        if not pingok(ip, lo) then return nil, "only small packets get through" end
+        while hi - lo > 1 do                               -- lo answers, hi doesn't
+            local m = math.floor((lo + hi) / 2)
+            if pingok(ip, m) then lo = m else hi = m end
+            l = learned(ip); if l and l < ifm then return l end
+        end
+        return lo + 28
+    end
+    T = dofile("/usr/lib/machome/toolkit.lua")
+
+    if kind == "mtu" then
+        progress(5, "Measuring the internet path…")
+        local wan, tgts = nil, {}
+        for i, ip in ipairs({ "1.1.1.1", "9.9.9.9" }) do
+            if stopped() then break end
+            local v, why = path_mtu(ip)
+            tgts[#tgts + 1] = { name = i == 1 and "Cloudflare" or "Quad9", mtu = v or cjson.null, note = why or cjson.null }
+            if v and (not wan or v < wan) then wan = v end
+            progress(5 + i * 20, "Measuring the internet path…")
+        end
+        local tun = {}
+        local list = T.wg_tunnels()
+        for i, t in ipairs(list) do
+            if stopped() then break end
+            progress(45 + i * 50 / (#list + 1), "Checking " .. (t.name ~= "" and t.name or t.ifc) .. "…")
+            -- the path to this VPN server (when it answers pings), else the general internet path
+            local p, measured = nil, false
+            if t.ep and t.ep:match("^%d+%.%d+%.%d+%.%d+$") then p = path_mtu(t.ep); measured = p ~= nil end
+            p = p or wan
+            local over = t.v6 and 80 or 60               -- WireGuard adds 60 bytes (IPv4 server) or 80 (IPv6)
+            local best = p and math.max(1280, math.min(1500, p - over)) or nil
+            local cur = tonumber(t.mtu)
+            local works = cur and pingok("-I " .. t.ifc .. " 1.1.1.1", cur - 28) or false
+            tun[#tun + 1] = { ifc = t.ifc, name = t.name, cur = t.mtu, best = best or cjson.null, path = p or cjson.null, measured = measured, v6 = t.v6, works = works,
+                status = (not best or not cur) and "unknown" or (cur > best and "high") or (cur == best and "best") or (cur >= best - 20 and "fine") or "low" }
+        end
+        finish({ wan = wan or cjson.null, targets = tgts, tunnels = tun, ap = sh("uci -q get glconfig.general.mode"):match("ap") ~= nil,
+            note = stopped() and "stopped early" or cjson.null })
+        return
+    end
+
+    -- mtuapply: change one tunnel's size, test it for about a minute, and go back by itself if it misbehaves
+    local okq, q = pcall(cjson.decode, readf(DIR .. "/tk_mtu_req.json") or ""); os.remove(DIR .. "/tk_mtu_req.json")
+    if not okq or type(q) ~= "table" or not tostring(q.ifc):match("^wgclient%d+$") or not tostring(q.peer):match("^[%w_]+$") or not tonumber(q.mtu) then finish(nil, "the request was incomplete") return end
+    local ifc, peer, new = q.ifc, q.peer, math.floor(tonumber(q.mtu))
+    local nm = (type(q.name) == "string" and q.name ~= "") and q.name or ifc
+    local oldlive = tonumber((readf("/sys/class/net/" .. ifc .. "/mtu") or ""):match("%d+"))
+    local oldset = sh("uci -q get wireguard." .. peer .. ".mtu"):match("%d+") or ""
+    if not oldlive then finish(nil, "the tunnel isn't running") return end
+    local function setm(live, set)
+        os.execute("ip link set dev " .. ifc .. " mtu " .. math.floor(live))
+        if set == "" then os.execute("uci -q delete wireguard." .. peer .. ".mtu") else os.execute("uci set wireguard." .. peer .. ".mtu='" .. set .. "'") end
+        os.execute("uci commit wireguard")
+    end
+    local function web()
+        return sh("curl -s -m 8 -o /dev/null -w '%{http_code}' --interface " .. ifc .. " https://www.google.com/generate_204") == "204"
+            or sh("curl -s -m 8 -o /dev/null -w '%{http_code}' --interface " .. ifc .. " https://cp.cloudflare.com/generate_204") == "204"
+    end
+    progress(8, "Checking " .. nm .. " before the change…")
+    if not web() then finish(nil, nm .. " isn't loading websites right now, so the change couldn't be tested; nothing was changed") return end
+    -- undo script for the owner (the job also undoes by itself if the test fails)
+    os.execute("mkdir -p /root/machome-backup")
+    writef("/root/machome-backup/undo-mtu-" .. peer .. ".sh", "# undo: " .. nm .. " (" .. ifc .. ") size change from the Home tab toolkit, " .. os.date("%Y-%m-%d %H:%M") .. "\n" ..
+        "ip link set dev " .. ifc .. " mtu " .. oldlive .. " 2>/dev/null\n" ..
+        (oldset == "" and ("uci -q delete wireguard." .. peer .. ".mtu\n") or ("uci set wireguard." .. peer .. ".mtu='" .. oldset .. "'\n")) ..
+        "uci commit wireguard\nlogger -t machome 'undo-mtu: " .. peer .. " back to " .. (oldset ~= "" and oldset or oldlive) .. "'\n")
+    setm(new, tostring(new))
+    os.execute("logger -t machome 'toolkit: " .. ifc .. " (" .. peer .. ") MTU " .. oldlive .. " -> " .. new .. ", testing'")
+    local fails, why = 0, nil
+    for i = 1, 6 do
+        socket.sleep(8)
+        local okw = web()
+        local okp = pingok("-I " .. ifc .. " 1.1.1.1", new - 28) or pingok("-I " .. ifc .. " 9.9.9.9", new - 28)
+        if not okw then fails = fails + 1; why = "websites stopped loading" elseif not okp then fails = fails + 1; why = "full-size packets didn't get through" end
+        progress(15 + i * 14, string.format("Testing %d on %s (%d of 6)…", new, nm, i))
+        if fails >= 2 then break end
+    end
+    if fails >= 2 then
+        setm(oldlive, oldset)
+        os.execute("logger -t machome 'toolkit: " .. ifc .. " MTU " .. new .. " failed the test (" .. why .. "), back to " .. oldlive .. "'")
+        finish({ ifc = ifc, name = nm, mtu = new, old = oldlive, undone = true, why = why })
+    else
+        os.execute("logger -t machome 'toolkit: " .. ifc .. " MTU " .. new .. " passed the test and was kept'")
+        finish({ ifc = ifc, name = nm, mtu = new, old = oldlive, undone = false, undo = "/root/machome-backup/undo-mtu-" .. peer .. ".sh" })
+    end
 
 -- ---------------------------------------------------------------- refresh package lists
 elseif kind == "opkg" then

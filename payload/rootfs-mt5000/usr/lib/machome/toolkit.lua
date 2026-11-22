@@ -114,9 +114,9 @@ function T.job_status()
     local okr, res = pcall(cjson.decode, readf(DIR .. "/tk_results.json") or "{}")
     return { ok = true, job = j, results = (okr and type(res) == "table") and res or {} }
 end
-local KINDS = { cpu = true, crypto = true, disk = true, mem = true, dns = true, zram = true, opkg = true }
-function T.job_start(kind, opt)
-    if not KINDS[kind] then return { ok = false, err = "unknown test" } end
+local KINDS = { cpu = true, crypto = true, disk = true, mem = true, dns = true, zram = true, opkg = true, mtu = true }
+function T.job_start(kind, opt, internal)
+    if not KINDS[kind] and not (internal and kind == "mtuapply") then return { ok = false, err = "unknown test" } end
     if job_alive() then return { ok = false, err = "another test is still running" } end
     local secs = tonumber(opt and opt.secs) or 60
     if kind == "cpu" and secs ~= 30 and secs ~= 60 and secs ~= 120 then secs = 60 end
@@ -187,6 +187,38 @@ function T.pkg_fix(what)
         os.remove("/var/lock/opkg.lock"); os.execute("logger -t machome 'toolkit: removed a stale opkg lock'"); return { ok = true }
     elseif what == "update" then return T.job_start("opkg", {}) end
     return { ok = false, err = "unknown fix" }
+end
+
+-- ---------------------------------------------------------------- MTU (toolkit phase 2, owner 2026-11-22)
+-- WireGuard tunnels of this router: interface, GL server profile (wireguard.<peer>), sizes. The server address
+-- stays on the router (the measuring job reads it itself); the page only gets names and numbers.
+function T.wg_tunnels()
+    local list = {}
+    for n in sh("ls /sys/class/net"):gmatch("%S+") do
+        if n:match("^wgclient%d+$") then
+            local peer = trim(sh("uci -q get network." .. n .. ".config"))
+            if not peer:match("^[%w_]+$") then peer = "" end
+            local ep = sh("wg show " .. n .. " endpoints"):match("%s(%S+)%s*$") or ""
+            list[#list + 1] = { ifc = n, mtu = num("/sys/class/net/" .. n .. "/mtu") or cjson.null, peer = peer ~= "" and peer or cjson.null,
+                name = peer ~= "" and trim(sh("uci -q get wireguard." .. peer .. ".name")) or "",
+                set_mtu = peer ~= "" and tonumber(trim(sh("uci -q get wireguard." .. peer .. ".mtu"))) or cjson.null,
+                v6 = ep:match("^%[") ~= nil, ep = ep:match("^%[?([%x%.:]+)%]?:%d+$") }
+        end
+    end
+    return list
+end
+-- Change one tunnel's size: done by a background job that tests it for a minute and puts the old size back by
+-- itself if websites or full-size packets stop getting through (tk_job.lua mtuapply).
+function T.mtu_apply(ifc, mtu)
+    ifc, mtu = tostring(ifc or ""), tonumber(mtu)
+    if not ifc:match("^wgclient%d+$") then return { ok = false, err = "only WireGuard tunnels can be changed here" } end
+    if not mtu or mtu ~= math.floor(mtu) or mtu < 1280 or mtu > 1500 then return { ok = false, err = "the size must be a whole number from 1280 to 1500" } end
+    local tun; for _, t in ipairs(T.wg_tunnels()) do if t.ifc == ifc then tun = t end end
+    if not tun then return { ok = false, err = "that tunnel isn't running" } end
+    if tun.peer == cjson.null then return { ok = false, err = "couldn't find the tunnel's server profile" } end
+    if tun.mtu == mtu then return { ok = false, err = "the tunnel already uses " .. mtu } end
+    writef(DIR .. "/tk_mtu_req.json", cjson.encode({ ifc = ifc, mtu = mtu, peer = tun.peer, name = tun.name }))
+    return T.job_start("mtuapply", {}, true)
 end
 
 -- ---------------------------------------------------------------- SSH keys (dropbear authorized_keys)

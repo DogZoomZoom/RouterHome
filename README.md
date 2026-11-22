@@ -33,7 +33,7 @@ Ookla speed tests for the internet and each VPN tunnel (one tunnel or all of the
 On a router used as an access point, the Home tab shows an Access Point card with the main router, internet latency and the Wi-Fi clients connected to it.
 
 ### GL.inet Utilities Toolkit
-Point-and-click tools inspired by [phantasm22](https://github.com/phantasm22)'s [GL.iNet Utilities Toolkit](https://github.com/phantasm22/GL-iNet_utils), rebuilt from scratch for the Home tab: hardware and VPN crypto acceleration details, benchmarks (CPU thermal stress, VPN & crypto speed, storage, memory, DNS latency), zram tuning, a package system check, and SSH key management.
+Point-and-click tools inspired by [phantasm22](https://github.com/phantasm22)'s [GL.iNet Utilities Toolkit](https://github.com/phantasm22/GL-iNet_utils), rebuilt from scratch for the Home tab: hardware and VPN crypto acceleration details, benchmarks (CPU thermal stress, VPN & crypto speed, storage, memory, DNS latency), an MTU check for WireGuard tunnels (tests a new size for a minute and undoes it by itself if it breaks), per-device speed limits (GL's own limiter), zram tuning (reinstalled automatically after a firmware upgrade), a package system check, and SSH key management.
 
 ### Also included
 - **Discord alerts:** outages, high ping, VPN drops, new devices, firmware updates and more, with mute, daily digest and anti-spam controls.
@@ -56,7 +56,7 @@ Download the latest release zip and extract it first. Don't run it from inside t
 **Windows**
 1. Double-click `Install Router Home.cmd`.
 2. Choose **1**, enter the router's IP, and answer the speed-test question.
-3. Type the admin password when asked. You're asked twice, and nothing shows while you type.
+3. Type the admin password when asked (just once). Nothing shows while you type.
 4. Open the router's admin page and press **Ctrl+F5**. **Home** is now at the top of the menu.
 
 **Mac**
@@ -76,7 +76,10 @@ Full details, including the optional security settings the installer offers, are
 
 ## Update or remove
 
-Run the installer again and choose **1** to update (your settings are kept), **2** to remove Router Home, or **3** to undo the optional security changes.
+- **From the Home tab (version 2.6 and later):** Control Center → **Router Home updates** → **Check**. It downloads the latest release from this page, checks its signature, and installs it in about a minute. Your settings are kept, and if anything goes wrong the previous version is put back automatically.
+- **With the installer:** run it again and choose **1** to update (your settings are kept), **2** to remove Router Home, or **3** to undo the optional security changes.
+
+Updates are signed: the Home tab only installs packages signed with the Router Home release key, so a tampered download is refused. From 2.6.4 the router also checks once a day by itself and sends a Discord message when a new version is out (it never installs on its own).
 
 ## License
 
