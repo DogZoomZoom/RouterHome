@@ -12,9 +12,13 @@ build, and every other model gets the general build. You don't have to pick anyt
 safely if the router isn't running GL.iNet 4.x firmware.
 
 WHAT YOU NEED
-  - A Windows 10 or 11 PC connected to the router (Wi-Fi or cable).
+  - A Windows 10 or 11 PC or a Mac connected to the router (Wi-Fi or cable).
   - The router's IP address: the one you type to open its admin page (often 192.168.8.1).
   - The router's admin password.
+  - SSH turned on in the router (the installer uses it). Check BEFORE you start:
+    router admin page > Security > Access Control (or Admin Panel) > "Enable SSH" on > Apply.
+    If it won't stay on, set a stronger admin password first: GL turns SSH off when the
+    admin password is weak. If SSH is off, the installer says it can't reach the router.
 
 HOW TO INSTALL ON A MAC
   1. Double-click the zip to extract it.

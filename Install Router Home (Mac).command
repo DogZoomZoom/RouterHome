@@ -99,7 +99,10 @@ if command -v nc >/dev/null 2>&1 && ! nc -z -G 3 "$ip" 22 >/dev/null 2>&1; then
   red "  Can't reach SSH on $ip (port 22)."
   say "  - Is this Mac connected to that router (Wi-Fi or cable)?"
   say "  - Is the IP right? It's the address of the router's admin page."
-  say "  - SSH is on by default on GL.iNet routers; if it was turned off, turn it back on in the admin page."
+  yel "  - Is SSH turned on? The installer needs it. In the router's admin page:"
+  yel "      Security > Access Control (or Admin Panel) > turn on 'Enable SSH' > Apply, then run this again."
+  yel "    If the switch won't stay on, set a stronger admin password first: GL turns SSH off when the"
+  yel "    admin password is weak."
   finish 1
 fi
 green "  Router found."

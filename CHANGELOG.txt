@@ -23,6 +23,9 @@ VERSION 2.6.6  (2026-11-22)
     correctly (same fix for Remove and Undo). Also gone: the harmless "Command failed:
     ubus call service delete ... (Not found)" line on a first install. Reported on a
     Slate 7 (GL-BE3600, firmware 4.11.0), which installs and runs fine.
+  - Install instructions and both installers now remind you to turn on SSH first
+    (Security > Access Control > Enable SSH) and explain that GL turns SSH off when the
+    admin password is weak. Thanks to the user who suggested it.
 
 
 VERSION 2.6.5  (2026-11-22)

@@ -54,6 +54,7 @@ Every feature is explained in [FEATURE GUIDE.txt](FEATURE%20GUIDE.txt). What cha
 - A GL.iNet router on **firmware 4.x**. Tested on the Brume 3 (GL-MT5000), Flint 3 (GL-BE9300) and Slate 7 Pro (GL-BE10000); other 4.x models will probably work (see **Which routers?** below). The installer detects the model and stops safely on other firmware.
 - A **Windows 10/11 PC or a Mac** connected to the router.
 - The router's **IP address** (often `192.168.8.1`) and its **admin password**.
+- **SSH turned on** in the router, because the installer uses it. Check before you start: in the router's admin page, go to **Security → Access Control** (or **Admin Panel**), turn on **Enable SSH**, and click **Apply**. If it won't stay on, set a stronger admin password first: GL turns SSH off when the admin password is weak. With SSH off, the installer says it can't reach the router.
 
 ### Which routers?
 

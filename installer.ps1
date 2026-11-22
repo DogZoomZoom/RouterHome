@@ -54,7 +54,10 @@ if (-not (Port22 $ip)) {
   Say "  Can't reach SSH on $ip (port 22)." Red
   Say "  - Is this PC connected to that router (Wi-Fi or cable)?"
   Say "  - Is the IP right? It's the address of the router's admin page."
-  Say "  - SSH is on by default on GL.iNet routers; if it was turned off, turn it back on in the admin page."
+  Say "  - Is SSH turned on? The installer needs it (user tip, 2026-11-22). In the router's admin page:" Yellow
+  Say "      Security > Access Control (or Admin Panel) > turn on 'Enable SSH' > Apply, then run this again." Yellow
+  Say "    If the switch won't stay on, set a stronger admin password first: GL turns SSH off when the" Yellow
+  Say "    admin password is weak." Yellow
   exit 1
 }
 Say "  Router found." Green
