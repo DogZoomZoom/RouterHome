@@ -1022,7 +1022,7 @@ var DOCK = [
   ['lanip','Network','net','indigo'],'|',['overview','System','gear','gray'],['upgrade','Upgrade','up','pink'],['@dnshub','DNS','dnsq','red']
 ];
 
-var MH_VERSION = '2.6.8', MH_BUILD = '2026-11-22';
+var MH_VERSION = '2.6.9', MH_BUILD = '2026-11-22';
 var MH_REPO = 'https://github.com/xDarkHawkx/RouterHome';   /* updates come from this repo's GitHub Releases */
 var MH_CREDIT = 'Made by DogZoomZoom &amp; Claude AI (the bot)';
 /* "About Home" guide (Control Center > About Home): [section, intro, [[feature, how it works / how to use], ...]] */
@@ -1736,6 +1736,11 @@ return {
       if (staleTun.length) issues.push(staleTun.length + ' VPN tunnel' + (staleTun.length > 1 ? 's have' : ' has') + ' gone quiet (no recent handshake / server contact)');
       if (newDevs.length) issues.push(newDevs.length + ' new device' + (newDevs.length > 1 ? 's' : '') + ' joined today');
       if (secBad.length) issues.push(secBad.length + ' security check' + (secBad.length > 1 ? 's need' : ' needs') + ' attention');
+      /* Known vulnerabilities count too (2.6.9, owner: the chip said "Security OK" next to "Firmware update needed") */
+      var vu = (L.x && L.x.vuln) || null, vuBad = !!(vu && vu.problems > 0);
+      var VUT = { infected: ['signs of infection were found (Security card)', 'Security: infection signs'], exposed: ['a known vulnerability needs a setting changed (Security card)', 'Security: exposed'],
+                  update: ['a security firmware update is needed (Security card)', 'Security: update needed'], suspicious: ['a suspicious file was found (Security card)', 'Security: suspicious file'] };
+      if (vuBad && VUT[vu.worst]) issues.push(VUT[vu.worst][0]);
       this.set('summary', esc((board.model || 'GL.iNet router') + ' · ' + (issues.length ? 'Heads up: ' + issues.join(', ') + '.' : 'Everything is running smoothly.')));
       var chips = [
         ['internet', wanUp ? 'var(--mh-green)' : 'var(--mh-red)', 'Internet ' + (wanUp ? 'online' : 'offline')],
@@ -1746,8 +1751,14 @@ return {
           : ['adguardhome', adgOn ? 'var(--mh-green)' : 'var(--mh-text3)', 'AdGuard ' + (m.adg ? (adgOn ? 'on' : 'disabled') : '…')],
         ['clients', 'var(--mh-blue)', cliTot.total + ' clients'],
         ['overview', maxT ? tempColor(maxT) : 'var(--mh-text3)', maxT ? tdisp(maxT) : 'Temp …'],
-        ['firewallview', !secList.length ? 'var(--mh-text3)' : secBad.length ? 'var(--mh-orange)' : 'var(--mh-green)',
-          !secList.length ? 'Security …' : secBad.length ? secBad.length + ' security alert' + (secBad.length > 1 ? 's' : '') : 'Security OK']
+        /* "#gosec": scrolls to the Home tab's own Security card (2.6.9; it used to open GL's Security page) */
+        ['#gosec', !secList.length ? 'var(--mh-text3)' : (vuBad && vu.worst === 'infected') ? 'var(--mh-red)' : (secBad.length || vuBad) ? 'var(--mh-orange)' : (vu && vu.worst === 'notice') ? 'var(--mh-blue)' : 'var(--mh-green)',
+          !secList.length ? 'Security …'
+          : (secBad.length + (vuBad ? 1 : 0)) > 1 ? (secBad.length + (vuBad ? 1 : 0)) + ' security alerts'
+          : secBad.length ? '1 security alert'
+          : vuBad ? ((VUT[vu.worst] || [])[1] || '1 security alert')
+          : (vu && vu.worst === 'notice') ? 'Security: new GL notice'
+          : 'Security OK']
       ];
       /* Tailscale (only on routers that have it installed) */
       var ts = s.tailscale;
@@ -1767,6 +1778,7 @@ return {
         if ((x = /^AdGuard on NAS(.*)$/.exec(t))) return 'AdGuard' + x[1];
         if (t === 'Security OK') return 'Secure';
         if ((x = /^(\d+) security alerts?$/.exec(t))) return x[1] + ' alert' + (x[1] === '1' ? '' : 's');
+        if ((x = /^Security: (.*)$/.exec(t))) return x[1].charAt(0).toUpperCase() + x[1].slice(1);
         if ((x = /^Tailscale (on|off|connecting)$/.exec(t))) return 'TS ' + x[1];
         if (t === 'Backups healthy') return 'Backups OK';
         if ((x = /^(\d+) new devices?$/.exec(t))) return x[1] + ' new';
@@ -3294,6 +3306,12 @@ return {
         return;
       }
       if (name === 'vuln') return this.openVuln();
+      if (name === 'gosec'){   /* status chip → our Security card (scroll + outline); GL's page only if the card is hidden */
+        var scard = this.$el.querySelector('[data-card="sec"]');
+        if (scard && scard.offsetParent !== null){ scard.scrollIntoView({ behavior: 'smooth', block: 'center' }); scard.classList.add('mh-sfl'); setTimeout(function(){ scard.classList.remove('mh-sfl'); }, 1800); }
+        else this.go('firewallview');
+        return;
+      }
       if (name === 'vulnchk'){ var vself = this; return rpcx('machome', 'vuln_check', {}, 15000).then(function(){ vself.toast('Checking for known vulnerabilities… the card updates within a minute'); })
         .catch(function(e){ vself.toast('Couldn’t start the check: ' + e.message); }); }
       if (name === 'wx-dis') return this.wxDismiss(arg);

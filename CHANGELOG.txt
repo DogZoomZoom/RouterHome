@@ -6,6 +6,16 @@ installer again and choose 1. Your settings (Discord webhook, weather ZIP, NAS b
 etc.) are kept either way.
 
 
+VERSION 2.6.9  (2026-11-22)
+-------------------------
+  - The Security status chip at the top now includes Known vulnerabilities: it says
+    "Security: update needed" (or exposed / infection signs) in orange or red instead of
+    "Security OK" when the Security card finds something, and the "Everything is running
+    smoothly" line mentions it too.
+  - Clicking the Security chip now scrolls to the Home tab's own Security card (and
+    outlines it) instead of opening GL's Security page.
+
+
 VERSION 2.6.8  (2026-11-22)
 -------------------------
   - After a GL firmware upgrade, the services you chose to turn off during install (app
