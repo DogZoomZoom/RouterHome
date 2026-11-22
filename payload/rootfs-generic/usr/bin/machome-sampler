@@ -700,7 +700,23 @@ while true do
         local ok2, lv = pcall(X.live); if ok2 then extra = lv end
     end
 
+    -- zram (compressed swap in RAM, GL's zram-swap package; owner 2026-11-22): size, swapped, compression, peak.
+    -- /proc/swaps "Used" is in kB; mm_stat = orig_data compr_data mem_used mem_limit mem_used_max ... (bytes)
+    local zr = cjson.null
+    do
+        local sw = readf("/proc/swaps") or ""
+        local size, used = sw:match("/dev/zram0%s+%S+%s+(%d+)%s+(%d+)")
+        if size then
+            local mm = {}; for v in (readf("/sys/block/zram0/mm_stat") or ""):gmatch("%d+") do mm[#mm + 1] = tonumber(v) end
+            local algo = (readf("/sys/block/zram0/comp_algorithm") or ""):match("%[([%w%-]+)%]")
+            local avail = (readf("/proc/meminfo") or ""):match("MemAvailable:%s+(%d+)")
+            zr = { size = tonumber(size) * 1024, used = tonumber(used) * 1024, orig = mm[1] or 0, compr = mm[2] or 0,
+                   mem = mm[3] or 0, peak = mm[5] or 0, algo = algo or cjson.null, avail = avail and tonumber(avail) * 1024 or cjson.null }
+        end
+    end
+
     writef(DIR .. "/live.json", cjson.encode({
+        zram = zr,
         time = now, wan = wan, ping = p, ph = ph, pl = pl, dns = dns, dh = dh,
         wg = wg, sec = sec, seen = seen or {}, interval = 10, x = extra or cjson.null,
         wp = okwp and wps or cjson.null, wh = okwh and whs or cjson.null

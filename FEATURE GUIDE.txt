@@ -82,6 +82,11 @@ SYSTEM
     fan, and DHCP pool: how many of the router's DHCP addresses are handed out (active
     leases inside the pool, e.g. 28 of 150; hover for the range). The DHCP gauge only
     appears when the router runs DHCP itself (not in access-point mode).
+  - Zram gauge (next to Memory, only when zram is on): zram is memory the router
+    compresses instead of running out of RAM. The gauge shows how full it is and how
+    much is in use; hover for the compression ratio, the real RAM it takes and the peak
+    since the last restart. Orange from 60% full, red from 85%. To turn zram on, install
+    GL's "zram-swap" package (System > Plug-ins); it sets itself up at every boot.
   - Clicking the fan gauge opens the Fan panel:
       Auto     The router's own fan control. Set "Turn the fan on at ___ °F" to make
                it start sooner or later.
@@ -275,6 +280,28 @@ SECURITY
 SENSORS            Every temperature sensor in °F.
 LAST 24 HOURS      Temperature and internet traffic charts. Kept across reboots.
 SERVICES           On/off state of every router service.
+
+GL.INET UTILITIES TOOLKIT  (the last card on the page)
+  Point-and-click tools inspired by phantasm22's GL.iNet Utilities Toolkit
+  (github.com/phantasm22/GL-iNet_utils), rebuilt from scratch for Router Home.
+  - Hardware: CPU type and clock, memory, storage, temperatures (°F), network ports,
+    Wi-Fi radios (band, channel, width, power), and a VPN crypto check: whether AES
+    instructions, NEON, a hardware crypto engine and fast ChaCha20 (WireGuard's cipher)
+    are active.
+  - Benchmarks (one at a time, with a Stop button; results stay until the router
+    restarts):
+      CPU thermal stress: all cores at full load for 30 s, 1 or 2 min; shows the peak
+        temperature and whether the CPU slowed itself down. Stops by itself at 203 °F.
+      VPN & crypto speed: ChaCha20, AES-128-GCM and AES-256-GCM on one core, plus RSA.
+      Storage speed: writes 64 MB to the flash, reads it back, deletes it.
+      Memory speed: RAM and the RAM disk.
+      DNS latency: 10 popular sites at your devices' DNS, the router's DNS, Cloudflare,
+        Quad9 and Google.
+  - Zram & system: change zram's size and compression (zram restarts in a few seconds;
+    "Back to defaults" undoes it), and check the package system (remove a leftover lock
+    from an unfinished install, refresh the package lists).
+  - SSH keys: see, add and remove the keys that can sign in as root. The last key can't
+    be removed while password sign-in is off, so SSH can't be locked out by accident.
 
 TOP DEVICES BY DATA      Biggest users over 24 hours and 7 days.
 

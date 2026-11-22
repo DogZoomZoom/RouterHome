@@ -1039,7 +1039,9 @@ var ABOUT = [
   ['Fix buttons', 'One-click fixes on some alerts (Restart tunnel, Renew connection, Fix DNS, Restore settings), always with a confirmation first.'],
   ['Dismiss / It’s mine', 'Dismiss hides an alert for a while (1 h for red, 24 h for orange). “It’s mine” on a new-device alert marks the device as known for good. “↻ Clear” on a packet-loss alert starts the 10-minute loss check fresh (handy right after changing a VPN server): the alert only comes back if new loss shows up. “Mute” silences that kind of alert (banner and Discord) for 1 hour, the rest of today or a week; it’s still listed in Recent events. “Clear all” under the alerts restarts the VPN, packet-loss and high-ping checks from scratch and hides the rest like Dismiss.'],
   ['How VPN pings are checked', 'Each VPN tunnel keeps one steady ping running to Cloudflare and one to Quad9 (one a second each, like ping -t on a PC), instead of starting new pings every check. Tested 11-20 side by side: some VPN servers (Nord, Surfshark) pause answers for ~30 s when one client starts many new pings, while a steady ping, and your devices, lost nothing. When pings do stop, a web page is loaded through the tunnel: if it loads, it is a ping-only blip (not counted as down, loss or a stall anywhere); if it fails too, it is a real drop and devices move to another tunnel.'],
-  ['VPN outage log', 'VPN Health card → “Outage log”: every REAL VPN outage (30 s or more with no pings and no web page through the tunnel) of the last 7, 30 or 60 days, with server, length, why, where devices went and whether auto-heal restarted it. Filter by provider, then “Copy as text” or “Send to Discord” for the VPN provider’s support. Ping-only blips aren’t listed. Recording since 11-20 evening; kept for 60 days.'],
+  ['GL.inet Utilities Toolkit', 'The last card on the page: point-and-click tools inspired by phantasm22’s GL.iNet Utilities Toolkit (github.com/phantasm22/GL-iNet_utils), rebuilt from scratch for Router Home. Hardware: CPU, memory, storage, temperatures (°F), network ports, Wi-Fi radios and a VPN crypto acceleration check. Benchmarks: CPU thermal stress (stops at 203 °F), VPN & crypto speed, storage, memory and DNS latency; results stay until the router restarts. Zram & system: zram size and compression, package system check (leftover lock, refresh lists). SSH keys: list, add and remove; the last key can’t be removed while password sign-in is off.'],
+  ['Zram gauge','System card, next to Memory: zram is memory the router compresses instead of running out of RAM (GL’s zram-swap package; about half the RAM, set up automatically at boot). The gauge shows how full it is; hover for the compression ratio, the real RAM it uses and the peak since the last restart. Orange from 60% full, red from 85%. Shown only when zram is on.'],
+  ['VPN outage log','VPN Health card → “Outage log”: every REAL VPN outage (30 s or more with no pings and no web page through the tunnel) of the last 7, 30 or 60 days, with server, length, why, where devices went and whether auto-heal restarted it. Filter by provider, then “Copy as text” or “Send to Discord” for the VPN provider’s support. Ping-only blips aren’t listed. Recording since 11-20 evening; kept for 60 days.'],
   ['Phone view','The 📱 button in the menu bar switches to a compact page for phones: overall status, internet grade and speed, VPN tunnels with on/off switches, devices online, and big buttons (speed test, test VPN, clear alerts, recent events, DNS hub, outage log, settings). It turns on by itself on small screens; your choice is remembered in that browser. “Full page” goes back.'],
   ['Outage & lag log', 'In the ISP report card (and the Network Health “Log” link): every outage with its likely cause, lag episode, modem restart and slow speed test from the last 30 days, plus a per-day table (ping, evening ping, lag spikes, no answer). “Copy as text” or “Send to Discord”, ready for your ISP.'],
   ['Evenings, modem restarts, VPN server back', 'Every night at 11 PM the router compares 7–11 PM with the rest of the day; if the evenings were much worse on 4 of the last 7 days you get one message (at most weekly) and Network Health says so. A modem that restarts by itself (its uptime starts over) is reported and logged. After auto-heal gives up on a tunnel, the router keeps watching its VPN server and reconnects as soon as it answers again (Settings → Auto-heal).'],
@@ -1055,7 +1057,7 @@ var ABOUT = [
   ['DNS easter egg', 'The red DNS button at the end of the dock opens “It’s always DNS, Hub”: a verdict (is it DNS?), how a lookup travels (your devices → AdGuard → its upstream → who answers; the router; each VPN tunnel’s DNS), every DNS setting in one place (WAN, LAN, GL DNS page, overrides, rebind protection, IPv6, AdGuard on the router and on your NAS with DNSSEC and today’s blocked share), who has answered your lookups over the last 48 hours, and a DNS Race: type a name and every resolver (AdGuard, this router, Quad9, Cloudflare, Google, and each VPN tunnel’s DNS) looks it up at once, with medals. Below it, the Lookup map: type a name (e.g. weather.com) to see every step it took: your DNS (blocked? remembered? which upstream answered and how fast, from AdGuard’s own log), then the full trail from a root server to the .com servers to the site’s own servers, and the answer with how long it’s remembered. Read-only. Plus the haiku and a DNS fact.'],
   ['Radar easter egg','Click the weather widget: a live Ventusky radar opens, centered on your ZIP. It only loads when opened and is removed completely when closed (X, Esc or click outside), so it uses no memory afterwards. “Weather settings” in its top bar opens the ZIP settings.']]],
  ['Cards', 'Every card can be moved, resized or hidden: Control Center > Settings > Layout > Edit.', [
-  ['System', 'Gauges for CPU, memory, temperature (°F), connections, fan (models with a fan) and DHCP pool, plus per-core load, model, firmware, uptime, storage, MAC, thermal throttling, hardware acceleration, bufferbloat grade and the last NAS backup.'],
+  ['System', 'Gauges for CPU, memory, zram (when on), temperature (°F), connections, fan (models with a fan) and DHCP pool, plus per-core load, model, firmware, uptime, storage, MAC, thermal throttling, hardware acceleration, bufferbloat grade and the last NAS backup.'],
   ['Connections gauge', 'How many network connections pass through the router right now, out of the most it can track. Each web page, app, stream or game uses several, so a few hundred to a couple of thousand is normal. If it fills up, new connections fail; you’re alerted and the router looks after it.'],
   ['DHCP pool gauge', 'How many of the router’s DHCP addresses are handed out (active leases in the pool, e.g. 28 of 150). Hover for the range. Only shown when the router hands out addresses itself (not in access-point mode).'],
   ['Fan (models with a fan)', 'Click the fan gauge: Auto (set the start temperature in °F) or Manual (fixed speed) with a failsafe that switches back to Auto if it gets too hot.'],
@@ -1177,7 +1179,7 @@ function skeleton(){
     '<div class="mh-hero"><div class="l"><div><h1 data-k="greet">Welcome</h1><p data-k="summary">Gathering status…</p></div><div data-k="wxw"></div></div><div class="mh-chips" data-k="chips"></div></div>' +
     '<div data-k="fwb"></div>' +
     '<div class="mh-grid">' +
-      win('sys', 'System', {ic:[['cpu','gray']], wide:true, route:'overview', delay:0, body:'<div class="mh-gauges">' + gauge('cpu','CPU') + gauge('mem','Memory') + gauge('temp','Temperature') + gauge('conn','Connections') +
+      win('sys', 'System', {ic:[['cpu','gray']], wide:true, route:'overview', delay:0, body:'<div class="mh-gauges">' + gauge('cpu','CPU') + gauge('mem','Memory') + '<div class="mh-zramg" style="display:none">' + gauge('zram','Zram') + '</div>' + gauge('temp','Temperature') + gauge('conn','Connections') +
         '<div class="mh-dhcpg" style="display:none">' + gauge('dhcp','DHCP pool') + '</div>' +
         '<div class="mh-fang" data-act="fan" title="Fan control" style="display:none">' + gauge('fan','Fan') + '</div></div><div data-k="sysinfo"></div>'}) +
       /* owner's order (2026-11-13): Internet + Network Health side by side, Last 24 Hours right under them */
@@ -1204,6 +1206,8 @@ function skeleton(){
       win('sen', 'Sensors', {ic:[['therm','orange']], route:'overview', delay:420}) +
       win('svc', 'Services', {ic:[['apps','pink']], route:'plugins', delay:440}) +
       win('home', 'Who’s Home', {delay:470}) +
+      /* GL.inet Utilities Toolkit (owner, 2026-11-22): always the last card */
+      win('tk', 'GL.inet Utilities Toolkit', {ic:[['cpu','indigo']], cls:'full', delay:480}) +
     '</div>' +
     '<div class="mh-ver">Router Home v' + MH_VERSION + ' · build ' + MH_BUILD + ' · ' + MH_CREDIT + '</div>' +
     '<div class="mh-dockwrap"><nav class="mh-dock">' + dock + '</nav></div>' +
@@ -1264,8 +1268,10 @@ return {
     this.mh.timers.push(setInterval(function(){ if (!document.hidden) self.slow(); }, 15000));
     this.mh.timers.push(setInterval(function(){ if (!document.hidden) self.history(); }, 60000));
     this.mh.timers.push(setInterval(function(){ self.clock(); self.theme(); self.vwTick(); }, 1000));
-    this.layApply(); this.lifeLoad();
+    this.layApply(); this.lifeLoad(); this.tkLoad();
     this.mh.timers.push(setInterval(function(){ if (!document.hidden) self.lifeLoad(); }, 30000));
+    /* toolkit: follow a running test every 2 s */
+    this.mh.timers.push(setInterval(function(){ var t = self.mh.tk; if (!document.hidden && t && t.job && t.job.running) self.tkJob(); }, 2000));
     this.mh.timers.push(setInterval(function(){ if (!document.hidden) self.lifePaint(); }, 5000));
   },
   beforeDestroy: function(){
@@ -1775,6 +1781,16 @@ return {
       /* system window */
       if (cpuP != null) this.gaugeSet('cpu', cpuP, loadColor(cpuP), Math.round(cpuP) + '%', (s.freq_mhz ? (s.freq_mhz / 1000).toFixed(1) + ' GHz' : ''));
       if (sys.memory_total) this.gaugeSet('mem', memP, loadColor(memP), Math.round(memP) + '%', bytes(memUsed) + ' used');
+      /* zram gauge (owner, 2026-11-22): only when zram is on; % of the zram swap in use */
+      var zg = this.$el.querySelector('.mh-zramg'), zr = s.live && s.live.zram;
+      if (zg){
+        zg.style.display = (zr && zr.size) ? '' : 'none';
+        if (zr && zr.size){
+          var zp = zr.used / zr.size * 100;
+          this.gaugeSet('zram', Math.max(zp, 2), zp >= 85 ? 'var(--mh-red)' : zp >= 60 ? 'var(--mh-orange)' : 'var(--mh-green)', Math.round(zp) + '%', bytes(zr.used) + ' used');
+          zg.title = this.zramTip(zr);
+        }
+      }
       if (maxT) this.gaugeSet('temp', maxT, tempColor(maxT), cf(maxT) + '°F', 'hottest sensor');
       /* fan dial (models with a PWM fan): power %, RPM, manual / failsafe state */
       var fg = this.$el.querySelector('.mh-fang');
@@ -3177,6 +3193,7 @@ return {
       if (name === 'vwatch') return this.doVpnWatch();
       if (name === 'vpnclear') return this.doVpnClear();
       if (name === 'vpnlog') return this.openVpnLog(30, '');
+      if (name === 'tk') return this.tkAct(arg);
       if (name === 'lossclr') return this.doLossClear(arg);
       if (name === 'dnshub') return this.openDnsHub();
       if (name === 'adg') return this.doAdg();
@@ -4598,6 +4615,205 @@ return {
         } });
       load(md);
     },
+    /* ---- GL.inet Utilities Toolkit (owner, 2026-11-22): point-and-click versions of the kinds of tools in
+       phantasm22's GL.iNet Utilities Toolkit, rebuilt from scratch for Router Home (rpc tk_*, toolkit.lua, tk_job.lua). */
+    tkLoad: function(){
+      var self = this, m = this.mh, t = m.tk = m.tk || { tab: 'hw' };
+      var tab = t.tab;
+      var done = function(){ if (m.alive) self.tkPaint(); };
+      if (tab === 'hw') rpc('machome', 'tk_info').then(function(r){ if (r && r.ok) t.info = r; done(); });
+      if (tab === 'bench') this.tkJob();
+      if (tab === 'sys'){ rpc('machome', 'tk_zram').then(function(r){ if (r && r.ok) t.zram = r; done(); }); rpc('machome', 'tk_pkg').then(function(r){ if (r && r.ok) t.pkg = r; done(); }); this.tkJob(); }
+      if (tab === 'ssh') rpc('machome', 'tk_ssh').then(function(r){ if (r && r.ok) t.ssh = r; done(); });
+      this.tkPaint();
+    },
+    tkJob: function(){
+      var self = this, m = this.mh, t = m.tk = m.tk || { tab: 'hw' };
+      var was = t.job && t.job.running;
+      rpc('machome', 'tk_job_status').then(function(r){
+        if (!r || !r.ok) return;
+        t.job = r.job; t.results = r.results || {};
+        /* a zram restart or package refresh just finished: reload that tab's data */
+        if (was && !r.job.running && (r.job.kind === 'zram' || r.job.kind === 'opkg')){
+          if (r.job.kind === 'zram') rpc('machome', 'tk_zram').then(function(z){ if (z && z.ok){ t.zram = z; self.tkPaint(); } });
+          if (r.job.kind === 'opkg') rpc('machome', 'tk_pkg').then(function(p){ if (p && p.ok){ t.pkg = p; self.tkPaint(); } });
+          self.toast(r.job.err ? 'That didn’t work: ' + r.job.err : (r.job.kind === 'zram' ? 'Zram restarted with the new settings' : 'Package lists refreshed'));
+        }
+        if (m.alive) self.tkPaint();
+      });
+    },
+    tkAct: function(arg){
+      var self = this, m = this.mh, t = m.tk = m.tk || { tab: 'hw' }, a = String(arg || '').split(':');
+      if (a[0] === 'tab'){ t.tab = a[1]; return this.tkLoad(); }
+      if (a[0] === 'refresh') return this.tkLoad();
+      if (a[0] === 'run'){
+        var kind = a[1], secs = Number(a[2]) || 60;
+        var go = function(){ return rpcx('machome', 'tk_job_start', { kind: kind, secs: secs }, 15000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'not started'); t.job = { running: true, kind: kind, pct: 0, step: 'Starting…' }; self.tkPaint(); return ''; }); };
+        if (kind === 'cpu') return this.confirm({ title: 'Run the CPU stress test?', icon: 'cpu', grad: GRAD.orange, ok: 'Start', working: 'Starting…',
+          body: '<p>All ' + ((t.info && t.info.cores && t.info.cores.length) || '') + ' CPU cores run at full load for ' + (secs >= 120 ? '2 minutes' : secs + ' seconds') + ' while the temperature is recorded. Internet and VPN keep working but can be a little slower during the test.</p><p>It stops by itself if the router reaches 203 °F.</p>' }, go);
+        if (kind === 'disk') return this.confirm({ title: 'Run the storage speed test?', icon: 'cpu', grad: GRAD.blue, ok: 'Start', working: 'Starting…',
+          body: '<p>Writes 64 MB of test data to the router’s flash storage, reads it back and deletes it. Takes about 10 seconds; a one-off test like this doesn’t wear the flash in any meaningful way.</p>' }, go);
+        return go().catch(function(e){ self.toast('Couldn’t start it: ' + e.message); });
+      }
+      if (a[0] === 'stop') return rpcx('machome', 'tk_job_stop', {}, 10000).then(function(){ self.toast('Stopping…'); self.tkJob(); });
+      if (a[0] === 'zram') return this.tkZramDialog();
+      if (a[0] === 'zramreset') return this.confirm({ title: 'Put zram back to its defaults?', icon: 'cpu', grad: GRAD.blue, ok: 'Reset', working: 'Restarting…',
+        body: '<p>Zram goes back to GL’s defaults: half the RAM, lzo compression. It restarts in a few seconds; anything swapped out moves back into RAM first.</p>' },
+        function(){ return rpcx('machome', 'tk_zram_reset', {}, 15000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'error'); t.job = { running: true, kind: 'zram', pct: 0, step: 'Restarting zram…' }; self.tkPaint(); return 'Restarting zram…'; }); });
+      if (a[0] === 'pkgfix') return this.confirm({ title: a[1] === 'lock' ? 'Remove the leftover lock?' : 'Refresh the package lists?', icon: 'apps', grad: GRAD.blue, ok: a[1] === 'lock' ? 'Remove' : 'Refresh', working: 'Working…',
+        body: a[1] === 'lock' ? '<p>An install that didn’t finish left a lock file behind, which blocks new installs. Nothing is installing right now, so it’s safe to remove.</p>'
+          : '<p>Downloads the current package lists from GL.iNet’s servers (what GL’s Plug-ins page does). Nothing is installed or removed.</p>' },
+        function(){ return rpcx('machome', 'tk_pkg_fix', { what: a[1] }, 15000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'error');
+          if (a[1] === 'update'){ t.job = { running: true, kind: 'opkg', pct: 0, step: 'Downloading package lists…' }; self.tkPaint(); return 'Refreshing package lists…'; }
+          return rpc('machome', 'tk_pkg').then(function(p){ if (p && p.ok){ t.pkg = p; self.tkPaint(); } return 'Lock removed'; }); }); });
+      if (a[0] === 'sshadd') return this.tkSshAdd();
+      if (a[0] === 'sshrm'){
+        var fp = a.slice(1).join(':'), k = ((t.ssh && t.ssh.keys) || []).filter(function(x){ return x.fp === fp; })[0];
+        if (!k) return;
+        return this.confirm({ title: 'Remove this SSH key?', icon: 'shield', grad: GRAD.red, ok: 'Remove key', working: 'Removing…', danger: true,
+          body: '<p><b>' + esc(k.type) + '</b> ' + esc(k.comment || '(no name)') + '<br><small style="word-break:break-all">' + esc(k.fp) + '</small></p>' +
+            (k.claude ? '<p style="color:var(--mh-red)"><b>This is the key Claude Code uses to manage this router.</b> Without it, Claude can’t make changes or run checks over SSH until a new key is added.</p>' : '') +
+            '<p>Anyone using this key can no longer sign in over SSH. A copy of the key file is kept in /root/machome-backup/.</p>' },
+          function(){ return rpcx('machome', 'tk_ssh_remove', { fp: fp }, 15000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'error');
+            return rpc('machome', 'tk_ssh').then(function(s){ if (s && s.ok){ t.ssh = s; self.tkPaint(); } return 'Key removed'; }); }); });
+      }
+    },
+    tkZramDialog: function(){
+      var self = this, t = this.mh.tk, z = t.zram; if (!z) return;
+      var ramMb = Math.round(z.ram / 1048576), cur = z.set_size || 0;
+      var sizes = [[0, 'Default: half the RAM (' + z.default_mb + ' MB)'], [Math.round(ramMb * .25), '25% of RAM (' + Math.round(ramMb * .25) + ' MB)'], [Math.round(ramMb * .75), '75% of RAM (' + Math.round(ramMb * .75) + ' MB)'], [ramMb, '100% of RAM (' + ramMb + ' MB)']];
+      var AD = { 'lzo': 'lzo: fast, GL’s default', 'lzo-rle': 'lzo-rle: a bit faster than lzo', 'lz4': 'lz4: fastest', 'lz4hc': 'lz4hc: slower to compress, fast to read', 'zstd': 'zstd: best compression, uses the most CPU', '842': '842: hardware-friendly, rarely better' };
+      var opt = function(v, l, sel){ return '<option value="' + esc(String(v)) + '"' + (sel ? ' selected' : '') + '>' + esc(l) + '</option>'; };
+      this.confirm({ title: 'Zram settings', icon: 'cpu', grad: GRAD.green, ok: 'Apply & restart zram', working: 'Applying…',
+        body: '<p>Zram is memory the router compresses instead of running out of RAM. A bigger size lets it squeeze more in; a stronger algorithm packs it tighter but uses more CPU.</p>' +
+          '<label for="mh-zsz">Size</label><select id="mh-zsz">' + sizes.map(function(s){ return opt(s[0], s[1], s[0] === cur || (!cur && !s[0])); }).join('') + '</select>' +
+          '<label for="mh-zal" style="margin-top:8px">Compression</label><select id="mh-zal">' + (z.algos || []).map(function(a){ return opt(a, AD[a] || a, a === z.algo); }).join('') + '</select>' +
+          '<p style="font-size:12px">Applying restarts zram in a few seconds; anything swapped out moves back into RAM first. The old settings are saved in /root/machome-backup/.</p>' },
+        function(){
+          var md = document.getElementById('machome-modal');
+          var size = Number(md.querySelector('#mh-zsz').value), algo = md.querySelector('#mh-zal').value;
+          return rpcx('machome', 'tk_zram_set', { size_mb: size, algo: algo }, 15000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'error');
+            t.job = { running: true, kind: 'zram', pct: 0, step: 'Restarting zram…' }; self.tkPaint(); return 'Restarting zram…'; });
+        });
+    },
+    tkSshAdd: function(){
+      var self = this, t = this.mh.tk;
+      this.confirm({ title: 'Add an SSH key', icon: 'shield', grad: GRAD.blue, ok: 'Add key', working: 'Adding…',
+        body: '<p>Paste a <b>public</b> key (one line starting with ssh-ed25519, ssh-rsa or ecdsa-sha2-…). The person or computer holding the matching private key can then sign in as root over SSH.</p>' +
+          '<textarea id="mh-sshk" rows="4" style="width:100%;font-family:monospace;font-size:12px" placeholder="ssh-ed25519 AAAA… name"></textarea>' },
+        function(){
+          var v = document.getElementById('machome-modal').querySelector('#mh-sshk').value;
+          return rpcx('machome', 'tk_ssh_add', { key: v }, 15000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'error');
+            return rpc('machome', 'tk_ssh').then(function(s){ if (s && s.ok){ t.ssh = s; self.tkPaint(); } return 'Key added'; }); });
+        });
+    },
+    tkPaint: function(){
+      if (!this.q('tk')) return;
+      var t = this.mh.tk || { tab: 'hw' }, tab = t.tab, job = t.job || {}, R = t.results || {}, self = this;
+      var F = function(c){ return c == null ? '—' : Math.round(c * 9 / 5 + 32) + ' °F'; };
+      var yes = function(b, y, n){ return '<span style="color:' + (b ? 'var(--mh-green)' : 'var(--mh-orange)') + '">' + (b ? '✓ ' : '✗ ') + esc(b ? y : n) + '</span>'; };
+      var tabs = [['hw', 'Hardware'], ['bench', 'Benchmarks'], ['sys', 'Zram & system'], ['ssh', 'SSH keys']];
+      var h = '<div class="mh-seg2" style="margin-bottom:12px">' + tabs.map(function(x){ return '<button data-act="tk" data-arg="tab:' + x[0] + '" class="' + (tab === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>';
+      var sec = function(s){ return '<div class="mh-sec">' + s + '</div>'; };
+      var tbl = function(head, rows){ return '<div class="mh-isp"><table><thead><tr>' + head.map(function(x){ return '<th>' + x + '</th>'; }).join('') + '</tr></thead><tbody>' + rows.map(function(r){ return '<tr>' + r.map(function(c){ return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>'; };
+      var running = job.running ? '<div class="mh-vh" style="margin-bottom:10px"><b>' + esc(({ cpu: 'CPU stress test', crypto: 'VPN & crypto test', disk: 'Storage test', mem: 'Memory test', dns: 'DNS test', zram: 'Zram', opkg: 'Package lists' })[job.kind] || 'Test') + ': ' + esc(job.step || '…') +
+        '</b><div class="mh-bar" style="margin:8px 0"><i style="width:' + Math.max(3, job.pct || 0) + '%;background:var(--mh-blue)"></i></div>' + (job.kind !== 'zram' && job.kind !== 'opkg' ? '<button class="mh-btn sec" data-act="tk" data-arg="stop">Stop</button>' : '') + '</div>' : '';
+      if (tab === 'hw'){
+        var i = t.info;
+        if (!i) h += '<p class="mh-empty">Reading the hardware…</p>';
+        else {
+          var c0 = (i.cores && i.cores[0]) || {}, mem = i.mem || {}, cr = i.crypto || {};
+          /* short sizes so values fit the narrow grid: "113 MB", "7.2 GB" */
+          var sz = function(n){ n = Number(n) || 0; return n >= 1073741824 ? (n / 1073741824).toFixed(1) + ' GB' : Math.round(n / 1048576) + ' MB'; };
+          h += sec('Processor & system') + '<div class="mh-kv">' + kv('Device', i.board) + kv('CPU', i.core + ' × ' + (i.cores || []).length) +
+            kv('Clock', c0.max ? Math.round(c0.max / 1000) + ' MHz' : null) + kv('Power mode', c0.gov || null) +
+            kv('Firmware', i.firmware) + kv('OpenWrt', i.openwrt ? String(i.openwrt).replace(/^OpenWrt\s*/, '') : null) + kv('Kernel', i.kernel) + kv('Uptime', dur(i.uptime)) + '</div>';
+          h += sec('Memory & storage') + '<div class="mh-kv">' + kv('RAM', sz(mem.total)) + kv('Available', sz(mem.avail)) + kv('Cache', sz(mem.cached)) + kv('Zram in use', mem.swap ? sz(mem.swap - mem.swapfree) + ' of ' + sz(mem.swap) : 'Off') +
+            (i.disks || []).map(function(d){ return kv(d.mnt === '/overlay' ? 'Flash storage' : d.mnt === '/tmp' ? 'RAM disk' : 'Firmware space', sz(d.used) + ' of ' + sz(d.size)); }).join('') + '</div>';
+          h += sec('Temperatures') + '<div class="mh-kv">' + (i.temps || []).map(function(x){ return kv(x.name.replace(/_thermal$|_tz_sensor/g, ' ').replace(/_/g, ' ').trim(), F(x.c)); }).join('') + '</div>';
+          /* crypto audit as a table: the driver names are too long for the grid */
+          var ok2 = function(b){ return '<span style="color:' + (b ? 'var(--mh-green)' : 'var(--mh-orange)') + '">' + (b ? '✓ Yes' : '✗ No') + '</span>'; };
+          h += sec('VPN crypto acceleration') + tbl(['Feature', 'Active', 'Details'], [
+            ['AES instructions (ARMv8 Crypto Extensions)', ok2(cr.aes_ce), 'Speeds up AES, used by OpenVPN and HTTPS'],
+            ['NEON (SIMD)', ok2(cr.neon), 'Vector instructions that speed up ChaCha20'],
+            ['AES-GCM in the kernel', ok2(!!cr.gcm), esc(cr.gcm || cr.aes || '—')],
+            ['ChaCha20 (WireGuard’s cipher)', ok2(cr.chacha_fast), esc(cr.chacha || 'plain C code')],
+            ['Hardware crypto engine', ok2(!!cr.engine), esc(cr.engine || 'none found')],
+            ['WireGuard kernel module', ok2(cr.wg), cr.wg ? 'loaded' : 'not loaded'],
+            ['OpenSSL', ok2(!!cr.openssl), esc(cr.openssl || 'not installed')]]);
+          h += sec('Network ports') + tbl(['Port', 'State', 'Link', 'MTU', 'Received', 'Sent'], (i.ifs || []).map(function(x){
+            return [esc(x.name), x.state === 'up' ? '<span style="color:var(--mh-green)">up</span>' : esc(x.state || '—'), x.speed && x.speed > 0 ? (x.speed >= 1000 ? (x.speed / 1000) + ' Gbps' : x.speed + ' Mbps') + (x.duplex === 'full' ? '' : x.duplex ? ' ' + esc(x.duplex) : '') : '—', x.mtu || '—', bytes(x.rx), bytes(x.tx)]; }));
+          h += sec('Wi-Fi radios') + ((i.radios || []).length ? tbl(['Interface', 'Band', 'Channel', 'Width', 'Power', 'Hardware'], i.radios.map(function(r){
+            return [esc(r.ifname), r.ghz ? (r.ghz > 5.9 ? '6 GHz' : r.ghz > 4 ? '5 GHz' : '2.4 GHz') : '—', r.channel || '—', esc(r.width), r.txpower != null ? r.txpower + ' dBm' : '—', esc(r.hw || '—')]; }))
+            : '<p class="mh-empty" style="margin:0">' + (i.mode === 'ap' ? 'No Wi-Fi radios found.' : 'This router has no Wi-Fi radios.') + '</p>');
+          h += '<p style="margin-top:8px"><button class="mh-btn sec" data-act="tk" data-arg="refresh">Refresh</button></p>';
+        }
+      }
+      if (tab === 'bench'){
+        var when = function(k){ return R[k] ? ' <small style="color:var(--mh-text2)">· ' + ago(Math.floor(Date.now() / 1000) - R[k].t) + '</small>' : ''; };
+        var btn = function(k, l, extra){ return '<button class="mh-btn' + (job.running ? ' sec' : '') + '" data-act="tk" data-arg="run:' + k + (extra ? ':' + extra : '') + '"' + (job.running ? ' disabled' : '') + ' style="margin:0 6px 6px 0">' + l + '</button>'; };
+        var item = function(title, desc, buttons, k, res){ return '<div class="mh-vh"><b>' + title + when(k) + '</b><p style="margin:4px 0 8px;color:var(--mh-text2);font-size:12px">' + desc + '</p>' + buttons + (res || '') + '</div>'; };
+        var spark = function(s){ if (!s || s.length < 2) return ''; var lo = Math.min.apply(null, s) - 1, hi = Math.max.apply(null, s) + 1, W = 240, H = 40;
+          return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:240px;height:40px;display:block;margin-top:6px"><polyline fill="none" stroke="var(--mh-orange)" stroke-width="2" points="' + s.map(function(v, j){ return (j * W / (s.length - 1)).toFixed(1) + ',' + (H - (v - lo) / (hi - lo) * H).toFixed(1); }).join(' ') + '"/></svg>'; };
+        var rc = R.cpu && R.cpu.r, rk = R.crypto && R.crypto.r, rd = R.disk && R.disk.r, rm = R.mem && R.mem.r, rn = R.dns && R.dns.r;
+        h += running;
+        h += item('CPU thermal stress', 'Runs every CPU core at full load and records how hot the router gets and whether it slows itself down (throttles). Stops by itself at 203 °F.',
+          btn('cpu', '30 s', '30') + btn('cpu', '1 min', '60') + btn('cpu', '2 min', '120'), 'cpu',
+          rc ? '<p style="margin:6px 0 0">Peak <b>' + F(rc.peak_c) + '</b> (started at ' + F(rc.start_c) + ', back to ' + F(rc.end_c) + ') over ' + rc.secs + ' s on ' + rc.cores + ' cores · CPU ' + (rc.throttled ? '<span style="color:var(--mh-orange)">slowed to ' + rc.low_mhz + ' MHz (throttled)</span>' : 'stayed at ' + ((rc.low_mhz && rc.max_mhz && rc.low_mhz < rc.max_mhz) ? rc.low_mhz + '–' + rc.max_mhz : (rc.max_mhz || rc.avg_mhz || '—')) + ' MHz (no throttling)') + (rc.note ? ' · ' + esc(rc.note) : '') + '</p>' + spark((rc.series || []).map(function(c){ return c * 9 / 5 + 32; })) : '');
+        h += item('VPN & crypto speed', 'How fast one CPU core encrypts with OpenSSL: ChaCha20 (what WireGuard uses) and AES-GCM (OpenVPN and most HTTPS), plus RSA handshakes. Takes about 40 seconds. WireGuard itself runs in the kernel and can use several cores.',
+          btn('crypto', 'Run'), 'crypto',
+          rk ? tbl(['Cipher', 'Speed (one core)', 'Used by'], (rk.ciphers || []).map(function(c){ return ['<b>' + esc(c.name) + '</b>', c.mbs != null ? c.mbs + ' MB/s <small>(' + Math.round(c.mbs * 8.39) + ' Mbps)</small>' : '—', esc(c.what)]; })) +
+            '<p style="margin:6px 0 0;font-size:12px">RSA-2048: ' + (rk.rsa_sign != null ? Math.round(rk.rsa_sign) + ' signs/s · ' + Math.round(rk.rsa_verify) + ' verifies/s' : '—') + ' · ' + esc(rk.openssl || '') + '</p>' : '');
+        h += item('Storage speed', 'Writes 64 MB of test data to the flash storage, reads it back and deletes it.', btn('disk', 'Run'), 'disk',
+          rd ? '<p style="margin:6px 0 0">Write <b>' + rd.write_mbs + ' MB/s</b> · read <b>' + rd.read_mbs + ' MB/s</b> <small>(' + rd.mb + ' MB' + (rd.fs ? ', ' + esc(rd.fs) + ' flash' : '') + ')</small></p>' : '');
+        h += item('Memory speed', 'How fast the RAM moves data, and the RAM disk (/tmp) where the router keeps temporary files.', btn('mem', 'Run'), 'mem',
+          rm ? '<p style="margin:6px 0 0">Memory copy <b>' + rm.copy_mbs + ' MB/s</b> · RAM disk write <b>' + rm.write_mbs + ' MB/s</b>, read <b>' + rm.read_mbs + ' MB/s</b></p>' : '');
+        h += item('DNS latency', 'Looks up 10 popular sites at your devices’ DNS, the router’s own DNS, Cloudflare, Quad9 and Google, straight from the router. Lower is better; your own DNS often wins because it caches answers.', btn('dns', 'Run'), 'dns',
+          rn ? tbl(['DNS server', 'Middle', 'Average', 'Best – worst', 'Failed'], (rn.servers || []).map(function(s){ return ['<b>' + esc(s.label) + '</b> <small>' + esc(s.ip) + '</small>', s.median != null ? s.median + ' ms' : '—', s.avg != null ? s.avg + ' ms' : '—', s.best != null ? s.best + '–' + s.worst + ' ms' : '—', s.fails ? '<span style="color:var(--mh-orange)">' + s.fails + ' of ' + s.n + '</span>' : '0']; })) : '');
+        h += '<p style="font-size:12px;color:var(--mh-text2)">Results stay until the router restarts. Only one test runs at a time.</p>';
+      }
+      if (tab === 'sys'){
+        var z = t.zram, p = t.pkg;
+        h += running;
+        h += sec('Zram (compressed memory)');
+        if (!z) h += '<p class="mh-empty">Checking…</p>';
+        else if (!z.installed) h += '<p class="mh-empty" style="margin:0">Zram isn’t installed. Install GL’s <b>zram-swap</b> package in System → Plug-ins; it sets itself up at every boot.</p>';
+        else {
+          var ratio = z.compr > 0 ? (z.orig / z.compr).toFixed(1) + '×' : '—';
+          h += '<div class="mh-kv">' + kv('Status', z.on ? '<span style="color:var(--mh-green)">On</span>' : '<span style="color:var(--mh-orange)">Off</span>', true) + kv('Size', z.on ? bytes(z.size) + (z.set_size ? ' (custom)' : ' (default)') : '—') +
+            kv('In use', z.on ? bytes(z.used) + ' (' + Math.round(z.size ? z.used / z.size * 100 : 0) + '%)' : '—') + kv('Compression', (z.algo || '—') + ' · ratio ' + ratio) +
+            kv('RAM it takes', bytes(z.mem)) + kv('Peak since restart', bytes(z.peak)) + '</div>' +
+            '<p><button class="mh-btn" data-act="tk" data-arg="zram"' + (job.running ? ' disabled' : '') + '>Change size or compression</button> ' +
+            ((z.set_size || z.set_algo) ? '<button class="mh-btn sec" data-act="tk" data-arg="zramreset"' + (job.running ? ' disabled' : '') + '>Back to defaults</button>' : '') + '</p>';
+        }
+        h += sec('Package system');
+        if (!p) h += '<p class="mh-empty">Checking…</p>';
+        else {
+          h += '<div class="mh-kv">' + kv('Installed packages', String(p.packages)) + kv('Database', p.problems.length ? '<span style="color:var(--mh-orange)">' + p.problems.length + ' problem' + (p.problems.length > 1 ? 's' : '') + '</span>' : '<span style="color:var(--mh-green)">✓ healthy</span>', true) +
+            kv('Package lists', p.lists ? p.lists + ' downloaded' : 'none yet') + kv('Installing now', p.busy ? 'yes' : 'no') + '</div>' +
+            (p.problems.length ? '<ul style="margin:6px 0 8px 18px;font-size:13px">' + p.problems.map(function(x){ return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' : '') +
+            '<p>' + (p.stale_lock ? '<button class="mh-btn" data-act="tk" data-arg="pkgfix:lock">Remove leftover lock</button> ' : '') +
+            '<button class="mh-btn sec" data-act="tk" data-arg="pkgfix:update"' + (job.running ? ' disabled' : '') + '>Refresh package lists</button></p>' +
+            (p.dups && p.dups.length ? '<p style="font-size:12px;color:var(--mh-text2)">Packages listed twice can’t be fixed safely from here: reinstalling them in System → Plug-ins usually clears it.</p>' : '');
+        }
+        h += sec('Mode switch') + '<p style="font-size:13px;margin:0;color:var(--mh-text2)">This router has no physical mode switch, so there’s nothing to set here.</p>';
+      }
+      if (tab === 'ssh'){
+        var s = t.ssh;
+        if (!s) h += '<p class="mh-empty">Reading the keys…</p>';
+        else {
+          var only = (s.keys || []).length <= 1;
+          h += '<p style="font-size:13px;margin:0 0 8px">Keys that can sign in as root over SSH. Password sign-in is <b>' + (s.password_login ? '<span style="color:var(--mh-orange)">on</span>' : 'off') + '</b>' + (s.password_login ? '' : ', so the last key can’t be removed (it would lock SSH out)') + '.</p>' +
+            ((s.keys || []).length ? (s.keys.map(function(k){ return '<div class="mh-vh"><b>' + esc(k.comment || '(no name)') + ' <small style="color:var(--mh-text2)">' + esc(k.type) + '</small>' + (k.claude ? ' <span class="mh-pill" style="font-size:11px;padding:1px 6px;border-radius:8px;background:var(--mh-blue);color:#fff">Claude Code</span>' : '') +
+              (k.restricted ? ' <small style="color:var(--mh-text2)">(restricted)</small>' : '') + '</b><p style="margin:4px 0 6px;font-size:12px;word-break:break-all;color:var(--mh-text2)">' + esc(k.fp) + '</p>' +
+              '<button class="mh-btn sec" data-act="tk" data-arg="sshrm:' + esc(k.fp) + '"' + (only && !s.password_login ? ' disabled title="The last key can’t be removed while password sign-in is off"' : '') + '>Remove</button></div>'; }).join(''))
+              : '<p class="mh-empty">No SSH keys.</p>') +
+            '<p><button class="mh-btn" data-act="tk" data-arg="sshadd">Add a key</button></p>';
+        }
+      }
+      h += '<p style="margin-top:14px;padding-top:10px;border-top:1px solid var(--mh-sep);font-size:12px;color:var(--mh-text2)">Inspired by the <a href="https://github.com/phantasm22/GL-iNet_utils" target="_blank" rel="noopener" style="color:var(--mh-blue)">GL.iNet Utilities Toolkit</a> by <b>phantasm22</b> (GPL-3.0). Rebuilt from scratch for Router Home as point-and-click tools; no code from the original script is used.</p>';
+      this.set('tk', h);
+    },
     /* ---- Speed history */
     sphPaint: function(){
       var m = this.mh, list = m.sph; if (!this.q('sph') || !list) return;
@@ -5027,6 +5243,13 @@ return {
       }
       if (info && info.hardware_feature && info.hardware_feature.fan === false) return 'None (passive cooling)';
       return s ? 'Not detected' : null;
+    },
+    /* hover text for the zram gauge (owner, 2026-11-22; data = sampler live.zram) */
+    zramTip: function(z){
+      var ratio = z.compr > 0 ? (z.orig / z.compr) : 0;
+      return 'Zram: memory the router compresses instead of running out of RAM. ' + bytes(z.used) + ' of ' + bytes(z.size) + ' swapped out' +
+        (ratio ? ', compressed ' + ratio.toFixed(1) + '× into ' + bytes(z.mem) + ' of RAM' : '') + '. Peak since restart: ' + bytes(z.peak) + ' of RAM' +
+        (z.algo ? ' (' + z.algo + ')' : '') + '. Orange from 60% full, red from 85%.';
     },
     throttleText: function(){
       var s = this.mh.stats; if (!s || !s.cooling) return null;

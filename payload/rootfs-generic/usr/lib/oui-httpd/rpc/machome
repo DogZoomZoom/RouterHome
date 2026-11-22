@@ -789,6 +789,22 @@ function M.vpn_log_send(args)
     f:write(cjson.encode({ title = "📋 VPN outage log: last " .. r.days .. " days" .. ((r.provider ~= cjson.null) and (" (" .. r.provider .. ")") or ""), text = r.text })); f:close()
     return { ok = true }
 end
+--- GL.inet Utilities Toolkit card (owner, 2026-11-22): point-and-click tools rebuilt from scratch, inspired by
+--- phantasm22's GL.iNet Utilities Toolkit. All logic in /usr/lib/machome/toolkit.lua (+ tk_job.lua for long jobs).
+local function tk() return dofile("/usr/lib/machome/toolkit.lua") end
+local function targ(a, k) return type(a) == "table" and a[k] or nil end
+function M.tk_info() return tk().info() end
+function M.tk_job_status() return tk().job_status() end
+function M.tk_job_start(a) local k = targ(a, "kind"); if type(k) ~= "string" or k == "zram" or k == "opkg" then return { ok = false, err = "bad request" } end; return tk().job_start(k, { secs = targ(a, "secs") }) end
+function M.tk_job_stop() return tk().job_stop() end
+function M.tk_zram() return tk().zram_get() end
+function M.tk_zram_set(a) local s, al = targ(a, "size_mb"), targ(a, "algo"); if al ~= nil and (type(al) ~= "string" or not al:match("^[%w%-]+$")) then return { ok = false, err = "bad request" } end; return tk().zram_set(tonumber(s), al) end
+function M.tk_zram_reset() return tk().zram_reset() end
+function M.tk_pkg() return tk().pkg_check() end
+function M.tk_pkg_fix(a) local w = targ(a, "what"); if w ~= "lock" and w ~= "update" then return { ok = false, err = "bad request" } end; return tk().pkg_fix(w) end
+function M.tk_ssh() return tk().ssh_list() end
+function M.tk_ssh_add(a) local k = targ(a, "key"); if type(k) ~= "string" then return { ok = false, err = "bad request" } end; return tk().ssh_add(k) end
+function M.tk_ssh_remove(a) local f = targ(a, "fp"); if type(f) ~= "string" or not f:match("^SHA256:[%w%+/]+$") then return { ok = false, err = "bad request" } end; return tk().ssh_remove(f) end
 --- one line: a Speed History series (label) or one "Past servers this week" entry (reliability key)
 function M.speedhist_remove(args)
     local P = more(); local label = type(args) == "table" and args.label

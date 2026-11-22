@@ -6,6 +6,13 @@ Your settings (Discord webhook, weather ZIP, NAS backup, etc.) are kept.
 
 VERSION 2.5  (2026-11-14, updated 2026-11-20)
 -------------------------
+  - New "GL.inet Utilities Toolkit" card at the bottom of the page: point-and-click
+    tools inspired by phantasm22's GL.iNet Utilities Toolkit. Hardware and VPN crypto
+    details, benchmarks (CPU stress, VPN & crypto speed, storage, memory, DNS latency),
+    zram settings, a package system check, and SSH key management.
+  - System card: a Zram gauge next to Memory shows how much of the router's compressed
+    memory (zram) is in use, with the compression ratio on hover. It only appears when
+    zram is on (GL's zram-swap package).
   - Network Health: the modem check works with the cable modem in bridge mode (it
     pings the modem itself instead of your ISP's gateway, which may ignore pings).
   - VPN outage log (VPN Health card, "Outage log"): every real VPN outage of the last

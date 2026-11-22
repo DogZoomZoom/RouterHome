@@ -32,6 +32,9 @@ Ookla speed tests for the internet and each VPN tunnel (one tunnel or all of the
 ### Access point mode
 On a router used as an access point, the Home tab shows an Access Point card with the main router, internet latency and the Wi-Fi clients connected to it.
 
+### GL.inet Utilities Toolkit
+Point-and-click tools inspired by [phantasm22](https://github.com/phantasm22)'s [GL.iNet Utilities Toolkit](https://github.com/phantasm22/GL-iNet_utils), rebuilt from scratch for the Home tab: hardware and VPN crypto acceleration details, benchmarks (CPU thermal stress, VPN & crypto speed, storage, memory, DNS latency), zram tuning, a package system check, and SSH key management.
+
 ### Also included
 - **Discord alerts:** outages, high ping, VPN drops, new devices, firmware updates and more, with mute, daily digest and anti-spam controls.
 - **Auto-heal:** restarts stuck VPN tunnels and services whose memory keeps growing, reconnects when a VPN server comes back, and (opt-in) restarts the cable modem as a last resort. Each repair can be switched off.
