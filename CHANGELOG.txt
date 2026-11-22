@@ -17,6 +17,12 @@ VERSION 2.6.6  (2026-11-22)
     "No known vulnerabilities" (with the model, firmware and how many notices/CVEs were
     checked), orange or red when something is found (it names what was found), blue for
     a new GL notice. Buttons: Review & fix (or Details) and Check now.
+  - Windows installer fix: a successful install was reported as "The install didn't
+    finish (code ... 0)", and the router's progress text didn't show while installing.
+    The install itself was fine. It now shows the progress live and reports success
+    correctly (same fix for Remove and Undo). Also gone: the harmless "Command failed:
+    ubus call service delete ... (Not found)" line on a first install. Reported on a
+    Slate 7 (GL-BE3600, firmware 4.11.0), which installs and runs fine.
 
 
 VERSION 2.6.5  (2026-11-22)

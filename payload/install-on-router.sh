@@ -73,7 +73,10 @@ rm -f /tmp/options-on-router.sh /tmp/mh-options
 # process started by nginx, which still holds nginx's ports 80/443. A restart then can't bind them ("Address in use")
 # and the admin page stays down; a reload keeps the same master and its ports. New rpc/view files only need a reload.
 if pidof nginx >/dev/null 2>&1 && nginx -s reload 2>/dev/null; then echo "nginx reloaded"; else /etc/init.d/nginx restart; fi
-/etc/init.d/machome restart
+# stop (quietly: on a first install there's nothing to stop, and procd printed a scary "Command failed ... Not found"),
+# then start (user report 2026-11-22)
+/etc/init.d/machome stop 2>/dev/null || true
+/etc/init.d/machome start
 echo "installed; previous files in $B/pre-install-$TS; uninstall: $B/uninstall.sh"
 sleep 20
 echo "sampler running: $(ps w | grep -c '[m]achome-sampler')"

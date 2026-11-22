@@ -62,13 +62,14 @@ Only three models have been tested, but nothing is built for one model: the Home
 | | Models | What to expect |
 |---|---|---|
 | **Tested** | Brume 3 (GL-MT5000), Flint 3 (GL-BE9300), Slate 7 Pro (GL-BE10000) | Everything works. |
+| **Installed by users** | Slate 7 (GL-BE3600, firmware 4.11.0), Beryl 7 | Users report a successful install. Thanks for the reports! |
 | **Very likely works** | Recent GL.iNet routers on firmware 4.x, e.g. Flint 2, Brume 2, Beryl AX, Slate AX, Spitz AX, Marble, Puli AX | Same admin system and tools as the tested models. |
 | **Works, with less** | Older or budget models with 4.x firmware (e.g. Mango, Shadow, Opal, older Beryl) | No speed test (Ookla only makes it for ARM and x86 chips; the installer skips it). Needs about 1.3 MB of free storage, so routers with 16 MB of flash or 128 MB of RAM may be too tight. Slower chips feel the background checks more. |
 | **Won't install** | Firmware 3.x or older, or plain OpenWrt without GL's firmware | The installer checks first and stops without changing anything. |
 
 - **Hardware-specific features only appear when the router has the hardware:** fan control, the touchscreen weather (Slate 7 Pro), hardware crypto details, Wi-Fi details. Temperature sensors the Home tab doesn't recognize show their raw names.
 - **Toolkit extras:** speed limits use GL's own limiter (most 4.x models have it); the MTU tool needs WireGuard tunnels.
-- **Firmware versions matter more than models.** Tested on firmware 4.9 and 4.10. On a much older 4.x, a card might show no data if GL changed something internally. The page still loads, and **Remove** (option 2 in the installer) undoes everything.
+- **Firmware versions matter more than models.** Tested on firmware 4.9 and 4.10; users have installed it on 4.11. On a much older 4.x, a card might show no data if GL changed something internally. The page still loads, and **Remove** (option 2 in the installer) undoes everything.
 - **Tried it on another model?** Let me know how it went (see [Found a bug or an issue?](#found-a-bug-or-an-issue)), with your model and firmware version, and a screenshot if something looks off.
 
 ## Install

@@ -9,7 +9,10 @@ function Say($t, $c = "Gray") { Write-Host $t -ForegroundColor $c }
 function Ask($q, $def) { $a = Read-Host "$q$(if ($def) { " [$def]" })"; if ([string]::IsNullOrWhiteSpace($a)) { $def } else { $a.Trim() } }
 function YesNo($q) { while ($true) { $a = (Read-Host "$q (y/n)").Trim().ToLower(); if ($a -in "y","yes") { return $true }; if ($a -in "n","no") { return $false } } }
 function Port22($ip) { try { $c = New-Object Net.Sockets.TcpClient; $ok = $c.ConnectAsync($ip, 22).Wait(3000) -and $c.Connected; $c.Close(); $ok } catch { $false } }
-function Run($exe, [string[]]$argv) { & $exe @argv; return $LASTEXITCODE }
+# Out-Host: show the program's output live and return ONLY its exit code. Without it PowerShell made the router's
+# whole install log part of the return value, so a successful install (code 0) was reported as "didn't finish"
+# (user report 2026-11-22, Slate 7 / BE3600).
+function Run($exe, [string[]]$argv) { & $exe @argv | Out-Host; return $LASTEXITCODE }
 
 Say ""
 Say "  ===============================================" Cyan
