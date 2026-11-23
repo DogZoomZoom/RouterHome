@@ -165,6 +165,126 @@ function V.fetch_feeds()
     return r
 end
 
+-- ---------------------------------------------------------------- 1. security firmware, straight from GL's release notes (2.7.0)
+-- GL's update server sends the release notes with every new firmware. If they talk about a security fix, a
+-- vulnerability, a CVE, malware or unauthorized access, this router gets "Security firmware available" for ANY model,
+-- without waiting for the signed list. Plain keyword rules, no AI. Cache: /etc/machome/fw_security.json.
+local FWSEC = EDIR .. "/fw_security.json"
+local function lrpc(obj, method, params)
+    local f = DIR .. "/vc_rpc.json"
+    writef(f, cjson.encode({ jsonrpc = "2.0", id = 1, method = "call", params = { "", obj, method, params or cjson.empty_object or {} } }))
+    local out = sh("curl -s -m 40 -H 'glinet: 1' -H 'Content-Type: application/json' --data-binary @" .. f .. " http://127.0.0.1/rpc")
+    os.remove(f)
+    local ok, v = pcall(cjson.decode, out); return ok and type(v) == "table" and v.result or nil
+end
+V.lrpc = lrpc
+function V.fetch_fw_security(fw)
+    local r = lrpc("upgrade", "check_firmware_online", {})
+    if type(r) ~= "table" then return { err = "GL's update server didn't answer" } end
+    local new = type(r.version_new) == "string" and r.version_new ~= "" and r.version_new or nil
+    local res = { t = os.time(), current = fw, new = new or cjson.null, security = false, critical = false, cves = {}, notes = "" }
+    if new then
+        local note = tostring(r.release_note or "")
+        local l = note:lower()
+        res.security = l:find("security", 1, true) ~= nil or l:find("vulnerab", 1, true) ~= nil or l:find("cve%-%d") ~= nil
+            or l:find("exploit", 1, true) ~= nil or l:find("malware", 1, true) ~= nil or l:find("unauthori", 1, true) ~= nil
+        res.critical = l:find("malware", 1, true) ~= nil or l:find("unauthori", 1, true) ~= nil or l:find("remote code", 1, true) ~= nil
+            or l:find("actively exploited", 1, true) ~= nil or (l:find("upgrad", 1, true) ~= nil and l:find("immediately", 1, true) ~= nil)
+        local seen = {}; for c in note:gmatch("CVE%-%d+%-%d+") do if not seen[c] then seen[c] = true; res.cves[#res.cves + 1] = c end end
+        res.notes = note:gsub("\r", ""):gsub("#+%s*", ""):gsub("%*%*", ""):gsub("\n%s*%*%s*", "\n• "):gsub("\n\n+", "\n"):gsub("^%s+", ""):sub(1, 700)
+        res.compiled = r.new_compile_time or cjson.null
+    end
+    writef(FWSEC, cjson.encode(res))
+    return res
+end
+
+-- ---------------------------------------------------------------- 2. daily "signs of tampering" sweep (2.7.0)
+-- General checks that need no published notice, compared with what's normal on THIS router (baseline taken at the
+-- first sweep: /etc/machome/sweep_base.json). Only alerts; nothing is removed automatically (it could break the
+-- router). "Severe" signs (a program running from a temp folder, a hidden preload, an extra admin account) mean a
+-- factory reset is the safe answer; the rest is "unusual, have a look" with a button to mark it as expected.
+local SWBASE, SWOUT = EDIR .. "/sweep_base.json", DIR .. "/sweep.json"
+local function sweep_state()
+    local st = {}
+    st.keys = {}; for b in (readf("/etc/dropbear/authorized_keys") or ""):gmatch("ssh%-[%w%-]+%s+([%w%+/=]+)") do st.keys[#st.keys + 1] = b:sub(-24) end
+    st.users = {}; st.root2 = {}
+    for line in (readf("/etc/passwd") or ""):gmatch("[^\n]+") do
+        local name, uid = line:match("^([^:]+):[^:]*:(%d+):"); if name then st.users[#st.users + 1] = name; if uid == "0" and name ~= "root" then st.root2[#st.root2 + 1] = name end end
+    end
+    st.cron = {}; for l in (readf("/etc/crontabs/root") or ""):gmatch("[^\n]+") do if l:match("%S") and not l:match("^%s*#") then st.cron[#st.cron + 1] = l end end
+    st.ports = {}
+    for _, f in ipairs({ "/proc/net/tcp", "/proc/net/tcp6" }) do
+        for line in (readf(f) or ""):gmatch("[^\n]+") do
+            local la, stt = line:match("^%s*%d+:%s+(%S+)%s+%S+%s+(%x%x)")
+            if la and stt == "0A" then
+                local ip, port = la:match("^(%x+):(%x+)$")
+                if ip and (ip:match("^0+$")) then st.ports[#st.ports + 1] = tostring(tonumber(port, 16)) end   -- open to every network
+            end
+        end
+    end
+    table.sort(st.keys); table.sort(st.users); table.sort(st.cron)
+    local u = {}; for _, p in ipairs(st.ports) do u[p] = true end; st.ports = {}; for p in pairs(u) do st.ports[#st.ports + 1] = p end; table.sort(st.ports)
+    return st
+end
+local function setdiff(now, was) local w, out = {}, {}; for _, x in ipairs(was or {}) do w[x] = true end; for _, x in ipairs(now or {}) do if not w[x] then out[#out + 1] = x end end; return out end
+function V.sweep()
+    local found = {}    -- { cat, label, severe }
+    local function add(cat, label, severe) found[#found + 1] = { cat = cat, label = label, severe = severe == true } end
+    -- programs running from temp folders, or from a file that was deleted after starting (classic malware tricks)
+    for pid in sh("ls /proc"):gmatch("%d+") do
+        local exe = trim(sh("readlink /proc/" .. pid .. "/exe"))
+        if exe:match("^/tmp/") or exe:match("^/var/tmp/") or exe:match("^/dev/shm/") or exe:find("(deleted)", 1, true) then
+            local cmd = (readf("/proc/" .. pid .. "/cmdline") or ""):gsub("%z", " "):sub(1, 80)
+            add("proc", "A program is running from " .. (exe:find("deleted", 1, true) and "a deleted file" or "a temporary folder") .. ": " .. exe .. " (" .. trim(cmd) .. ")", true)
+        end
+    end
+    -- real programs (ELF executables) stored in temp folders; GL keeps only lock and marker files there
+    for f in sh("find /tmp /var/tmp /dev/shm -xdev -maxdepth 4 -type f -size +1k 2>/dev/null | head -400"):gmatch("[^\n]+") do
+        local h = io.open(f, "rb"); local m = h and h:read(4); if h then h:close() end
+        if m == "\127ELF" then add("tmpelf", "A program file is stored in a temporary folder: " .. f, false) end
+    end
+    if readf("/etc/ld.so.preload") then add("preload", "/etc/ld.so.preload exists (a way to inject code into every program)", true) end
+    local crond = tonumber(trim(sh("ps w | grep -c '[c]rond'"))) or 0
+    if crond > 1 then add("crond", crond .. " copies of the task scheduler (crond) are running (normally 1)", false) end
+    -- unknown programs added to the system folders (not from any installed package, not Router Home)
+    local own = {}; for f in sh("cat /usr/lib/opkg/info/*.list 2>/dev/null"):gmatch("[^\n]+") do own[f] = true end
+    for f in sh("cd /overlay/upper 2>/dev/null && find bin sbin usr/bin usr/sbin usr/libexec -type f 2>/dev/null"):gmatch("[^\n]+") do
+        local p = "/" .. f; if not own[p] and not p:match("/machome%-[%w%-]+$") then add("sysbin", "A program not from any installed package is in a system folder: " .. p, false) end
+    end
+    -- compared with this router's normal state
+    local now, base = sweep_state(), jread(SWBASE)
+    if #now.root2 > 0 then add("root2", "Extra admin (root-level) account: " .. table.concat(now.root2, ", "), true) end
+    if not base then base = now; base.ports_prev = now.ports; writef(SWBASE, cjson.encode(base))   -- first sweep = this router's normal
+    else
+        for _, k in ipairs(setdiff(now.keys, base.keys)) do add("keys", "A new SSH key can sign in (…" .. k:sub(-10) .. "). If you added it, mark it as expected.", false) end
+        for _, u in ipairs(setdiff(now.users, base.users)) do add("users", "A new user account appeared: " .. u, false) end
+        for _, c in ipairs(setdiff(now.cron, base.cron)) do add("cron", "A new scheduled task: " .. c:sub(1, 100), false) end
+        -- a new port open to every network, seen in two daily sweeps in a row (programs restart on new ports now and then)
+        local newp = setdiff(now.ports, base.ports); local prev = {}; for _, p in ipairs(base.ports_prev or {}) do prev[p] = true end
+        for _, p in ipairs(newp) do if prev[p] then add("ports", "A new port is open to every network: " .. p .. " (seen two days in a row)", false) end end
+        base.ports_prev = now.ports; writef(SWBASE, cjson.encode(base))
+    end
+    -- findings the owner marked as expected (non-severe only) stay quiet
+    local ok = {}; for _, l in ipairs(type(base.ok) == "table" and base.ok or {}) do ok[l] = true end
+    local kept = {}; for _, f in ipairs(found) do if f.severe or not ok[f.label] then kept[#kept + 1] = f end end
+    found = kept
+    local res = { t = os.time(), found = found }
+    writef(SWOUT, cjson.encode(res))
+    return res
+end
+--- "These are expected": the current state becomes this router's normal (keys, users, tasks, ports)
+function V.accept()
+    local r = jread(SWOUT) or {}; local keep, okl = {}, {}
+    for _, f in ipairs(type(r.found) == "table" and r.found or {}) do if f.severe then keep[#keep + 1] = f else okl[#okl + 1] = f.label end end
+    local old = jread(SWBASE) or {}
+    for _, l in ipairs(type(old.ok) == "table" and old.ok or {}) do okl[#okl + 1] = l end
+    local now = sweep_state(); now.ports_prev = now.ports; now.ok = okl
+    writef(SWBASE, cjson.encode(now))
+    r.found = keep; writef(SWOUT, cjson.encode(r))
+    log("tampering sweep: current keys/accounts/tasks/ports marked as expected from the Home tab")
+    return V.run("local")
+end
+
 -- ---------------------------------------------------------------- checks on the router
 local SAFE_PATH = function(p) p = tostring(p or ""); return p:match("^/[%w%._%-/]+$") ~= nil and not p:find("..", 1, true) end
 local procs_cache = nil
@@ -213,7 +333,7 @@ local function applies(a, model, fw)
     if a.fw_min and cmp(fw, a.fw_min) < 0 then return false end
     return true
 end
-local RANK = { infected = 4, exposed = 3, update = 2, suspicious = 2, notice = 1.5, ok = 1, na = 0 }
+local RANK = { infected = 4, exposed = 3, update = 2, suspicious = 2, unusual = 2, notice = 1.5, ok = 1, na = 0 }
 V.RANK = RANK
 function V.check_adv(a, model, fw)
     local r = { id = a.id, kind = "gl", title = a.title, severity = a.severity or "unknown", link = a.link or cjson.null, published = a.published or cjson.null,
@@ -238,17 +358,21 @@ function V.check_adv(a, model, fw)
     r.upgrade = (r.status == "update") or (type(f) == "table" and f.type == "upgrade") or false
     local adv = type(a.advice) == "table" and (a.advice[r.status] or a.advice.any) or nil
     r.advice = adv or cjson.null
+    -- the notice says a factory reset is the remedy for this status (2.7.0): shown in red + in the Discord alert
+    r.reset = type(a.reset) == "table" and a.reset[r.status] == true or false
     return r
 end
 
 function V.run(mode)
     local model, fw = V.model(), V.firmware()
     local res = { t = os.time(), mode = mode, model = model, fw = fw, items = {}, problems = 0, worst = "ok" }
-    local adv_err, nvd, feeds = nil, nil, nil
+    local adv_err, nvd, feeds, fws, sw = nil, nil, nil, nil, nil
     if mode == "run" then
         adv_err = V.fetch_adv()
         nvd = V.fetch_nvd(model, fw)
         feeds = V.fetch_feeds()
+        local okf, f1 = pcall(V.fetch_fw_security, fw); fws = okf and f1 or nil
+        local oks, s1 = pcall(V.sweep); sw = oks and s1 or nil
         res.fetch_ok = (adv_err == nil or adv_err:match("^no list")) and nvd.err == cjson.null and feeds.err == cjson.null
     end
     local adv, src = V.load_adv()
@@ -286,6 +410,33 @@ function V.run(mode)
         end
     end
     res.feed.n = type(feeds.list) == "table" and #feeds.list or 0
+    -- 1. security firmware from GL's release notes (any model), unless a list entry already says "fixed in" that version
+    fws = (fws and not fws.err) and fws or jread(FWSEC) or {}
+    res.fwsec = { t = fws.t or cjson.null, new = fws.new or cjson.null, security = fws.security == true, err = fws.err or cjson.null }
+    if fws.security == true and type(fws.new) == "string" and cmp(fw, fws.new) < 0 then
+        local dup = false; for _, it in ipairs(res.items) do if it.kind == "gl" and it.status == "update" and it.fixed_in == fws.new then dup = true end end
+        if not dup then
+            res.items[#res.items + 1] = { id = "fw:" .. fws.new, kind = "firmware", title = "GL firmware " .. fws.new .. " fixes security issues", severity = fws.critical and "critical" or "high",
+                link = cjson.null, published = type(fws.compiled) == "string" and fws.compiled:sub(1, 10) or cjson.null, summary = fws.notes or "", fixed_in = fws.new, status = "update",
+                found = (type(fws.cves) == "table" and #fws.cves > 0) and { "Fixes " .. table.concat(fws.cves, ", ") } or {}, fix = cjson.null, upgrade = true,
+                advice = "GL's release notes for " .. fws.new .. " describe security fixes. Install it from the Upgrade page (use the Home tab's firmware checklist first; Router Home survives with Keep settings).",
+                firmware_note = cjson.null, reset = false }
+        end
+    end
+    -- 2. tampering sweep (daily): severe signs = "signs of compromise" + factory reset; the rest = "unusual activity"
+    sw = sw or jread(SWOUT) or {}
+    res.sweep = { t = sw.t or cjson.null, n = type(sw.found) == "table" and #sw.found or 0 }
+    if type(sw.found) == "table" and #sw.found > 0 then
+        local severe, labels = false, {}
+        for _, f in ipairs(sw.found) do labels[#labels + 1] = f.label; if f.severe then severe = true end end
+        res.items[#res.items + 1] = { id = "sweep", kind = "sweep", title = severe and "Signs that this router was tampered with" or "Unusual activity on this router",
+            severity = severe and "critical" or "medium", link = cjson.null, published = os.date("%Y-%m-%d", sw.t or os.time()), found = labels,
+            summary = "Router Home's daily check found things that aren't normal on this router. It doesn't need a published notice to spot these.",
+            status = severe and "infected" or "unusual", fix = cjson.null, upgrade = false, accept = not severe, reset = severe,
+            advice = severe and "Treat the router as compromised: back up nothing from it, factory-reset it, set it up again with a new admin password, install the latest firmware, then reinstall Router Home."
+                or "If you made these changes yourself (added an SSH key, installed a program, opened a port), press \"These are expected\". Otherwise look into them, or ask for help.",
+            firmware_note = cjson.null }
+    end
     for _, it in ipairs(res.items) do
         if RANK[it.status] >= RANK.update then res.problems = res.problems + 1 end
         if RANK[it.status] > RANK[res.worst] then res.worst = it.status end

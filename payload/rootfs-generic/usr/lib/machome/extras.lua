@@ -62,7 +62,9 @@ local function load_cfg()
         sqm_auto = c.sqm_auto == true, stuck_fix = c.stuck_fix ~= false, mem_fix = c.mem_fix ~= false,
         ev_keep_days = tonumber(c.ev_keep_days) or 14, digest_hour = tonumber(c.digest_hour) or 18, digest = {},
         mutes = type(c.mutes) == "table" and c.mutes or {}, vpn_keep_provider = c.vpn_keep_provider ~= false, vpn_autoforget = c.vpn_autoforget ~= false,
-        adg_watch = c.adg_watch == true, vpn_return = c.vpn_return ~= false }
+        adg_watch = c.adg_watch == true, vpn_return = c.vpn_return ~= false,
+        -- 2.7.0 security automation, both opt-in
+        vuln_autofix = c.vuln_autofix == true, fw_autosec = c.fw_autosec == true }
     for _, k in ipairs(type(c.digest_types) == "table" and c.digest_types or {}) do out.digest[tostring(k)] = true end
     for k, v in pairs(DEF.types) do out.types[k] = (type(c.types) == "table" and c.types[k] ~= nil) and (c.types[k] == true) or v end
     return out
@@ -915,7 +917,7 @@ end
 -- router that didn't have it, and if zram-swap is removed on purpose (no upgrade in between) the marker goes too.
 local ZWANT, ZPEND, ZPID, ZLOG = EDIR .. "/zram_want", EDIR .. "/zram_reinstall", DIR .. "/zram_reinstall.pid", DIR .. "/zram_reinstall.log"
 local zr_t = 0
-local function zram_tick(now, online, upgraded)
+function X.zram_tick(now, online, upgraded)
     local inst = exists("/etc/init.d/zram")
     if upgraded and not inst and exists(ZWANT) and not exists(ZPEND) then
         writef(ZPEND, cjson.encode({ since = now, tries = 0 }))
@@ -957,8 +959,9 @@ end
 -- green one when an infection or exposure is gone. State: /etc/machome/vuln_state.json (written only on changes).
 local VSTATE, VOUT = EDIR .. "/vuln_state.json", DIR .. "/vuln.json"
 local vst, vu_local, vu_seen = nil, 0, 0
-local VWORDS = { infected = "🚨 Signs of infection", exposed = "⚠ Exposed", update = "⬆ Firmware update needed", suspicious = "⚠ Suspicious file", notice = "📰 New GL.iNet security notice" }
-local function vuln_tick(now, online)
+local VWORDS = { infected = "🚨 Signs of infection", exposed = "⚠ Exposed", update = "⬆ Firmware update needed", suspicious = "⚠ Suspicious file", notice = "📰 New GL.iNet security notice", unusual = "🔎 Unusual activity" }
+local RESET_HOW = "**⚠ Factory reset recommended.** Don't restore a backup of this router's settings. Reset it (System → Reset firmware, or hold the reset button about 10 s), set it up again with a NEW admin password, install the latest firmware, then reinstall Router Home."
+function X.vuln_tick(now, online)
     vst = vst or jread(VSTATE, {}); if type(vst) ~= "table" then vst = {} end
     vst.notified = type(vst.notified) == "table" and vst.notified or {}
     local okV, V = pcall(dofile, "/usr/lib/machome/vulncheck.lua"); if not okV or type(V) ~= "table" then return end
@@ -976,17 +979,26 @@ local function vuln_tick(now, online)
         if r.mode == "run" and r.fetch_ok == false and not vst.retry then vst.fetched = now - 86400 + 3600; vst.retry = true; changed = true end
         X.vuln_sum = { problems = r.problems or 0, worst = r.worst or "ok", t = r.t, fetched = r.fetched or cjson.null, n_gl = r.adv and r.adv.n or 0, n_nvd = r.nvd and r.nvd.n or 0, notices = r.notices or 0,
             model = r.model or cjson.null, fw = r.fw or cjson.null, feed_t = r.feed and r.feed.t or cjson.null,
-            top = (r.items[1] and r.items[1].status ~= "ok") and { title = r.items[1].title, status = r.items[1].status, found = (type(r.items[1].found) == "table" and r.items[1].found[1]) or cjson.null, fix = type(r.items[1].fix) == "table" } or cjson.null }
+            top = (r.items[1] and r.items[1].status ~= "ok") and { title = r.items[1].title, status = r.items[1].status, found = (type(r.items[1].found) == "table" and r.items[1].found[1]) or cjson.null, fix = type(r.items[1].fix) == "table", reset = r.items[1].reset == true } or cjson.null }
         local now_bad = {}
         for _, it in ipairs(r.items) do
             if VWORDS[it.status] then
                 now_bad[it.id] = it.status
                 if vst.notified[it.id] ~= it.status then
+                    -- opt-in auto-fix (2.7.0, Settings → Auto-heal): fixes from the SIGNED list only, never for firmware or sweep findings
+                    local fixed = nil
+                    if X.cfg.vuln_autofix == true and type(it.fix) == "table" and (it.status == "infected" or it.status == "exposed" or it.status == "suspicious") then
+                        local okf, fr = pcall(V.fix, it.id)
+                        if okf and type(fr) == "table" and fr.ok then fixed = fr; os.execute("logger -t machome 'vulncheck: auto-fixed " .. tostring(it.id):gsub("[^%w%-%._:]", "") .. "'") end
+                    end
                     local found = (type(it.found) == "table" and #it.found > 0) and ("\n• " .. table.concat(it.found, "\n• ")) or ""
-                    alert("vuln", VWORDS[it.status] .. ": " .. tostring(it.title),
-                        tostring(it.summary or ""):sub(1, 300) .. found .. "\n" .. (type(it.fix) == "table" and ("**Fix:** Security card → Known vulnerabilities → " .. tostring(it.fix.label)) or it.upgrade and "**Fix:** install the firmware update (Upgrade page)." or ""),
-                        (it.status == "infected") and "red" or (it.status == "notice") and "blue" or "orange", { { name = "Details", value = tostring(it.link or "Security card on the Home tab"), inline = false } })
-                    vst.notified[it.id] = it.status; changed = true
+                    local how = fixed and ("**Fixed automatically** (Auto-heal): " .. tostring(fixed.done) .. (type(fixed.undo) == "string" and (". Undo: " .. fixed.undo) or "") .. ".")
+                        or (type(it.fix) == "table" and ("**Fix:** Security card → Known vulnerabilities → " .. tostring(it.fix.label)) or it.upgrade and "**Fix:** install the firmware update (Upgrade page)." or "")
+                    alert("vuln", (it.reset and "🚨 " or "") .. VWORDS[it.status] .. ": " .. tostring(it.title),
+                        tostring(it.summary or ""):sub(1, 300) .. found .. "\n" .. how .. (it.reset and ("\n" .. RESET_HOW) or ""),
+                        (it.status == "infected" or it.reset) and "red" or (it.status == "notice") and "blue" or "orange",
+                        { { name = "Details", value = (type(it.link) == "string" and it.link) or "Security card on the Home tab", inline = false } })
+                    vst.notified[it.id] = fixed and (fixed.status or "ok") or it.status; changed = true
                 end
             end
         end
@@ -1000,13 +1012,45 @@ local function vuln_tick(now, online)
     if changed then writef(VSTATE, cjson.encode(vst)) end
 end
 
+-- ---------------------------------------------------------------- security firmware auto-install (2.7.0, opt-in)
+-- Settings → Auto-heal → "Install security firmware automatically" (off by default). At 4 AM, only when GL's release
+-- notes for the new firmware describe security fixes (vulncheck.lua fw_security.json), only if the upgrade checklist
+-- says nothing would be wiped, at most one try a day. Uses GL's own online upgrade (upgrade_online, keep settings
+-- + packages), the same as GL's Upgrade page. The after-upgrade report arrives when the router is back.
+local FWAUTO = EDIR .. "/fw_autosec.json"
+function X.fwauto_tick(now)   -- (a field of X, not a local: the tick function is near Lua 5.1's 60-upvalue limit)
+    if X.cfg.fw_autosec ~= true then return end
+    if tonumber(os.date("%H", now)) ~= 4 then return end
+    local fs = jread(EDIR .. "/fw_security.json", nil)
+    if type(fs) ~= "table" or fs.security ~= true or type(fs.new) ~= "string" then return end
+    local okV, V = pcall(dofile, "/usr/lib/machome/vulncheck.lua"); if not okV or type(V) ~= "table" then return end
+    local cur = trim(readf("/etc/glversion") or "")
+    if cur == "" or V.cmp(cur, fs.new) >= 0 then return end
+    local st = jread(FWAUTO, {}); if type(st) ~= "table" then st = {} end
+    local today = os.date("%Y-%m-%d", now); if st.day == today then return end
+    st.day, st.version = today, fs.new; writef(FWAUTO, cjson.encode(st))
+    if trim(sh("pidof speedtest")) ~= "" or exists(DIR .. "/speedtest.req") then return end   -- not during the nightly speed test (tomorrow instead)
+    local rd = readiness(now, true)
+    if #rd.lost > 0 then
+        alert("upgrade", "⚠ Security firmware " .. fs.new .. " wasn't installed automatically",
+            "Auto-install is on, but the upgrade checklist says these would be wiped: " .. table.concat(rd.lost, ", ") .. ". Check the Home tab's firmware checklist and install it by hand.", "orange")
+        return
+    end
+    alert("upgrade", "⬆ Installing security firmware " .. fs.new .. " now",
+        "Auto-install is on (Settings → Auto-heal) and GL's release notes for " .. fs.new .. " describe security fixes" ..
+        ((type(fs.cves) == "table" and #fs.cves > 0) and (" (" .. table.concat(fs.cves, ", ") .. ")") or "") ..
+        ". The router downloads it and restarts in about 5–10 minutes, keeping its settings. The after-upgrade report follows when it's back.", "purple")
+    local r = lrpc("upgrade", "upgrade_online", { keep_config = true, keep_package = true })
+    os.execute("logger -t machome 'fw-autosec: started GL online upgrade " .. cur .. " -> " .. fs.new:gsub("[^%w%.%-]", "") .. " (" .. (r and "accepted" or "no answer") .. ")'")
+end
+
 -- ---------------------------------------------------------------- Router Home updates: daily check (2026-11-22, owner)
 -- Once a day the router asks GitHub for the newest Router Home release (updater.lua check) and sends ONE Discord
 -- message per new version (alert type "rhupdate"). It never installs anything: that stays a click in
 -- Control Center → Router Home updates. A failed check is retried after an hour.
 local RHUPD = EDIR .. "/rhupd.json"
 local rhu = nil
-local function rhupd_tick(now)
+function X.rhupd_tick(now)
     rhu = rhu or jread(RHUPD, {})
     if type(rhu) ~= "table" then rhu = {} end
     if now - (tonumber(rhu.checked) or 0) < 86400 then return end
@@ -1382,9 +1426,10 @@ function X.tick(ctx)
         usage_tick(now)
         local upgraded = false
         if not booted then booted = true; local okb, u = pcall(boot_check, now, ctx.sec); upgraded = okb and u == true end
-        pcall(zram_tick, now, online, upgraded)
-        if online then pcall(rhupd_tick, now) end
-        pcall(vuln_tick, now, online)
+        pcall(X.zram_tick, now, online, upgraded)
+        if online then pcall(X.rhupd_tick, now) end
+        pcall(X.vuln_tick, now, online)
+        if online then pcall(X.fwauto_tick, now) end
         -- security transitions
         if ctx.sec and #ctx.sec > 0 then
             if prev_sec then

@@ -310,6 +310,7 @@ function M.get_alerts()
         -- 2026-11-18
         sqm_auto = c.sqm_auto == true, stuck_fix = c.stuck_fix ~= false, mem_fix = c.mem_fix ~= false, vpn_keep_provider = c.vpn_keep_provider ~= false, vpn_autoforget = c.vpn_autoforget ~= false,
         adg_watch = c.adg_watch == true, vpn_return = c.vpn_return ~= false,
+        vuln_autofix = c.vuln_autofix == true, fw_autosec = c.fw_autosec == true,   -- 2.7.0, opt-in
         ev_keep_days = tonumber(c.ev_keep_days) or 14, digest_hour = tonumber(c.digest_hour) or 18,
         digest_types = type(c.digest_types) == "table" and c.digest_types or {}, mutes = (function()
             local m = {}; for k, u in pairs(type(c.mutes) == "table" and c.mutes or {}) do if tonumber(u) and tonumber(u) > os.time() then m[k] = tonumber(u) end end
@@ -340,7 +341,7 @@ function M.set_alerts(args)
     if args.wifi_report ~= nil then c.wifi_report = args.wifi_report == true end
     for _, k in ipairs({ "wan_heal", "dns_heal", "ts_heal", "wifi_heal", "vpn_switch", "speed_retest",
                          "nas_retry", "nas_wake", "leak_fix", "ct_relief", "storage_trim", "ap_uplink", "svc_autostop", "chan_auto", "modem_restart",
-                         "sqm_auto", "stuck_fix", "mem_fix", "vpn_keep_provider", "vpn_autoforget", "adg_watch", "vpn_return" }) do if args[k] ~= nil then c[k] = args[k] == true end end
+                         "sqm_auto", "stuck_fix", "mem_fix", "vpn_keep_provider", "vpn_autoforget", "adg_watch", "vpn_return", "vuln_autofix", "fw_autosec" }) do if args[k] ~= nil then c[k] = args[k] == true end end
     -- 2026-11-18: how long Recent events are kept, and the daily digest
     if tonumber(args.ev_keep_days) then c.ev_keep_days = math.max(1, math.min(30, math.floor(tonumber(args.ev_keep_days)))) end
     if tonumber(args.digest_hour) then c.digest_hour = math.max(0, math.min(23, math.floor(tonumber(args.digest_hour)))) end
@@ -816,6 +817,7 @@ function M.vuln_status()
     return r
 end
 function M.vuln_check() local V = vul(); if V.running() then return { ok = true, running = true } end; return { ok = V.start("run"), running = true } end
+function M.vuln_accept() local okA, r = pcall(vul().accept); if not okA then return { ok = false, err = tostring(r):sub(1, 120) } end; return { ok = true } end   -- sweep: "These are expected" (2.7.0)
 function M.vuln_fix(a) local id = type(a) == "table" and a.id; if type(id) ~= "string" or not id:match("^[%w%-%._]+$") then return { ok = false, err = "bad request" } end; return vul().fix(id) end
 --- Security recommendations (2.6.7): "Turn on" for one check that never passed on this router. Same commands as the
 --- installer's optional changes; every change writes /root/machome-backup/undo-sec-<id>.sh. HTTPS-only is done by the

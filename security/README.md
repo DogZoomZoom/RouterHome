@@ -19,6 +19,15 @@ There's no AI on the router. It checks two kinds of structured data with plain r
 
 3. **GL.iNet's own news feeds**, used to spot new notices. The router reads GL's public Security Updates feed and blog feed. Any security post from the last 90 days that this list doesn't cover yet shows on the Security card as "New notice, not checked yet" and sends one Discord alert, so you hear about it the day it's posted. Nothing on the router changes because of a feed post. Real checks only arrive when this signed list is updated.
 
+4. **GL's firmware release notes** (Router Home 2.7.0+). When a new firmware for the router's model describes security fixes, it shows "Firmware update needed" with the CVE numbers, for every model, without waiting for this list.
+5. **A daily tampering check** (2.7.0+) that needs no published notice. It looks for:
+   - programs running from temporary folders, and program files stored there
+   - extra admin accounts and code injection (`/etc/ld.so.preload`)
+   - extra task schedulers and unknown programs in system folders
+   - new SSH keys, accounts, scheduled tasks or open ports, compared with the router's normal state
+
+   Serious signs mean "factory reset recommended". The rest can be marked "These are expected".
+
 Once a day, each router downloads this list, asks NVD and reads GL's feeds. The checks on the router run again every 10 minutes.
 
 **Keeping the list current:** when a router reports a new GL notice, the maintainer adds an entry here, the build signs the list, and the updated `security` folder is uploaded. Routers pick it up within a day, or straight away with **Check now**. No new Router Home version is needed.
@@ -86,6 +95,7 @@ For maintainers. Raise `version` by 1 with every change; routers ignore a list o
   "exposures":  [ { "type": "uci", "key": "config.section.option", "equals": "1", "label": "…" },
                   { "type": "service", "name": "…", "label": "…" },
                   { "type": "listen", "port": 1234, "label": "…" } ],
+  "reset":  { "infected": true },         // optional: the notice says a factory reset is the remedy for this status
   "fixes":  { "infected": { "type": "kill_remove", "process": "…", "path": "/tmp/…", "label": "…" },
               "exposed":  { "type": "uci_set", "key": "…", "value": "0", "restart": "service", "label": "…" } },
   "advice": { "infected": "…", "exposed": "…", "ok": "…" }

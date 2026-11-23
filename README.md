@@ -23,6 +23,9 @@ An internet grade, a router → modem → internet check that shows where a prob
   - **GL.iNet security notices**, turned into a signed list of checks in [`security/`](security). For example, the [11-20 cloud-management notice](https://www.gl-inet.com/en-gb/blogs/blog/glinet-security-notice-2026-11-20) checks for GL's sign of infection and whether the exploited service is on.
   - **The National Vulnerability Database (NVD):** published CVEs for your exact model, matched to your firmware version.
   - **GL.iNet's news feeds:** a new GL security post that the list doesn't cover yet shows as "New notice, not checked yet", with a Discord alert, the day it's posted.
+  - **GL's firmware release notes (2.7.0+):** when a new firmware for your model describes security fixes, you get "Firmware update needed" with the CVEs. This works for any model.
+  - **A daily tampering check (2.7.0+):** signs of a break-in that need no published notice, such as programs running from temp folders, extra admin accounts, or new SSH keys and open ports. Serious findings show **"Factory reset recommended"**.
+  - **Optional automation** (off by default): apply safe fixes automatically, and install GL's security firmware at 4 AM.
 
   It shows Not affected / Exposed / Signs of infection / Firmware update needed, offers a one-click fix where one is safe, and sends a Discord alert for new findings. Firmware upgrades are never automatic. How it works, and why the list is signed: [security/README.md](security/README.md).
 

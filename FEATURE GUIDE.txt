@@ -299,6 +299,17 @@ SECURITY
          the last 90 days that the list doesn't cover yet shows as "New notice, not
          checked yet" and sends one Discord alert, so you hear about it the same day.
          It isn't checked on the router until the signed list on GitHub is updated.
+      4. GL's firmware release notes: when a new firmware for your model describes
+         security fixes, "Firmware update needed" with the CVE numbers, for any model.
+      5. A daily tampering check (no notice needed): programs running from temporary
+         folders, program files stored there, extra admin accounts, code injection,
+         extra task schedulers, unknown programs in system folders, and new SSH keys,
+         accounts, scheduled tasks or open ports compared with your router's normal.
+         "These are expected" quiets the unusual-but-harmless ones.
+    Factory reset: when a notice says so for what was found, or the tampering check
+    finds serious signs, the panel turns red: "Factory reset recommended", with steps.
+    Optional (Settings > Auto-heal > Security, off by default): apply the list's safe
+    fixes automatically; install GL's security firmware by itself at 4 AM.
     Downloaded once a day; the checks on the router repeat every 10 minutes.
     Results: Not affected, Exposed (a risky setting is on), Suspicious file, Signs of
     infection, Firmware update needed, or New notice, with GL's advice and a link.

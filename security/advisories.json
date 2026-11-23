@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "updated": "2026-11-22",
   "about": "Router Home known-vulnerability list (GL.iNet security notices turned into checks). Signed with the Router Home release key; routers ignore a copy whose signature doesn't match. Format: docs/VULN-CHECKER.md in the Router Home project.",
   "advisories": [
@@ -20,6 +20,7 @@
       "exposures": [
         { "type": "uci", "key": "gl-cloud.@cloud[0].enable", "equals": "1", "label": "GoodCloud remote management is turned on (the service that was exploited)" }
       ],
+      "reset": { "infected": true },
       "fixes": {
         "infected": { "type": "kill_remove", "process": "crond -i /tmp/.log", "path": "/tmp/.log", "label": "Stop the malware process and delete /tmp/.log" },
         "suspicious": { "type": "kill_remove", "process": "crond -i /tmp/.log", "path": "/tmp/.log", "label": "Delete /tmp/.log (a copy is kept)" },

@@ -6,6 +6,28 @@ installer again and choose 1. Your settings (Discord webhook, weather ZIP, NAS b
 etc.) are kept either way.
 
 
+VERSION 2.7.0  (2026-11-22)
+-------------------------
+  More automatic security checks (Security card → Known vulnerabilities):
+  - Security firmware, any model: the router reads GL's release notes for each new
+    firmware. When they describe security fixes (a vulnerability, a CVE, malware,
+    unauthorized access), you get "Firmware update needed" with the CVE numbers and an
+    Upgrade button, without waiting for anyone to update the vulnerability list.
+  - Daily tampering check: looks for signs of a break-in that don't need a published
+    notice: programs running from temporary folders, program files stored there, extra
+    admin accounts, code injection (ld.so.preload), extra task schedulers, unknown
+    programs in system folders, and (compared with your router's normal state) new SSH
+    keys, user accounts, scheduled tasks or ports open to every network. Unusual things
+    can be marked "These are expected". It only alerts; nothing is removed by itself.
+  - Factory reset alerts: when a GL notice says so for what was found (e.g. the
+    2026-11-20 malware), or the tampering check finds serious signs, the card turns red
+    with "Factory reset recommended" and the steps, and the Discord alert says so.
+  - Two new opt-in switches in Settings > Auto-heal > Security (both off by default):
+    apply the safe fixes from the signed list automatically, and install GL's security
+    firmware by itself at 4 AM (only when the release notes describe security fixes, and
+    only if the upgrade checklist says nothing would be lost).
+
+
 VERSION 2.6.9  (2026-11-22)
 -------------------------
   - The Security status chip at the top now includes Known vulnerabilities: it says
