@@ -6,6 +6,9 @@ Router Home adds a **Home** tab as the first page of your GL.iNet router's admin
 
 See the [Screenshots](#screenshots) at the bottom of this page.
 
+> [!WARNING]
+> **Made with AI, use at your own risk.** Router Home was written with the help of AI (Anthropic's Claude). It is a free hobby project, not made, endorsed or supported by GL.iNet. It changes files and settings on your router, and **no liability is accepted for any problems, data loss, downtime or damage** that may result. Please read the [Disclaimer](#disclaimer) before installing.
+
 ## Features
 
 ### Dashboard
@@ -119,6 +122,13 @@ Report it to me on **[Discord](https://discord.com/users/861741061465571349)**. 
 - your router model and firmware version (GL admin page → System → Overview)
 - your Router Home version (the line at the very bottom of the Home tab)
 - what happened, and a screenshot if something looks wrong. Turn on **privacy mode** first (the eye icon in the top bar) so your IP and MAC addresses and device names are hidden.
+
+## Disclaimer
+
+- **AI-assisted:** most of Router Home's code, installers and documents were written with the help of AI (Anthropic's Claude) and then tested on the author's own GL.iNet routers. AI-written code can contain mistakes that testing didn't catch.
+- **No warranty, no liability:** Router Home is provided **"as is"**, without warranty of any kind. By installing it you accept all risk. The author is not liable for any problem it may cause, including lost settings or data, network or internet downtime, security issues, a router that needs a reset or recovery, or any other damage. See the [MIT License](LICENSE).
+- **Not official:** Router Home is not made, endorsed or supported by GL.iNet. GL.iNet's support may ask you to remove it before helping you.
+- **Before installing:** back up your router's settings from the GL admin page (the Backup / Restore option under System). If something goes wrong, **Remove** Router Home with the installer, or reset the router.
 
 ## License
 

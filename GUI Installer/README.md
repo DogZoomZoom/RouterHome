@@ -33,5 +33,8 @@ The easiest way to put Router Home on a GL.iNet router: **one file, a normal Win
 <img src="screenshots/3-optional-settings.png" width="330" alt="Optional security and cleanup">
 </p>
 
+> [!WARNING]
+> **Made with AI, use at your own risk.** Router Home and this installer were written with the help of AI (Anthropic's Claude). It's a free hobby project, not made or supported by GL.iNet, provided "as is" with **no liability for any problems** it may cause. See the [Disclaimer](../README.md#disclaimer).
+
 Mac users and anyone who prefers scripts: see the [main README](../README.md#install).
 Found a problem? [Report it](../README.md#found-a-bug-or-an-issue).
