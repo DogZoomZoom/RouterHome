@@ -20,7 +20,7 @@ See the [Screenshots](#screenshots) at the bottom of this page.
 | **Can I see the code?** | Yes, all of it. The router code is in [payload](payload), and the Windows programs are in [Source code](Source%20code). Nothing is hidden or obfuscated. |
 | **Does it send my data anywhere?** | Nothing is ever sent to the author: no tracking, no analytics, no accounts. The router only contacts the services its features need (weather, update checks, your own Discord alerts). [Privacy](#privacy-what-it-connects-to) |
 | **Can updates be faked?** | No. Every release is digitally signed, and the router refuses anything whose signature doesn't match. [Update or remove](#update-or-remove) |
-| **What do antivirus scanners say?** | Clean on all but one of about 60 engines on VirusTotal. [Antivirus scans](#antivirus-scans-virustotal) |
+| **What do antivirus scanners say?** | Router Home itself is clean on every engine on VirusTotal. One small engine (VirIT) flags the Windows GUI installer, but no other engine does. [Antivirus scans](#antivirus-scans-virustotal) |
 | **Can I remove it?** | Yes, in one step with the installer. It deletes all of its files and puts GL's upgrade keep-list back the way it was. |
 
 ## Features
@@ -122,10 +122,10 @@ Everything on this page was scanned on [VirusTotal](https://www.virustotal.com),
 
 | What was scanned | Result |
 |---|---|
-| **The repo files**: everything on this page, including the GUI Installer and the Vulnerability Checker | [**1 detection** out of about 60 engines](https://www.virustotal.com/gui/file/0bf84e988f77d7370767c2ccbb20f93b9fd90d1ed1b2ff8b66c07391c2f013d9/detection). Malwarebytes and every other engine: clean. |
-| **The release files** (v2.7.1: installer zip and signed update package) | [Clean on every engine](https://www.virustotal.com/gui/file/3301eebbf2cee58e76e80ca0baba511e9860e9d742270ef3f6ed89a8902da0ab/detection) |
+| **Router Home itself**: the release files (v2.7.1 installer zip and signed update package), which hold the code that runs on your router | [**Clean on every engine**](https://www.virustotal.com/gui/file/3301eebbf2cee58e76e80ca0baba511e9860e9d742270ef3f6ed89a8902da0ab/detection) |
+| **The repo files**: everything on this page, including the Windows programs (GUI Installer and Vulnerability Checker) | [**1 detection** out of about 60 engines](https://www.virustotal.com/gui/file/0bf84e988f77d7370767c2ccbb20f93b9fd90d1ed1b2ff8b66c07391c2f013d9/detection), from **VirIT**, on the **GUI Installer** (`Router-Home-Setup.exe`). Malwarebytes and every other engine: clean. |
 
-**About that one detection:** new programs that aren't code-signed and haven't been downloaded much yet are often flagged by one or two smaller engines' "looks unusual" rules, even when they're harmless. That's common for free open-source tools. Click the report to see which engine it was.
+**About that one detection:** it's only the **Windows GUI installer**, the small program that copies Router Home to your router. **Router Home itself, the code that runs on the router, isn't flagged by any engine.** VirIT is a smaller Italian antivirus engine. New programs that aren't code-signed and haven't been downloaded much yet are often flagged by one or two smaller engines' "looks unusual" rules, even when they're harmless, which is common for free open-source tools. If you'd rather not use the GUI installer, the [script installers](#install) do the same job without any program at all.
 
 **Fixed along the way:** an earlier build of `Router-Home-Setup.exe` was flagged by Malwarebytes' machine-learning rule ("MachineLearning/Anomalous", a guess based on how a file looks, not a known-malware match). Testing showed the trigger was the program's custom icon. The current installer ships without it and passes Malwarebytes cleanly. The installer also no longer carries Router Home inside it: it downloads the signed release when you press Install.
 
