@@ -10,7 +10,6 @@ Nothing here is hidden or left out. The only file that isn't published is the **
 | **Router Home installers** (scripts) | [`installer.ps1`](../installer.ps1), [`Install Router Home.cmd`](../Install%20Router%20Home.cmd), [`Install Router Home (Mac).command`](../Install%20Router%20Home%20(Mac).command), plus `install-on-router.sh` and `options-on-router.sh` in [`payload`](../payload) | PowerShell, shell |
 | **GUI Installer** (`Router-Home-Setup.exe`) | [`GUI Installer`](GUI%20Installer) in this folder | C# |
 | **Vulnerability Checker** (`Vulnerability-Checker.exe`) | [`Vulnerability Checker`](Vulnerability%20Checker) in this folder | C#, plus the Lua script it runs on the router |
-| **Home Hub** (`HomeHub.exe`) | [`Home Hub`](Home%20Hub) in this folder. The complete source, including the patched third-party browser library, is also `HomeHub-source.zip` in the [Home Hub folder](../Home%20Hub). | Go |
 | **Release signing and build tools** | [`Router Home tools`](Router%20Home%20tools) in this folder | Python, PowerShell |
 
 Every file in this folder is copied from the same build that produces the `.exe` files in this repo, so the code and the programs always match.
@@ -19,9 +18,17 @@ Every file in this folder is copied from the same build that produces the `.exe`
 
 ### GUI Installer
 
-[`RouterHomeSetup.cs`](GUI%20Installer/RouterHomeSetup.cs) is one C# file (WinForms, C# 5). [`build-setup-exe.ps1`](GUI%20Installer/build-setup-exe.ps1) compiles it with the C# compiler that's already part of Windows (`csc.exe`, .NET Framework 4.x), so no SDK is needed. The Router Home files it installs, the same ones as in [`payload`](../payload), are packed into the .exe as resources.
+[`RouterHomeSetup.cs`](GUI%20Installer/RouterHomeSetup.cs) is one C# file (WinForms, C# 5). [`build-setup-exe.ps1`](GUI%20Installer/build-setup-exe.ps1) compiles it with the C# compiler that's already part of Windows (`csc.exe`, .NET Framework 4.x), so no SDK is needed.
 
-What it does on the router is the same as the script installers: it sends the files over SSH with Windows' own `ssh.exe` and runs `install-on-router.sh`. The password is handed to `ssh.exe` through its "askpass" feature and is never written to disk.
+Router Home itself is **not** packed into the .exe. When you press Install:
+1. It downloads the signed release package (`routerhome-update-<version>.tgz` and its `.sig`) from this repo's GitHub releases.
+2. It sends them to the router over SSH with Windows' own `ssh.exe`, together with [`setup-on-router.sh`](GUI%20Installer/setup-on-router.sh) and the public key.
+3. The router checks the signature with OpenWrt's `usign` and stops if it doesn't match.
+4. If the signature matches, the router runs the package's own `install-on-router.sh`, the same as the script installers and the Home tab's update button.
+
+Only three small text files are packed into the .exe: `setup-on-router.sh`, `options-on-router.sh` (from [`payload`](../payload)) and `release.pub`.
+
+The password is handed to `ssh.exe` through its "askpass" feature (ssh starts the same .exe by its short path) and is never written to disk.
 
 ### Vulnerability Checker
 
@@ -32,12 +39,6 @@ What it does on the router is the same as the script installers: it sends the fi
   - the signed vulnerability list from [`security`](../security), used as a fallback when the router can't download it
 - `sample.json` is example data for the README screenshots only.
 
-### Home Hub
-
-Go 1.24+, no cgo. Extract `HomeHub-source.zip` from the [Home Hub folder](../Home%20Hub) and run `.\build.ps1`, which runs the tests and then builds `dist\HomeHub.exe`. See the README inside the zip.
-
-[`third_party/go-webview2`](../Home%20Hub) is a patched copy of [wailsapp/go-webview2](https://github.com/wailsapp/go-webview2). It's left out of this browsable copy because it's about 400 files, but it's complete in the zip, with the patches listed in its `PATCHES.md`.
-
 ### Router Home tools
 
 - [`rh_sign.py`](Router%20Home%20tools/rh_sign.py) signs releases and the vulnerability list with Ed25519, in OpenWrt's `usign` format, so routers can check them with `usign -V`. The public key is `payload/.../usr/share/machome/release.pub`. The secret key is never published.
@@ -47,7 +48,6 @@ Go 1.24+, no cgo. Extract `HomeHub-source.zip` from the [Home Hub folder](../Hom
 ## Verifying a download
 
 - **Router Home updates** are signed. A router refuses any update whose signature doesn't match the public key in `payload`.
-- **Home Hub:** `HomeHub.exe.sha256` holds its SHA-256 checksum.
 - **Any .exe:** you can build it yourself from this folder. You can also upload the file to [VirusTotal](https://www.virustotal.com) to have it scanned by about 70 antivirus engines.
 
 ## License

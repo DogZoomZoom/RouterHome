@@ -1,10 +1,14 @@
-// Router Home Setup: a point-and-click Windows installer for the Router Home tab (owner, 2026-11-24).
-// Does exactly what installer.ps1 does, with a window instead of a console:
-//   - Router Home's files are packed inside this .exe (resources made by tools/build-setup-exe.ps1)
+﻿// Router Home Setup: a point-and-click Windows installer for the Router Home tab (owner, 2026-11-24).
+// Does what installer.ps1 does, with a window instead of a console:
+//   - 2026-11-25 (antivirus false positives): Router Home's files are NOT packed inside this .exe any more. When you
+//     press Install it downloads the signed release package (routerhome-update-<version>.tgz + .sig) from the Router
+//     Home GitHub releases, stable or beta. The ROUTER checks the signature with usign and the Router Home public key
+//     before anything is installed (setup-on-router.sh; the same check as the Home tab's update button).
 //   - it talks to the router with Windows' own OpenSSH client (ssh.exe), ONE connection: the files go as a tar
-//     stream into the same ssh session that runs install-on-router.sh (same as the script installers)
+//     stream into the same ssh session that runs the install (same as the script installers)
 //   - the router password is typed into this window and handed to ssh through ssh's own "askpass" feature: ssh
-//     starts this same .exe in askpass mode, which prints the password to ssh only. It's never written to disk.
+//     starts this same .exe (by its short 8.3 path; no copy is made) in askpass mode, which prints the password to
+//     ssh only. It's never written to disk.
 // Built with the C# compiler that ships with Windows (.NET Framework 4.x, C# 5) so users need nothing extra.
 using System;
 using System.Collections.Generic;
@@ -20,11 +24,19 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Router Home Setup")]
 [assembly: AssemblyProduct("Router Home")]
 [assembly: AssemblyDescription("Installs the Router Home tab on a GL.iNet router")]
+// full version info (2026-11-25): Malwarebytes' machine-learning rule flagged the installer as "Anomalous"; programs
+// without company/copyright/version details look less like normal software to such models
+[assembly: AssemblyCompany("Router Home (open source, github.com/xDarkHawkx/RouterHome)")]
+[assembly: AssemblyCopyright("MIT License")]
+[assembly: AssemblyVersion("3.0.0.0")]
+[assembly: AssemblyFileVersion("3.0.0.0")]
+[assembly: AssemblyInformationalVersion("3.0.0")]
 
 static class Program
 {
@@ -54,11 +66,74 @@ static class Program
 // ------------------------------------------------------------------ the work (no UI)
 static class Setup
 {
-    // Both versions are packed inside (owner, 2026-11-24): resources "stable/..." and, when a beta is newer than the
-    // stable release, "beta/...". The window lets the user pick; installing also sets the router's update channel.
-    public static string VersionOf(string ch) { string v = Res(ch + "/version.txt"); return v == null ? null : v.Trim(); }
+    // Stable and beta come from the Router Home GitHub releases (2026-11-25; before, both were packed inside the .exe,
+    // which antivirus "dropper" rules flagged). Stable = the newest normal release; Beta = the newest pre-release when
+    // it's newer than stable. Installing also sets the router's update channel.
+    public const string Repo = "xDarkHawkx/RouterHome";
+    public class Rel { public string Version, Tag, PkgName, PkgUrl, SigUrl; }
+    public static Rel Stable, Beta;
+    public static string FetchError;
+    public static string VersionOf(string ch) { Rel r = ch == "beta" ? Beta : Stable; return r == null ? null : r.Version; }
     public static string Version { get { return VersionOf("stable"); } }
-    public static bool HasBeta { get { return VersionOf("beta") != null; } }
+    public static bool HasBeta { get { return Beta != null; } }
+
+    static WebClient Web()
+    {
+        ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072;   // TLS 1.2 (GitHub requires it)
+        var w = new WebClient();
+        w.Headers[HttpRequestHeader.UserAgent] = "RouterHome-Setup";
+        return w;
+    }
+    // "2.8.0-beta.2" -> numbers 2,8,0 and pre-release "beta.2"; a release is newer than its own pre-releases
+    public static bool Newer(string a, string b)
+    {
+        Func<string, int[]> core = v => Regex.Matches(Regex.Replace(v ?? "", "-.*$", ""), @"\d+").Cast<Match>().Select(m => int.Parse(m.Value)).Concat(new[] { 0, 0, 0 }).Take(3).ToArray();
+        int[] x = core(a), y = core(b);
+        for (int i = 0; i < 3; i++) if (x[i] != y[i]) return x[i] > y[i];
+        bool pa = (a ?? "").Contains("-"), pb = (b ?? "").Contains("-");
+        if (pa != pb) return pb;   // 2.8.0 is newer than 2.8.0-beta.2
+        if (!pa) return false;
+        var na = Regex.Match(a, @"(\d+)$"); var nb = Regex.Match(b, @"(\d+)$");
+        return na.Success && nb.Success && int.Parse(na.Value) > int.Parse(nb.Value);
+    }
+    // reads the release list once (about 20 KB); fills Stable/Beta, or FetchError
+    public static bool FetchReleases()
+    {
+        try
+        {
+            string json;
+            using (var w = Web()) json = w.DownloadString("https://api.github.com/repos/" + Repo + "/releases?per_page=20");
+            var list = new JavaScriptSerializer { MaxJsonLength = 8 << 20 }.DeserializeObject(json) as object[];
+            Rel st = null, be = null;
+            foreach (var o in list ?? new object[0])
+            {
+                var d = o as Dictionary<string, object>; if (d == null || true.Equals(G(d, "draft"))) continue;
+                string tag = Convert.ToString(G(d, "tag_name")); string ver = Regex.Replace(tag, "^[vV]", "");
+                Dictionary<string, object> pkg = null, sig = null;
+                foreach (var ao in (G(d, "assets") as object[]) ?? new object[0])
+                {
+                    var a = ao as Dictionary<string, object>; if (a == null) continue;
+                    string n = Convert.ToString(G(a, "name"));
+                    if (Regex.IsMatch(n, @"^routerhome-update-.+\.tgz$")) pkg = a;
+                    else if (Regex.IsMatch(n, @"^routerhome-update-.+\.tgz\.sig$")) sig = a;
+                }
+                if (pkg == null || sig == null) continue;
+                var r = new Rel { Version = ver, Tag = tag, PkgName = Convert.ToString(G(pkg, "name")), PkgUrl = Convert.ToString(G(pkg, "browser_download_url")), SigUrl = Convert.ToString(G(sig, "browser_download_url")) };
+                if (true.Equals(G(d, "prerelease"))) { if (be == null || Newer(r.Version, be.Version)) be = r; }
+                else if (st == null || Newer(r.Version, st.Version)) st = r;
+            }
+            if (st == null) { FetchError = "no Router Home release with an update package was found on GitHub"; return false; }
+            Stable = st; Beta = be != null && Newer(be.Version, st.Version) ? be : null; FetchError = null;
+            return true;
+        }
+        catch (Exception ex) { FetchError = ex.Message; return false; }
+    }
+    static object G(Dictionary<string, object> d, string k) { object v; return d != null && d.TryGetValue(k, out v) ? v : null; }
+    public static byte[] Download(string url)
+    {
+        if (!url.StartsWith("https://github.com/" + Repo + "/releases/download/")) throw new Exception("unexpected download address");
+        using (var w = Web()) return w.DownloadData(url);
+    }
 
     public static string Res(string name)
     {
@@ -150,33 +225,28 @@ static class Setup
         return m.ToArray();
     }
 
-    public static byte[] InstallBundle(string ch, bool ookla, List<string> opts)
+    // what goes to the router: the downloaded release package + its signature, the Router Home public key and the
+    // install step (setup-on-router.sh), plus the user's choices. The router verifies the signature before installing.
+    public static byte[] InstallBundle(string ch, byte[] pkg, byte[] sig, bool ookla, List<string> opts)
     {
         var files = new List<KeyValuePair<string, byte[]>>();
-        files.Add(new KeyValuePair<string, byte[]>("machome-rootfs-generic.tgz", ResBytes(ch + "/machome-rootfs-generic.tgz")));
-        files.Add(new KeyValuePair<string, byte[]>("machome-rootfs-mt5000.tgz", ResBytes(ch + "/machome-rootfs-mt5000.tgz")));
-        files.Add(new KeyValuePair<string, byte[]>("install-on-router.sh", ResBytes(ch + "/install-on-router.sh")));
+        files.Add(new KeyValuePair<string, byte[]>("pkg.tgz", pkg));
+        files.Add(new KeyValuePair<string, byte[]>("pkg.tgz.sig", sig));
+        files.Add(new KeyValuePair<string, byte[]>("release.pub", ResBytes("release.pub")));
+        files.Add(new KeyValuePair<string, byte[]>("setup.sh", Encoding.ASCII.GetBytes(Res("setup-on-router.sh").Replace("\r", ""))));
+        files.Add(new KeyValuePair<string, byte[]>("channel", Encoding.ASCII.GetBytes(ch + "\n")));
         if (ookla) files.Add(new KeyValuePair<string, byte[]>("mh-accept-ookla", Encoding.ASCII.GetBytes("yes\n")));
         if (opts.Count > 0)
         {
             files.Add(new KeyValuePair<string, byte[]>("mh-options", Encoding.ASCII.GetBytes(string.Join("\n", opts) + "\n")));
-            files.Add(new KeyValuePair<string, byte[]>("options-on-router.sh", ResBytes(ch + "/options-on-router.sh")));
+            files.Add(new KeyValuePair<string, byte[]>("options-on-router.sh", ResBytes("options-on-router.sh")));
         }
         return Tar(files);
     }
 
-    // writes the update channel the router's "Router Home updates" button follows (2.7.1+): {"channel":"beta"|"stable"}.
-    // No double quotes allowed in the router command (it's one double-quoted ssh argument): printf with \042 makes them.
-    public static string ChannelCmd(string ch, string file)
-    {
-        return "mkdir -p " + Path.GetDirectoryName(file).Replace('\\', '/') + " && printf '{\\042channel\\042:\\042" + ch + "\\042}' > " + file;
-    }
-    // router commands (single quotes only: the whole thing is one ssh argument in double quotes)
-    public static string InstallCmd(string ch)
-    {
-        return "tar -xf - -C /tmp && { tr -d '\\r' < /tmp/install-on-router.sh | sh; }; r=$?; [ $r = 0 ] && " + ChannelCmd(ch, "/etc/machome/update.json") +
-               "; rm -f /tmp/install-on-router.sh /tmp/options-on-router.sh /tmp/mh-options /tmp/mh-accept-ookla /tmp/machome-rootfs*.tgz; exit $r";
-    }
+    // router command (single quotes only: the whole thing is one ssh argument in double quotes)
+    public const string InstallCmd = "rm -rf /tmp/rhsetup && mkdir -p /tmp/rhsetup && tar -xf - -C /tmp/rhsetup && tr -d '\\r' < /tmp/rhsetup/setup.sh | sh; r=$?; " +
+        "rm -rf /tmp/rhsetup /tmp/install-on-router.sh /tmp/options-on-router.sh /tmp/mh-options /tmp/mh-accept-ookla /tmp/machome-rootfs*.tgz; exit $r";
     // Remove (2026-11-24): GL firmware upgrades wipe /root, so /root/machome-backup/uninstall.sh is often gone (owner's
     // Slate: "not installed" while it was installed). Try it, then the copy kept in /usr/lib/machome (installers from
     // 2.8.0 on), then remove the files directly (same list as uninstall.sh). No double quotes (one ssh argument).
@@ -198,19 +268,23 @@ static class Setup
     public static int Ssh(string ip, string password, string cmd, byte[] stdin, bool askpass, Action<string> log, out string errText, string extraOpts = "")
     {
         string ssh = SshPath();
-        string helper = null;
         var err = new StringBuilder();
-        try
+        // ssh starts the askpass program by path and can't handle spaces in it: use this .exe's short 8.3 path. No copy
+        // is made (2026-11-25: copying itself to %TEMP% and running the copy looked like malware to antivirus rules).
+        // If Windows has short names turned off and the path has spaces, ssh asks in its own window instead.
+        string self = Short(Application.ExecutablePath);
+        if (askpass && self.Contains(" "))
+        {
+            askpass = false;
+            log("This program's folder has a space in its name, so a small black window will ask for the router password. Type it there and press Enter. (Or move Router-Home-Setup.exe to a folder without spaces, like Downloads.)");
+        }
         {
             var psi = new ProcessStartInfo(ssh) { UseShellExecute = false, RedirectStandardInput = true };
             psi.Arguments = extraOpts + "-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o NumberOfPasswordPrompts=1 root@" + ip + " \"" + cmd + "\"";
             if (askpass)
             {
-                // ssh starts the askpass program by path: use a copy with a short path (no spaces) in %TEMP%
-                helper = Path.Combine(Path.GetTempPath(), "rh-askpass-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".exe");
-                File.Copy(Application.ExecutablePath, helper);
                 psi.CreateNoWindow = true; psi.RedirectStandardOutput = true; psi.RedirectStandardError = true;
-                psi.EnvironmentVariables["SSH_ASKPASS"] = Short(helper);
+                psi.EnvironmentVariables["SSH_ASKPASS"] = self;
                 psi.EnvironmentVariables["SSH_ASKPASS_REQUIRE"] = "force";
                 psi.EnvironmentVariables["RH_ASKPASS"] = "1";
                 psi.EnvironmentVariables["RH_PW"] = password ?? "";
@@ -237,10 +311,6 @@ static class Setup
                 return p.ExitCode;
             }
         }
-        finally
-        {
-            if (helper != null) for (int i = 0; i < 10; i++) { try { File.Delete(helper); break; } catch { Thread.Sleep(200); } }
-        }
     }
 
     static string Clean(string s) { return Regex.Replace(s, @"\x1b\[[0-9;]*[A-Za-z]", "").TrimEnd(); }
@@ -264,20 +334,25 @@ static class Setup
         catch { }
     }
 
-    // developer test: send the real install bundle, but the router only unpacks it in a scratch folder, lists it and
-    // deletes it (nothing installed). Uses RH_TEST_KEY for key login and RH_TEST_PW (or none) for askpass.
+    // developer test: download the real release from GitHub and send the real bundle, but the router only checks the
+    // signature and unpacks it in a scratch folder (nothing installed), then deletes it. RH_TEST_KEY = key login,
+    // RH_TEST_PW = password (askpass), RH_TEST_CHANNEL=beta, RH_TEST_TAMPER=1 corrupts the package (must be refused).
     public static int TestTransport(string ip, string logfile)
     {
         var sb = new StringBuilder();
         Action<string> log = s => { lock (sb) sb.AppendLine(s); };
         string key = Environment.GetEnvironmentVariable("RH_TEST_KEY");
         string extra = string.IsNullOrEmpty(key) ? "" : "-i \"" + key + "\" -o IdentitiesOnly=yes ";
+        if (!FetchReleases()) { log("GitHub: " + FetchError); File.WriteAllText(logfile, sb.ToString()); return 9; }
         string ch = Environment.GetEnvironmentVariable("RH_TEST_CHANNEL") == "beta" && HasBeta ? "beta" : "stable";
-        string cmd = "mkdir -p /tmp/rhsetup-test && tar -xf - -C /tmp/rhsetup-test && ls -la /tmp/rhsetup-test && md5sum /tmp/rhsetup-test/* && " +
-                     ChannelCmd(ch, "/tmp/rhsetup-test/update.json") + " && echo && cat /tmp/rhsetup-test/update.json && echo; rm -rf /tmp/rhsetup-test";
-        log("stable " + Version + " | beta " + (VersionOf("beta") ?? "none") + " | sending " + ch + " | ssh " + SshPath() + " | askpass " + SshCanAskpass(SshPath()));
-        var bundle = InstallBundle(ch, true, new List<string> { "kernel", "wgkey" });
-        log("bundle bytes " + bundle.Length);
+        Rel rel = ch == "beta" ? Beta : Stable;
+        log("stable " + Version + " | beta " + (VersionOf("beta") ?? "none") + " | sending " + ch + " " + rel.PkgName + " | ssh " + SshPath() + " | askpass " + SshCanAskpass(SshPath()) + " | self " + Short(Application.ExecutablePath));
+        byte[] pkg = Download(rel.PkgUrl), sig = Download(rel.SigUrl);
+        if (Environment.GetEnvironmentVariable("RH_TEST_TAMPER") == "1") { pkg[pkg.Length / 2] ^= 0x55; log("TAMPERED one byte of the package"); }
+        var bundle = InstallBundle(ch, pkg, sig, true, new List<string> { "kernel", "wgkey" });
+        log("package " + pkg.Length + " bytes, bundle " + bundle.Length + " bytes");
+        string cmd = "rm -rf /tmp/rhsetup-test && mkdir -p /tmp/rhsetup-test && tar -xf - -C /tmp/rhsetup-test && cd /tmp/rhsetup-test && ls && sh -n setup.sh && echo SETUP-SH-SYNTAX-OK && " +
+                     "if usign -V -q -m pkg.tgz -p release.pub -x pkg.tgz.sig; then echo SIGNATURE-OK; mkdir x && tar xzf pkg.tgz -C x && ls x && cat x/version.txt; else echo SIGNATURE-REFUSED; fi; cat channel; cd /; rm -rf /tmp/rhsetup-test";
         string err;
         int rc = Ssh(ip, Environment.GetEnvironmentVariable("RH_TEST_PW"), cmd, bundle, true, log, out err, extra);
         log("exit " + rc);
@@ -379,17 +454,15 @@ class MainForm : Form
         Controls.Add(grp);
         y += 114;
 
-        // which version (owner, 2026-11-24): stable, or the beta when one newer than stable is packed in
-        verGrp = new GroupBox { Text = "Version", Location = new Point(20, y), Size = new Size(560, Setup.HasBeta ? 78 : 50) };
-        rbStable = new RadioButton { Text = "Stable " + Setup.Version + " (recommended)", Checked = true, Location = new Point(14, 22), AutoSize = true };
-        verGrp.Controls.Add(rbStable);
-        if (Setup.HasBeta)
-        {
-            rbBeta = new RadioButton { Text = "Beta " + Setup.VersionOf("beta") + ": new features first, less tested", Location = new Point(14, 48), AutoSize = true };
-            verGrp.Controls.Add(rbBeta);
-        }
+        // which version (owner, 2026-11-24): stable, or the beta when one is newer than stable. Since 2026-11-25 both are
+        // looked up on GitHub when the window opens (ApplyReleases fills in the numbers) and downloaded at Install.
+        verGrp = new GroupBox { Text = "Version (downloaded from the Router Home GitHub page)", Location = new Point(20, y), Size = new Size(560, 78) };
+        rbStable = new RadioButton { Text = "Stable (recommended): checking GitHub for the latest version…", Checked = true, Location = new Point(14, 22), AutoSize = true };
+        rbBeta = new RadioButton { Text = "Beta: checking…", Location = new Point(14, 48), AutoSize = true, Enabled = false };
+        verGrp.Controls.Add(rbStable); verGrp.Controls.Add(rbBeta);
         Controls.Add(verGrp);
-        y += Setup.HasBeta ? 88 : 60;
+        y += 88;
+        Load += (s, e) => { if (!NoFetch) ThreadPool.QueueUserWorkItem(_ => { Setup.FetchReleases(); try { BeginInvoke(new Action(ApplyReleases)); } catch { } }); };
 
         ookla = new CheckBox { Text = "Include the speed test (uses Ookla's free Speedtest CLI; I accept Ookla's terms)", Checked = true, Location = new Point(22, y), Size = new Size(560, 24) };
         Controls.Add(ookla);
@@ -439,19 +512,38 @@ class MainForm : Form
 
     void Open(string url) { try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { } }
 
+    public static bool NoFetch;   // screenshots: don't ask GitHub
+    void ApplyReleases()
+    {
+        if (Setup.Stable != null)
+        {
+            rbStable.Text = "Stable " + Setup.Version + " (recommended)";
+            if (Setup.HasBeta) { rbBeta.Text = "Beta " + Setup.VersionOf("beta") + ": new features first, less tested"; rbBeta.Enabled = true; }
+            else { rbBeta.Text = "Beta: no beta newer than stable right now"; rbBeta.Enabled = false; rbStable.Checked = true; }
+        }
+        else
+        {
+            rbStable.Text = "Stable (recommended): couldn't reach GitHub yet; it tries again when you press Install";
+            rbBeta.Text = "Beta: couldn't check"; rbBeta.Enabled = false; rbStable.Checked = true;
+        }
+    }
+
     // README screenshots: the real windows in a few states, drawn to PNG files (address shown = GL's default 192.168.8.1)
     public static void Screens(string dir)
     {
         Directory.CreateDirectory(dir);
         Action<Control, string> save = (c, name) => { using (var b = new Bitmap(c.Width, c.Height)) { c.DrawToBitmap(b, new Rectangle(0, 0, c.Width, c.Height)); b.Save(Path.Combine(dir, name), System.Drawing.Imaging.ImageFormat.Png); } };
+        NoFetch = true;   // example versions for the pictures
+        Setup.Stable = new Setup.Rel { Version = "2.7.1" }; Setup.Beta = new Setup.Rel { Version = "2.8.0-beta.2" };
         var f = new MainForm(); f.StartPosition = FormStartPosition.Manual; f.Location = new Point(-3000, -3000); f.ShowInTaskbar = false; f.Show(); Application.DoEvents();
+        f.ApplyReleases();
         f.ipBox.Text = "192.168.8.1"; f.pwBox.Text = "password"; f.Refresh(); Application.DoEvents();
         save(f, "1-main-window.png");
         if (f.rbBeta != null) { f.rbBeta.Checked = true; f.Refresh(); Application.DoEvents(); save(f, "2-beta-choice.png"); f.rbStable.Checked = true; }
         using (var o = new OptionsForm(new List<string> { "https", "wgkey", "kernel" })) { o.StartPosition = FormStartPosition.Manual; o.Location = new Point(-3000, -3000); o.ShowInTaskbar = false; o.Show(); Application.DoEvents(); save(o, "3-optional-settings.png"); o.Close(); }
         // what a finished install looks like (the same messages the installer prints)
         f.status.Text = "Installed! Open the admin page and press Ctrl+F5 once."; f.status.ForeColor = Color.ForestGreen; f.openBtn.Visible = true;
-        foreach (string l in new[] { "Router found at 192.168.8.1.", "Router Home " + Setup.Version + ", with the speed test.", "Router model: GL-BE3600 - using the generic build",
+        foreach (string l in new[] { "Router found at 192.168.8.1.", "Router Home " + Setup.Version + ", with the speed test.", "Downloading Router Home " + Setup.Version + " from GitHub (routerhome-update-" + Setup.Version + ".tgz) …", "Downloaded 738 KB.", "Signature OK: this is an official Router Home release.", "Router model: GL-BE3600 - using the generic build",
                                      "GL.iNet firmware 4.8.8 - OK", "Downloading Ookla Speedtest CLI (aarch64) from install.speedtest.net ...", "Speed test installed.", "nginx reloaded",
                                      "sampler running: 1", "", "Installed! Open https://192.168.8.1 , log in and press Ctrl+F5 once. \"Home\" is now the first item in the menu." }) f.logBox.AppendText(l + Environment.NewLine);
         f.bar.Value = 100; f.Refresh(); Application.DoEvents();
@@ -544,12 +636,31 @@ class MainForm : Form
         }
         Log("Router found at " + ip + ".");
         if (!askpass) Log("This PC's OpenSSH is older, so a small black window will ask for the router password. Type it there and press Enter.");
-        string cmd = mode == 1 ? Setup.InstallCmd(ch) : mode == 2 ? Setup.RemoveCmd : Setup.UndoCmd;
+        string cmd = mode == 1 ? Setup.InstallCmd : mode == 2 ? Setup.RemoveCmd : Setup.UndoCmd;
         byte[] data = null;
         if (mode == 1)
         {
-            Log("Router Home " + Setup.VersionOf(ch) + (ch == "beta" ? " (beta)" : "") + (withOokla ? ", with the speed test" : ", without the speed test") + (chosen.Count > 0 ? ", options: " + string.Join(", ", chosen) : "") + ".");
-            data = Setup.InstallBundle(ch, withOokla, chosen);
+            if (Setup.Stable == null)
+            {
+                Status("Checking GitHub for the latest version …", Color.Black);
+                if (!Setup.FetchReleases())
+                {
+                    Status("Couldn't reach the Router Home GitHub page. Is this PC online?", Color.Firebrick);
+                    Log("The installer downloads Router Home from GitHub, so this PC needs internet. (" + Setup.FetchError + ")");
+                    return;
+                }
+                BeginInvoke(new Action(ApplyReleases));
+            }
+            var rel = ch == "beta" ? Setup.Beta : Setup.Stable;
+            if (rel == null) { Status("There's no beta newer than stable right now. Choose Stable.", Color.Firebrick); return; }
+            Log("Router Home " + rel.Version + (ch == "beta" ? " (beta)" : "") + (withOokla ? ", with the speed test" : ", without the speed test") + (chosen.Count > 0 ? ", options: " + string.Join(", ", chosen) : "") + ".");
+            Status("Downloading Router Home " + rel.Version + " from GitHub …", Color.Black);
+            Log("Downloading Router Home " + rel.Version + " from GitHub (" + rel.PkgName + ") …");
+            byte[] pkg, sig;
+            try { pkg = Setup.Download(rel.PkgUrl); sig = Setup.Download(rel.SigUrl); }
+            catch (Exception ex) { Status("The download from GitHub failed. Try again in a minute.", Color.Firebrick); Log("Download failed: " + ex.Message); return; }
+            Log("Downloaded " + (pkg.Length / 1024) + " KB. The router checks its signature before installing anything.");
+            data = Setup.InstallBundle(ch, pkg, sig, withOokla, chosen);
             Status("Copying and installing (about 30 seconds) …", Color.Black);
         }
         else Status(mode == 2 ? "Removing …" : "Undoing the optional changes …", Color.Black);
@@ -589,6 +700,8 @@ class MainForm : Form
             Log("or turn password login for SSH back on in the router's admin page, then try again.");
         }
         else if (rc == 255 && Setup.WrongPassword(err)) Status("The router didn't accept the password. It's the admin page password.", Color.Firebrick);
+        else if (mode == 1 && rc == 4) Status("The download's signature didn't match the Router Home key, so NOTHING was installed.", Color.Firebrick);
+        else if (mode == 1 && rc == 3) Status("This router can't check signatures (no usign), so nothing was installed. Use the script installer instead.", Color.Firebrick);
         else Status("It didn't finish (code " + rc + "). Nothing harmful was left behind; details below.", Color.Firebrick);
     }
 }

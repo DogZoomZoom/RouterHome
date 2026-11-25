@@ -6,8 +6,22 @@ Router Home adds a **Home** tab as the first page of your GL.iNet router's admin
 
 See the [Screenshots](#screenshots) at the bottom of this page.
 
+> [!NOTE]
+> **Router Home doesn't modify GL.iNet's firmware.** It's an app installed on top of it, like an add-on: it adds its own files (all named `machome`) next to GL's and a **Home** entry to GL's menu, and replaces none of GL's files. GL's firmware, admin pages and settings stay exactly as they are, and **Remove** takes it all away again. See [What it changes](#what-it-changes).
+
 > [!WARNING]
 > **Made with AI, use at your own risk.** Router Home was written with the help of AI (Anthropic's Claude). It is a free hobby project, not made, endorsed or supported by GL.iNet. It changes files and settings on your router, and **no liability is accepted for any problems, data loss, downtime or damage** that may result. Please read the [Disclaimer](#disclaimer) before installing.
+
+## Is it safe? Quick answers
+
+| Question | Answer |
+|---|---|
+| **Does it change GL.iNet's firmware?** | No. It's an add-on that only adds its own files. GL's firmware, pages and settings stay as they are. [What it changes](#what-it-changes) |
+| **Can I see the code?** | Yes, all of it. The router code is in [payload](payload), and the Windows programs are in [Source code](Source%20code). Nothing is hidden or obfuscated. |
+| **Does it send my data anywhere?** | Nothing is ever sent to the author: no tracking, no analytics, no accounts. The router only contacts the services its features need (weather, update checks, your own Discord alerts). [Privacy](#privacy-what-it-connects-to) |
+| **Can updates be faked?** | No. Every release is digitally signed, and the router refuses anything whose signature doesn't match. [Update or remove](#update-or-remove) |
+| **What do antivirus scanners say?** | Clean on all but one of about 60 engines on VirusTotal. [Antivirus scans](#antivirus-scans-virustotal) |
+| **Can I remove it?** | Yes, in one step with the installer. It deletes all of its files and puts GL's upgrade keep-list back the way it was. |
 
 ## Features
 
@@ -79,9 +93,13 @@ Only three models have been tested, but nothing is built for one model: the Home
 - **Firmware versions matter more than models.** Tested on firmware 4.9 and 4.10; users have installed it on 4.11. On a much older 4.x, a card might show no data if GL changed something internally. The page still loads, and **Remove** (option 2 in the installer) undoes everything.
 - **Tried it on another model?** Let me know how it went (see [Found a bug or an issue?](#found-a-bug-or-an-issue)), with your model and firmware version, and a screenshot if something looks off.
 
+## Just want a security check?
+
+The **[Vulnerability Checker](Vulnerability%20Checker)** is a separate, free Windows program. It checks any GL.iNet router once against GL's published security notices and the published signs of an attack, then tells you in plain words what to do. You don't need Router Home, nothing is installed on the router, and it's one file to double-click.
+
 ## Install
 
-**Windows, easiest:** open the **[GUI Installer](GUI%20Installer)** folder above, click **`Router-Home-Setup.exe`**, then the download button (⤓), and double-click the file. Type the router's admin password, choose **Stable** (or **Beta** to try new features early), and press **Install**. The router's address is filled in for you. Windows may say *"Windows protected your PC"* because this free installer isn't code-signed: click **More info → Run anyway**. Remove and Undo are in the same window.
+**Windows, easiest:** open the **[GUI Installer](GUI%20Installer)** folder above, click **`Router-Home-Setup.exe`**, then the download button (⤓), and double-click the file. Type the router's admin password, choose **Stable** (or **Beta** to try new features early), and press **Install**. The router's address is filled in for you. The installer downloads the latest release from this page, and the router checks its signature before installing anything. Windows may say *"Windows protected your PC"* because this free installer isn't code-signed: click **More info → Run anyway**. Remove and Undo are in the same window.
 
 Or use the scripts: download the latest release zip and extract it first. Don't run it from inside the zip.
 
@@ -98,13 +116,44 @@ Or use the scripts: download the latest release zip and extract it first. Don't 
 
 Full details, including the optional security settings the installer offers, are in [READ ME FIRST.txt](READ%20ME%20FIRST.txt).
 
+## Antivirus scans (VirusTotal)
+
+Everything on this page was scanned on [VirusTotal](https://www.virustotal.com), which checks files with about 60 antivirus engines (last scan: November 25, 2026):
+
+| What was scanned | Result |
+|---|---|
+| **The repo files**: everything on this page, including the GUI Installer and the Vulnerability Checker | [**1 detection** out of about 60 engines](https://www.virustotal.com/gui/file/0bf84e988f77d7370767c2ccbb20f93b9fd90d1ed1b2ff8b66c07391c2f013d9/detection). Malwarebytes and every other engine: clean. |
+| **The release files** (v2.7.1: installer zip and signed update package) | [Clean on every engine](https://www.virustotal.com/gui/file/3301eebbf2cee58e76e80ca0baba511e9860e9d742270ef3f6ed89a8902da0ab/detection) |
+
+**About that one detection:** new programs that aren't code-signed and haven't been downloaded much yet are often flagged by one or two smaller engines' "looks unusual" rules, even when they're harmless. That's common for free open-source tools. Click the report to see which engine it was.
+
+**Fixed along the way:** an earlier build of `Router-Home-Setup.exe` was flagged by Malwarebytes' machine-learning rule ("MachineLearning/Anomalous", a guess based on how a file looks, not a known-malware match). Testing showed the trigger was the program's custom icon. The current installer ships without it and passes Malwarebytes cleanly. The installer also no longer carries Router Home inside it: it downloads the signed release when you press Install.
+
+You don't have to take our word for any of this: **all of the code is public** in the [Source code](Source%20code) and [payload](payload) folders, so you (or anyone you trust) can read it, or build the programs yourself.
+
 ## What it changes
 
-- It adds the Home tab files and a small background service that collects the statistics.
-- It does **not** change Wi-Fi, firewall, VPN, DNS or passwords. Optional security tweaks are only applied if you say yes to each one.
-- Everything it replaces is backed up to `/root/machome-backup/` on the router, and it survives firmware upgrades when "Keep settings" is selected.
+- **It doesn't modify GL.iNet's firmware.** The firmware itself (the system image GL installs) is never touched or replaced, and you can keep installing GL's firmware updates as normal. Router Home is an app that runs on top of it.
+- **It only adds files.** It adds about 28 of its own files, all with `machome` in their name or folder (the Home page, its menu entry, the background service that collects the statistics, and its settings in `/etc/machome`). None of GL's own files are replaced. The only GL file it touches is the upgrade keep-list (`/etc/sysupgrade.conf`), where it adds its own file names so they survive firmware upgrades with "Keep settings" on. **Remove** deletes all of its files and takes those lines out again.
+- It does **not** change Wi-Fi, firewall, VPN, DNS or passwords. Optional security tweaks are only applied if you say yes to each one, and each can be undone.
+- If any of its files already exist (an older Router Home), they're backed up to `/root/machome-backup/` first.
 - Your password goes straight into your computer's own SSH program; the installer never sees or saves it.
 - Speed tests use Ookla's Speedtest CLI, which isn't included here. If you say yes, the router downloads it directly from Ookla.
+
+## Privacy: what it connects to
+
+**Nothing is ever sent to the author.** Router Home has no tracking, no analytics, no accounts and no "phone home". Everything it collects (speeds, devices, history) stays on your router. The router only contacts these services, each for a feature you can see:
+
+| Service | Why |
+|---|---|
+| Cloudflare, Google, Quad9, Apple, `neverssl.com` | Internet, ping and DNS checks (is the internet up, how fast it answers) |
+| Open-Meteo, Iowa State University (radar), Ventusky | Weather, the forecast and the radar map |
+| GitHub (this page) | Checking for Router Home updates and the signed vulnerability list |
+| US National Vulnerability Database (`nvd.nist.gov`), GL.iNet's website | Known vulnerabilities for your model, and GL's security news |
+| Ookla | Speed tests (only if you turned them on) |
+| Discord (and in 2.8.0 Telegram, Gmail, Slack or Home Assistant) | Your own alerts, sent only to the accounts you set up |
+
+Your passwords and alert settings are stored on the router only, readable by the router's admin account alone.
 
 ## Update or remove
 
