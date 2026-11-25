@@ -1024,7 +1024,9 @@ var DOCK = [
   ['lanip','Network','net','indigo'],'|',['overview','System','gear','gray'],['upgrade','Upgrade','up','pink'],['@dnshub','DNS','dnsq','red']
 ];
 
-var MH_VERSION = '2.7.0', MH_BUILD = '2026-11-22';
+var MH_VERSION = '2.7.1', MH_BUILD = '2026-11-24';
+/* 2.7.1: a beta build has a pre-release version like 2.8.0-beta.1 (Control Center → Router Home updates → Beta) */
+var MH_BETA = /\d-?[a-z]/i.test(MH_VERSION);
 var MH_REPO = 'https://github.com/xDarkHawkx/RouterHome';   /* updates come from this repo's GitHub Releases */
 var MH_CREDIT = 'Made by DogZoomZoom &amp; Claude AI (the bot)';
 /* "About Home" guide (Control Center > About Home): [section, intro, [[feature, how it works / how to use], ...]] */
@@ -1161,7 +1163,8 @@ var ABOUT = [
   ['Passwords', 'NAS and AdGuard passwords and the Discord webhook are stored on the router only, readable by its admin account only, and never shown again.'],
   ['Login', 'The Home tab only works when you’re signed in to the router’s admin page.']]],
  ['Updates and undo', '', [
-  ['Updating', 'Run the newer Router Home installer and choose 1. Your settings are kept.'],
+  ['Updating', 'Control Center → Router Home updates → Check installs a newer signed version from GitHub in about a minute (it rolls back by itself if anything fails). Or run the newer installer and choose 1. Your settings are kept.'],
+  ['Beta channel', 'Control Center → Router Home updates → Update channel: Stable (default) or Beta. Beta also offers versions marked as pre-releases on GitHub (like 2.8.0-beta.1): new features first, less tested. They’re signed and roll back the same way. The version line at the bottom shows BETA. Switch back to Stable any time; you’re then offered the latest stable version.'],
   ['Undo', 'Every change made to a router keeps a backup and an undo script in /root/machome-backup/. The installer’s option 3 undoes its optional changes; option 2 removes the Home tab.']]]
 ];
 function skeleton(){
@@ -1209,7 +1212,7 @@ function skeleton(){
       /* GL.inet Utilities Toolkit (owner, 2026-11-22): always the last card */
       win('tk', 'GL.inet Utilities Toolkit', {ic:[['cpu','indigo']], cls:'full', delay:480}) +
     '</div>' +
-    '<div class="mh-ver">Router Home v' + MH_VERSION + ' · build ' + MH_BUILD + ' · ' + MH_CREDIT + '</div>' +
+    '<div class="mh-ver">Router Home v' + MH_VERSION + (MH_BETA ? ' <b style="color:var(--mh-orange)">BETA</b>' : '') + ' · build ' + MH_BUILD + ' · ' + MH_CREDIT + '</div>' +
     '<div class="mh-dockwrap"><nav class="mh-dock">' + dock + '</nav></div>' +
   '</div>';
 }
@@ -3176,7 +3179,7 @@ return {
         (hasWake ? '<div class="mh-ccg" style="margin-top:8px">' + this.wakeCC() + '</div>' : '') +
         '<div class="mh-ccg" style="margin-top:8px">' +
           /* Router Home updates from GitHub (owner, 2026-11-22: in the Control Center) */
-          '<div class="mh-ccr"><div class="m"><b>Router Home updates</b><small>' + (m.updAvail ? '<span style="color:var(--mh-blue)">Version ' + esc(m.updAvail) + ' is available</span>' : 'Version ' + esc(MH_VERSION) + ' · checks GitHub for a newer one') + '</small></div><button class="mh-btn" style="margin:0" data-act="updates">' + (m.updAvail ? 'Update' : 'Check') + '</button></div>' +
+          '<div class="mh-ccr"><div class="m"><b>Router Home updates</b><small>' + (m.updAvail ? '<span style="color:var(--mh-blue)">Version ' + esc(m.updAvail) + ' is available</span>' : 'Version ' + esc(MH_VERSION) + (MH_BETA || m.updChan === 'beta' ? ' · Beta channel' : '') + ' · checks GitHub for a newer one') + '</small></div><button class="mh-btn" style="margin:0" data-act="updates">' + (m.updAvail ? 'Update' : 'Check') + '</button></div>' +
           '<div class="mh-ccr"><div class="m"><b>Settings</b><small>Privacy, look, layout, alerts, backups, modem, weather</small></div><button class="mh-btn" style="margin:0" data-act="settings">Open</button></div></div>' +
         '<p class="mh-ccnote">Every change asks you to confirm first.</p>';
     },
@@ -4741,10 +4744,12 @@ return {
       rpc('machome', 'upd_check').then(function(r){
         if (!r || !r.ok) return;
         var told = 0; try { told = Number(localStorage.getItem('machome-updtold') || 0); } catch (e) {}
-        try { localStorage.setItem('machome-updchk', String(Date.now())); localStorage.setItem('machome-updavail', r.newer ? r.latest : ''); } catch (e) {}
-        m.updAvail = r.newer ? r.latest : null; m.updChecked = true;
+        /* 2.7.1: a "back to Stable" offer (r.back) isn't an update, so no "needs an update" line or toast */
+        var nv = r.newer && !r.back;
+        try { localStorage.setItem('machome-updchk', String(Date.now())); localStorage.setItem('machome-updavail', nv ? r.latest : ''); } catch (e) {}
+        m.updAvail = nv ? r.latest : null; m.updChecked = true; m.updChan = r.channel || 'stable';
         self.updLine();
-        if (r.newer && Date.now() - told > 86400000){ try { localStorage.setItem('machome-updtold', String(Date.now())); } catch (e) {} self.toast('Router Home ' + r.latest + ' is available'); }
+        if (nv && Date.now() - told > 86400000){ try { localStorage.setItem('machome-updtold', String(Date.now())); } catch (e) {} self.toast('Router Home ' + (r.prerelease ? 'beta ' : '') + r.latest + ' is available'); }
       });
     },
     /* the line under "Everything is running smoothly" (owner, 2026-11-22, v2.6.1) */
@@ -4753,7 +4758,7 @@ return {
       el.style.display = '';
       el.innerHTML = m.updAvail
         ? '<span style="color:var(--mh-orange)">⬆ Router Home needs an update: version ' + esc(m.updAvail) + ' is available.</span> <button class="mh-btn" data-act="updates" style="margin:0 0 0 6px;padding:3px 10px;font-size:12px">Update now</button>'
-        : '<span style="color:var(--mh-green)">✓ Router Home is up to date</span> <span style="color:var(--mh-text2)">(' + esc(MH_VERSION) + ')</span>';
+        : '<span style="color:var(--mh-green)">✓ Router Home is up to date</span> <span style="color:var(--mh-text2)">(' + esc(MH_VERSION) + (MH_BETA ? ' · <b style="color:var(--mh-orange)">beta</b>' : '') + ')</span>';
     },
     /* ---- Known vulnerabilities (2.6.5): Security card row → this window. Data: rpc vuln_status (vulncheck.lua). */
     openVuln: function(msg){
@@ -4849,15 +4854,25 @@ return {
         return rpc('machome', 'upd_check').then(function(r){
           if (!document.getElementById('machome-modal')) return;
           if (!r || !r.ok){ self.openModal(shell('<p>Couldn’t check for updates: ' + esc((r && r.err) || 'no answer from the router') + '.</p>' + self.updRollbackRow(st)), self.updHandlers()); return; }
-          try { localStorage.setItem('machome-updchk', String(Date.now())); localStorage.setItem('machome-updavail', r.newer ? r.latest : ''); } catch (e) {}
-          m.updAvail = r.newer ? r.latest : null; m.updChecked = true; self.updLine();
+          var nv = r.newer && !r.back;
+          try { localStorage.setItem('machome-updchk', String(Date.now())); localStorage.setItem('machome-updavail', nv ? r.latest : ''); } catch (e) {}
+          m.updAvail = nv ? r.latest : null; m.updChecked = true; m.updChan = r.channel || 'stable'; self.updLine();
+          var beta = r.channel === 'beta';
           var src ='<p style="font-size:12px;color:var(--mh-text2)">From <a href="' + MH_REPO + '/releases" target="_blank" rel="noopener" style="color:var(--mh-blue)">GitHub · xDarkHawkx/RouterHome</a>. Only updates signed with the Router Home release key can install.</p>';
-          if (r.none) return self.openModal(shell('<p>Installed: <b>Router Home ' + esc(r.current) + '</b>.</p><p>' + esc(r.msg) + '</p>' + src + self.updRollbackRow(st)), self.updHandlers());
-          if (!r.newer) return self.openModal(shell('<p>✓ You’re up to date: <b>Router Home ' + esc(r.current) + '</b> (latest on GitHub: ' + esc(r.latest) + ').</p>' + src + self.updRollbackRow(st)), self.updHandlers());
+          /* 2.7.1: update channel. Beta = also GitHub pre-releases (new features first, less tested). */
+          var chan = '<div class="mh-mgrp" style="text-align:left"><h4>Update channel</h4><div class="mh-mrow"><span><b>' + (beta ? 'Beta' : 'Stable') + '</b><small>' +
+            (beta ? 'You get beta versions (new features first, less tested) and stable ones, whichever is newer. Report beta bugs on Discord (README on GitHub).' : 'Only finished, tested releases. Switch to Beta to try new features early.') +
+            '</small></span><div class="mh-thm" role="group" aria-label="Update channel"><button data-m="chan" data-c="stable"' + (beta ? '' : ' class="on"') + '>Stable</button><button data-m="chan" data-c="beta"' + (beta ? ' class="on"' : '') + '>Beta</button></div></div></div>';
+          if (r.none) return self.openModal(shell('<p>Installed: <b>Router Home ' + esc(r.current) + '</b>.</p><p>' + esc(r.msg) + '</p>' + chan + src + self.updRollbackRow(st)), self.updHandlers());
+          if (!r.newer) return self.openModal(shell('<p>✓ You’re up to date: <b>Router Home ' + esc(r.current) + '</b> (latest ' + (beta ? 'version, beta or stable' : 'release') + ' on GitHub: ' + esc(r.latest) + ').</p>' + chan + src + self.updRollbackRow(st)), self.updHandlers());
           var when = r.published ? new Date(r.published).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-          var body = '<p>A new version is available: <b>Router Home ' + esc(r.latest) + '</b>' + (when ? ' (' + esc(when) + ')' : '') + '. You have ' + esc(r.current) + '.</p>' + notes(r.notes) +
+          var body = (r.back
+              ? '<p>You’re on the beta <b>Router Home ' + esc(r.current) + '</b> but the channel is now Stable. Install the latest stable version, <b>' + esc(r.latest) + '</b>' + (when ? ' (' + esc(when) + ')' : '') + ', to go back. Your settings are kept; features that only exist in the beta go away.</p>'
+              : '<p>A new ' + (r.prerelease ? '<b style="color:var(--mh-orange)">beta</b> ' : '') + 'version is available: <b>Router Home ' + esc(r.latest) + '</b>' + (when ? ' (' + esc(when) + ')' : '') + '. You have ' + esc(r.current) + '.</p>' +
+                (r.prerelease ? '<p style="font-size:12px;color:var(--mh-orange)">This is a beta: new features that are still being tested. If something misbehaves, “Go back to it” below returns to the version you have now.</p>' : '')) +
+            notes(r.notes) +
             (r.installable ? '<p style="font-size:12px">Installing takes about a minute. Your settings, history and alerts are kept. The current version is saved first, and if anything goes wrong it’s put back automatically.</p>'
-              : '<p style="color:var(--mh-orange)">This release has no signed update package, so it can’t install from here. Download the installer from GitHub instead.</p>') + src;
+              : '<p style="color:var(--mh-orange)">This release has no signed update package, so it can’t install from here. Download the installer from GitHub instead.</p>') + chan + src;
           self.openModal(shell(body, '<button data-m="cancel">Not now</button>' + (r.url ? '<a class="mh-btn sec" href="' + esc(r.url) + '" target="_blank" rel="noopener" style="margin:0 6px">View on GitHub</a>' : '') +
             (r.installable ? '<button class="pri" data-m="install">Install ' + esc(r.latest) + '</button>' : '')), self.updHandlers());
         });
@@ -4872,6 +4887,19 @@ return {
         install: function(md, b){ b.disabled = true; b.textContent = 'Starting…';
           rpcx('machome', 'upd_install', {}, 15000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'not started'); self.updProgress(); })
             .catch(function(e){ b.disabled = false; b.textContent = 'Install'; md.querySelector('[data-e]').textContent = 'Couldn’t start: ' + e.message; }); },
+        /* 2.7.1: Stable / Beta channel */
+        chan: function(md, b){
+          var c = b.getAttribute('data-c'); if (b.classList.contains('on')) return;
+          if (!confirm(c === 'beta'
+            ? 'Join the beta?\n\nBeta versions get new features first, but they’re less tested and might have bugs. They still only install when you press Install, must be signed with the Router Home key, and roll back by themselves if an install fails.\n\nYou can switch back to Stable any time.'
+            : 'Switch back to Stable?\n\nYou’ll only get finished releases. If you’re on a beta now, you’ll be offered the latest stable version.')) return;
+          b.disabled = true;
+          rpcx('machome', 'upd_channel', { channel: c }, 15000).then(function(r){
+            if (!r || !r.ok) throw new Error((r && r.err) || 'not saved');
+            try { localStorage.removeItem('machome-updchk'); localStorage.removeItem('machome-updavail'); } catch (e) {}
+            self.mh.updChan = c; self.toast(c === 'beta' ? 'Beta channel on' : 'Back on the Stable channel'); self.openUpdates();
+          }).catch(function(e){ b.disabled = false; md.querySelector('[data-e]').textContent = 'Couldn’t switch: ' + e.message; });
+        },
         rollback: function(md, b){ if (!confirm('Go back to the previous version of Router Home? Your settings are kept.')) return; b.disabled = true;
           rpcx('machome', 'upd_rollback', {}, 15000).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'not started'); self.updProgress(); })
             .catch(function(e){ b.disabled = false; md.querySelector('[data-e]').textContent = 'Couldn’t start: ' + e.message; }); }

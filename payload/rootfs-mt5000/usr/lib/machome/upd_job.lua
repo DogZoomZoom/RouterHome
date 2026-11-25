@@ -78,7 +78,9 @@ run("/etc/init.d/machome restart")
 step(85, "Checking that everything works…")
 local okh, why = healthy()
 local newv = sh("zcat /www/views/gl-sdk4-ui-machome.common.js.gz | grep -o \"MH_VERSION = '[^']*'\" | head -1"):match("'([^']+)'")
-if okInst and okh and newv == c.latest then done(nil, "Updated to " .. tostring(c.latest)) return end
+-- 2.7.1: compare letters and digits only, so a tag written "v2.8.0-beta1" still matches MH_VERSION "2.8.0-beta.1"
+local function vnorm(s) return tostring(s or ""):lower():gsub("[^%w]", "") end
+if okInst and okh and newv and vnorm(newv) == vnorm(c.latest) then done(nil, "Updated to " .. tostring(newv)) return end
 step(90, "Something went wrong; putting the previous version back…")
 restore(BK)
 done("the update didn't work (" .. (okInst and why or "the installer stopped with an error") .. "); the previous version was restored")

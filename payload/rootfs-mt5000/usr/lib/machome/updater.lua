@@ -17,12 +17,46 @@ U.readf, U.writef, U.sh = readf, writef, sh
 function U.installed()
     return sh("zcat /www/views/gl-sdk4-ui-machome.common.js.gz | grep -o \"MH_VERSION = '[^']*'\" | head -1"):match("'([^']+)'") or "0"
 end
--- "2.6" < "2.6.1" < "2.10"; a leading "v" is ignored
+-- ---------------------------------------------------------------- update channel (2.7.1)
+-- Stable (default): only normal GitHub releases (/releases/latest never returns a pre-release).
+-- Beta: GitHub releases marked "pre-release" too (tag like v2.8.0-beta.1), whichever is newest.
+-- Saved in /etc/machome/update.json; survives firmware upgrades with the rest of /etc/machome.
+local CHAN = "/etc/machome/update.json"
+function U.channel()
+    local ok, v = pcall(cjson.decode, readf(CHAN) or "{}")
+    return (ok and type(v) == "table" and v.channel == "beta") and "beta" or "stable"
+end
+function U.set_channel(ch)
+    if ch ~= "beta" and ch ~= "stable" then return { ok = false, err = "unknown channel" } end
+    os.execute("mkdir -p /etc/machome")
+    writef(CHAN, cjson.encode({ channel = ch, t = os.time() }))
+    os.remove(CHECK)   -- the last check was for the other channel
+    os.execute("logger -t machome 'updates: channel set to " .. ch .. "'")
+    return { ok = true, channel = ch }
+end
+-- "2.8.0-beta.1" -> {2,8,0}, "beta", 1.  "v2.6.3" / "v.2.6.3" -> {2,6,3}, nil
+local function vparse(s)
+    s = tostring(s or "")
+    local t = {}; for n in (s:match("%d+[%.%d]*") or ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end
+    local pre = s:match("%d[%-%.]?(%a+[%.%-]?%d*)%s*$")
+    return t, pre and pre:lower():match("^%a+") or nil, pre and tonumber(pre:match("(%d+)$")) or 0
+end
+function U.is_beta(s) local _, p = vparse(s); return p ~= nil end
+-- "2.6" < "2.6.1" < "2.10"; "2.8.0-beta.1" < "2.8.0-beta.2" < "2.8.0" (a stable release beats its betas)
 function U.newer(a, b)
-    local function parts(s) local t = {}; for n in tostring(s):gsub("^[vV]", ""):gmatch("%d+") do t[#t + 1] = tonumber(n) end; return t end
-    local x, y = parts(a), parts(b)
+    local x, xp, xn = vparse(a)
+    local y, yp, yn = vparse(b)
     for i = 1, math.max(#x, #y) do local u, v = x[i] or 0, y[i] or 0; if u ~= v then return u > v end end
-    return false
+    if xp == nil and yp == nil then return false end
+    if xp == nil then return true end
+    if yp == nil then return false end
+    if xp ~= yp then return xp > yp end   -- alpha < beta < rc
+    return xn > yn
+end
+-- the version inside a tag: "v2.8.0-beta.1" -> "2.8.0-beta.1", "v.2.6.3" / "Version 2.6.3" -> "2.6.3"
+function U.tag_version(tag)
+    tag = tostring(tag or "")
+    return tag:match("%d+[%.%d]*%d%-%a+[%.%-]?%d*") or tag:match("%d+[%.%d]*%d") or tag:match("%d+") or ""
 end
 local function pick_assets(rel)
     local pkg, sig
@@ -36,24 +70,40 @@ local function pick_assets(rel)
 end
 
 function U.check()
-    local cur = U.installed()
-    local out = sh("curl -s -m 20 -w '\\n%{http_code}' -A RouterHome-updater -H 'Accept: application/vnd.github+json' https://api.github.com/repos/" .. REPO .. "/releases/latest")
+    local cur, ch = U.installed(), U.channel()
+    -- Stable: /releases/latest (GitHub never returns a pre-release there). Beta: the newest of the last 20 releases,
+    -- pre-releases included (a stable release newer than every beta wins, so testers end up on it).
+    -- -L (2.7.1): the owner's GitHub account was renamed for a while (11-24) and GitHub answered the old name
+    -- with "301 Moved Permanently"; routers up to 2.7.0 didn't follow it, so their update check failed.
+    local out = sh("curl -s -L -m 20 -w '\\n%{http_code}' -A RouterHome-updater -H 'Accept: application/vnd.github+json' https://api.github.com/repos/" .. REPO ..
+        (ch == "beta" and "/releases?per_page=20" or "/releases/latest"))
     local body, code = out:match("^(.*)\n(%d%d%d)%s*$")
-    local res = { ok = true, current = cur, checked = os.time(), repo = REPO }
+    local res = { ok = true, current = cur, checked = os.time(), repo = REPO, channel = ch, current_beta = U.is_beta(cur) }
     if code == "404" then res.none = true; res.msg = "No releases have been published on GitHub yet."
-    elseif code ~= "200" then return { ok = false, current = cur, err = code and ("GitHub answered with error " .. code) or "couldn't reach GitHub (is the internet up?)" }
+    elseif code ~= "200" then return { ok = false, current = cur, channel = ch, err = code and ("GitHub answered with error " .. code) or "couldn't reach GitHub (is the internet up?)" }
     else
         local ok, rel = pcall(cjson.decode, body or "")
-        if not ok or type(rel) ~= "table" then return { ok = false, current = cur, err = "GitHub's answer couldn't be read" } end
+        if not ok or type(rel) ~= "table" then return { ok = false, current = cur, channel = ch, err = "GitHub's answer couldn't be read" } end
+        if ch == "beta" then
+            local best
+            for _, r in ipairs(rel) do
+                if type(r) == "table" and r.draft ~= true and U.tag_version(r.tag_name) ~= "" and (not best or U.newer(U.tag_version(r.tag_name), U.tag_version(best.tag_name))) then best = r end
+            end
+            if not best then res.none = true; res.msg = "No releases have been published on GitHub yet."; writef(CHECK, cjson.encode(res)); return res end
+            rel = best
+        end
         local pkg, sig = pick_assets(rel)
-        -- the version number inside the tag, whatever surrounds it ("v2.6.3", "v.2.6.3", "Version 2.6.3" → "2.6.3").
-        -- A tag typo ("v.2.6.3") once made a perfect install roll back because "2.6.3" ≠ ".2.6.3" (2026-11-22).
-        res.latest = tostring(rel.tag_name or ""):match("%d+[%.%d]*%d") or tostring(rel.tag_name or ""):match("%d+") or ""
+        -- the version number inside the tag, whatever surrounds it ("v2.6.3", "v.2.6.3", "Version 2.6.3" → "2.6.3";
+        -- "v2.8.0-beta.1" → "2.8.0-beta.1"). A tag typo ("v.2.6.3") once made a perfect install roll back (2026-11-22).
+        res.latest = U.tag_version(rel.tag_name)
+        res.prerelease = rel.prerelease == true or U.is_beta(res.latest)
         res.name = rel.name or cjson.null
         res.notes = tostring(rel.body or ""):sub(1, 6000)
         res.published = rel.published_at or cjson.null
         res.url = rel.html_url or cjson.null
         res.newer = U.newer(res.latest, cur)
+        -- back to Stable from a beta: offer the newest stable release even though it's an older number
+        if ch == "stable" and res.current_beta and not res.newer and res.latest ~= "" and res.latest ~= cur then res.newer = true; res.back = true end
         res.installable = (pkg ~= nil and sig ~= nil)
         res.pkg = pkg or cjson.null; res.sig = sig or cjson.null
     end
@@ -68,7 +118,7 @@ end
 function U.status()
     local ok, j = pcall(cjson.decode, readf(JOB) or "null"); j = (ok and type(j) == "table") and j or { running = false }
     if j.running and not job_alive() then j.running = false; j.err = j.err or "stopped unexpectedly" end
-    j.ok = true; j.current = U.installed()
+    j.ok = true; j.current = U.installed(); j.channel = U.channel()
     j.rollback = (sh("ls -t " .. B .. "/pre-update-*.tgz 2>/dev/null | head -1"):match("pre%-update%-([%w%.%-]+)%.tgz")) or cjson.null
     return j
 end

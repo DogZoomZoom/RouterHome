@@ -1,6 +1,6 @@
 {
-  "version": 3,
-  "updated": "2026-11-22",
+  "version": 4,
+  "updated": "2026-11-24",
   "about": "Router Home known-vulnerability list (GL.iNet security notices turned into checks). Signed with the Router Home release key; routers ignore a copy whose signature doesn't match. Format: docs/VULN-CHECKER.md in the Router Home project.",
   "advisories": [
     {
@@ -32,6 +32,24 @@
         "update": "No sign of infection, but this router's firmware is older than GL's security fix for this issue. Install the update from the Upgrade page (use the Home tab's firmware checklist first; Router Home survives with Keep settings).",
         "exposed": "No sign of infection, but the exploited service is on. GL has blocked the attack path; turning remote management off until the security firmware is installed removes the risk entirely. You can turn it back on in GL's Applications > GoodCloud page later.",
         "ok": "No signs of infection and GoodCloud remote management is off. GL still recommends installing the stable security firmware when it's offered."
+      }
+    },
+    {
+      "id": "GL-2026-11-24",
+      "title": "GL.iNet security advisories of Nov 24: NAS login bypass, remote terminal (rtty) root access and two more",
+      "published": "2026-11-24",
+      "severity": "high",
+      "link": "https://www.gl-inet.com/en-gb/blogs/security-updates/security-advisories-vulnerabilities-and-cves-nov-24-2026",
+      "summary": "GL.iNet published four vulnerabilities (no CVE numbers or severity given): a login bypass in GL's NAS sharing service gl_nas_sys (vdb-submit-1113491), root access through the remote terminal (rtty) settings with a TLS certificate check bypass (vdb-submit-1112986), a root command injection in the AstroWarp API (vdb-submit-1112997) and an EMQX authorization bypass leading to remote code execution (vdb-submit-1112985, used on GL's KVM devices). GL's advice: upgrade to the firmware that contains the fixes. GL lists no sign of infection and no factory reset.",
+      "models": ["*"],
+      "fixed_in": { "mt5000": "4.9.2" },
+      "firmware_note": "Fixed in 4.9.2 for the Brume 3 (GL-MT5000), per GL's release notes (\"Fixed vulnerability VDB-submit-1113491 and enhanced the security protection of NAS identity authentication\"). GL's table of fixed versions for other models doesn't line up on their page, so other models aren't listed here yet: install the update GL offers on the Upgrade page from 2026-11-24 or later. Router Home also reads GL's release notes and shows \"Firmware update needed\" when a new firmware for your model describes security fixes.",
+      "indicators": [],
+      "exposures": [],
+      "fixes": {},
+      "advice": {
+        "update": "This router's firmware is older than GL's fix. Install the update from the Upgrade page (use the Home tab's firmware checklist first; Router Home survives with Keep settings). Until then, if you don't use them, turn off NAS sharing (GL's Applications > Network Storage page) and GoodCloud's remote terminal.",
+        "ok": "This router's firmware has GL's fix, or GL hasn't confirmed a fixed version for this model yet. If GL's Upgrade page offers an update dated 2026-11-24 or later, install it; until then, turn off NAS sharing and GoodCloud's remote terminal if you don't use them."
       }
     }
   ]

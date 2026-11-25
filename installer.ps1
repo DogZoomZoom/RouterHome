@@ -83,7 +83,16 @@ function HostKeyHelp {
 if ($choice -eq "2") {
   Say ""
   Say "  You'll be asked for the router's admin password (it's not shown while you type)." Cyan
-  $cmd = "if [ -f /root/machome-backup/uninstall.sh ]; then sh /root/machome-backup/uninstall.sh; else echo 'The Home tab is not installed on this router.'; fi"
+  # (2026-11-24) GL firmware upgrades wipe /root, so the uninstaller there is often gone: try it, then the copy kept in
+  # /usr/lib/machome, then remove the files directly (same list as uninstall.sh). No double quotes (PS 5.1 strips them).
+  $cmd = 'if [ -f /root/machome-backup/uninstall.sh ]; then sh /root/machome-backup/uninstall.sh; ' +
+    'elif [ -f /usr/lib/machome/uninstall.sh ]; then sh /usr/lib/machome/uninstall.sh; ' +
+    'elif [ -f /usr/share/oui/menu.d/machome.json ] || [ -f /www/views/gl-sdk4-ui-machome.common.js.gz ]; then echo Removing the Home tab ...; ' +
+    '/etc/init.d/machome stop 2>/dev/null; /etc/init.d/machome disable 2>/dev/null; /etc/init.d/machome-st stop 2>/dev/null; killall speedtest 2>/dev/null; ' +
+    'rm -rf /usr/share/oui/menu.d/machome.json /www/views/gl-sdk4-ui-machome.common.js.gz /usr/lib/oui-httpd/rpc/machome /usr/bin/machome-sampler /usr/lib/machome /etc/init.d/machome ' +
+    '/usr/bin/machome-speedtest /etc/init.d/machome-st /usr/share/machome /root/.config/ookla /usr/share/gl-download.d/machome /usr/share/gl-validator.d/machome.lua /tmp/machome; ' +
+    'sed -i -e ''/machome/d'' -e ''\#/root/.config/ookla/#d'' /etc/sysupgrade.conf; /etc/init.d/nginx restart; echo Home tab removed - settings in /etc/machome kept.; ' +
+    'else echo The Home tab is not installed on this router.; fi'
   $rc = Run "ssh" ($sshOpts + @($target, $cmd))
   if ($rc -eq 255 -and (HostKeyHelp)) { $rc = Run "ssh" ($sshOpts + @($target, $cmd)) }
   if ($rc -eq 0) { Say "  Done." Green } else { Say "  Removal didn't finish (code $rc)." Red }

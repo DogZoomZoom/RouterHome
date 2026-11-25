@@ -490,6 +490,12 @@ Router Home updates
              (checked when the page opens, at most once an hour; it never installs by
              itself). The router also checks once a day on its own and sends one
              Discord message per new version (alert type "New Router Home version").
+             Update channel (2.7.1): Stable (the default) only gets finished releases.
+             Beta also gets versions marked as pre-releases on GitHub (like
+             2.8.0-beta.1): new features first, less tested, signed and rolled back
+             the same way. A beta shows BETA in the version line at the bottom of the
+             page. Switch back to Stable any time; you're then offered the latest
+             stable version (your settings are kept).
 
 Settings     Everything below opens in one SETTINGS window (Control Center > Settings
              > Open), grouped:

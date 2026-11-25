@@ -49,8 +49,9 @@ function V.load_adv()
 end
 function V.fetch_adv()
     local tmp = DIR .. "/adv_dl"
-    local c1 = sh("curl -s -m 25 -A RouterHome-vulncheck -o " .. tmp .. ".json -w '%{http_code}' " .. ADV_URL)
-    local c2 = sh("curl -s -m 25 -A RouterHome-vulncheck -o " .. tmp .. ".json.sig -w '%{http_code}' " .. ADV_URL .. ".sig")
+    -- -L (2.7.1): follow GitHub's redirect if the account or repo is renamed again (the list is signed either way)
+    local c1 = sh("curl -s -L -m 25 -A RouterHome-vulncheck -o " .. tmp .. ".json -w '%{http_code}' " .. ADV_URL)
+    local c2 = sh("curl -s -L -m 25 -A RouterHome-vulncheck -o " .. tmp .. ".json.sig -w '%{http_code}' " .. ADV_URL .. ".sig")
     local err
     if c1 == "404" then err = "no list on GitHub yet (the built-in one is used)"
     elseif c1 ~= "200" or c2 ~= "200" then err = "couldn't download the list from GitHub (" .. (c1 ~= "" and c1 or "no answer") .. ")"

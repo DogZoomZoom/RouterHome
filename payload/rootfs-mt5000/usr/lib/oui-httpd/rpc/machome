@@ -849,6 +849,8 @@ function M.upd_check() return upd().check() end
 function M.upd_status() return upd().status() end
 function M.upd_install() return upd().install() end
 function M.upd_rollback() return upd().rollback() end
+--- 2.7.1: update channel, args.channel = "stable" | "beta" (beta = GitHub pre-releases too)
+function M.upd_channel(args) return upd().set_channel(type(args) == "table" and args.channel or "") end
 --- one line: a Speed History series (label) or one "Past servers this week" entry (reliability key)
 function M.speedhist_remove(args)
     local P = more(); local label = type(args) == "table" and args.label

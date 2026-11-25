@@ -1057,9 +1057,10 @@ function X.rhupd_tick(now)
         rhu.checked = now - 86400 + 3600
     else
         rhu.checked = now; rhu.latest = r.latest
-        if r.newer and r.latest and r.latest ~= "" and rhu.notified ~= r.latest then
+        -- 2.7.1: follows the update channel (Beta = pre-releases too); no message for "go back to Stable" offers
+        if r.newer and not r.back and r.latest and r.latest ~= "" and rhu.notified ~= r.latest then
             local notes = tostring(r.notes or ""):gsub("\r", ""):sub(1, 900)
-            alert("rhupdate", "⬆ Router Home " .. r.latest .. " is available",
+            alert("rhupdate", "⬆ Router Home " .. (r.prerelease and "beta " or "") .. r.latest .. " is available",
                 "This router runs " .. tostring(r.current) .. ". Install it from **Control Center → Router Home updates**; it backs up first and goes back by itself if anything fails." ..
                 (r.installable and "" or "\nThis release has no signed update package, so use the installer from GitHub instead."), "purple",
                 { { name = "What's new", value = notes ~= "" and notes or "(no notes)", inline = false } })

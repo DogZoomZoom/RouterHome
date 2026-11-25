@@ -6,6 +6,41 @@ installer again and choose 1. Your settings (Discord webhook, weather ZIP, NAS b
 etc.) are kept either way.
 
 
+VERSION 2.8.0-beta.1  (2026-11-24, BETA: only for routers on the Beta update channel)
+-------------------------
+  - Notification providers: alerts can now go to Telegram, ntfy, Gmail, Slack and Home
+    Assistant as well as Discord. Settings → Notification providers has one card per
+    provider with step-by-step setup instructions, Send test, a pause switch and Remove.
+    Every alert goes to each provider that's on, at the same time; if one fails, only
+    that one is retried. "Discord alerts" in Settings is now called "Alerts".
+  - Telegram: create a bot with @BotFather, paste its token, press Start in the bot,
+    then "Find my chat ID" picks your chat.
+  - ntfy: "Make a random topic name", then subscribe to the same topic in the ntfy app.
+    High-priority push for red alerts. Your own ntfy server and access token work too.
+  - Gmail: use a separate Gmail account just for router alerts, with 2-Step
+    Verification and an app password. Mail goes over an encrypted connection to
+    Gmail's mail server, and its certificate is checked.
+  - Slack: an incoming webhook for the channel you pick.
+  - Home Assistant: a webhook automation (shown ready to copy, with a random ID) that
+    sends the alert to your phone through Home Assistant's notify service.
+  - Secrets (tokens, app password, webhook links) stay on the router, readable by its
+    admin account only, and are never shown on the page again.
+
+
+VERSION 2.7.1  (2026-11-24)
+-------------------------
+  - Beta channel: Control Center → Router Home updates → Update channel: Stable or Beta.
+    Stable (the default) works exactly as before. Beta also offers test versions of new
+    features (GitHub pre-releases like 2.8.0-beta.1) before everyone gets them. Betas
+    are signed and roll back by themselves like every update, and only install when you
+    press Install. A beta shows BETA in the version line at the bottom of the page.
+    Switch back to Stable any time to be offered the latest stable version.
+  - Updates: a release tag written slightly differently (for example v2.8.0-beta1
+    instead of v2.8.0-beta.1) no longer makes a good install roll back.
+  - Updates now follow GitHub's redirects, so a renamed GitHub page can't break
+    "Check" for updates (it briefly showed error 301 on 2026-11-24).
+
+
 VERSION 2.7.0  (2026-11-22)
 -------------------------
   More automatic security checks (Security card → Known vulnerabilities):
@@ -162,7 +197,7 @@ VERSION 2.6.1  (2026-11-22)
 VERSION 2.6  (2026-11-22)
 -------------------------
   - Updates from GitHub: Control Center → "Router Home updates" checks
-    github.com/xDarkHawkx/RouterHome for a newer release, shows what's new and installs
+    github.com/DogZoomZoom/RouterHome for a newer release, shows what's new and installs
     it in about a minute. Only updates signed with the Router Home release key install;
     a tampered download is refused. The current version is saved first and put back
     automatically if anything goes wrong ("Go back to it" restores it later). The page
