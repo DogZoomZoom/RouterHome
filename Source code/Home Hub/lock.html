@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home Hub is locked</title>
+<style>
+  :root {
+    --bg: #eef0f4; --card: #ffffff; --text: #1d2330; --muted: #5d6675; --line: #d9dde5;
+    --field: #f6f7f9; --accent: #3d7be8; --accent-text: #ffffff; --err: #c62828; --ok: #2e7d32;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #131417; --card: #1f2125; --text: #eceef2; --muted: #a2a8b3; --line: #34373e;
+      --field: #17191c; --accent: #5b92f0; --err: #ff7b72; --ok: #6fcf7a; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center; padding: 24px 16px; user-select: none; }
+  .card { width: 100%; max-width: 360px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 16px; padding: 30px 28px 24px; box-shadow: 0 10px 40px rgba(0,0,0,.10); text-align: center; }
+  .icon { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 14px; display: grid; place-items: center;
+    background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+  h1 { font: 600 20px/1.25 "Segoe UI Semibold", "Segoe UI", sans-serif; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+  label { display: block; text-align: left; font-size: 12.5px; color: var(--muted); margin: 12px 0 5px; }
+  input { width: 100%; padding: 10px 12px; font: 600 22px/1.2 "Segoe UI", sans-serif; letter-spacing: .35em;
+    text-align: center; color: var(--text); background: var(--field); border: 1px solid var(--line);
+    border-radius: 10px; outline: none; user-select: text; }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  button.primary { width: 100%; margin-top: 18px; font: 600 14px "Segoe UI", sans-serif; border-radius: 10px;
+    padding: 10px 18px; cursor: pointer; background: var(--accent); color: var(--accent-text); border: 1px solid var(--accent); }
+  button.primary:disabled { opacity: .55; cursor: default; }
+  .link { margin-top: 14px; background: none; border: 0; color: var(--muted); font: 12.5px "Segoe UI", sans-serif;
+    cursor: pointer; text-decoration: underline; }
+  #status { margin-top: 14px; font-size: 13px; min-height: 1.2em; white-space: pre-line; }
+  #status.err { color: var(--err); } #status.ok { color: var(--ok); } #status.info { color: var(--muted); }
+  .hide { display: none !important; }
+  @keyframes shake { 10%, 90% { transform: translateX(-2px); } 30%, 70% { transform: translateX(5px); } 50% { transform: translateX(-6px); } }
+  .shake { animation: shake .35s; }
+</style>
+</head>
+<body>
+<form class="card" id="form" autocomplete="off">
+  <div class="icon" aria-hidden="true">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+  </div>
+  <h1 id="title"></h1>
+  <p class="sub" id="sub"></p>
+
+  <div id="curRow"><label for="cur">Current PIN</label><input id="cur" type="password" inputmode="numeric" maxlength="8"></div>
+  <div id="pinRow"><label for="pin" id="pinLabel">PIN</label><input id="pin" type="password" inputmode="numeric" maxlength="8"></div>
+  <div id="confRow"><label for="conf">Confirm PIN</label><input id="conf" type="password" inputmode="numeric" maxlength="8"></div>
+
+  <button class="primary" id="go" type="submit"></button>
+  <div id="status" role="status"></div>
+  <button class="link" id="forgot" type="button">Forgot your PIN?</button>
+  <button class="link" id="nopin" type="button">Don’t use a PIN</button>
+  <button class="link" id="remove" type="button">Turn the PIN off</button>
+  <button class="link" id="cancel" type="button">Cancel</button>
+</form>
+<script>
+(function () {
+  var cfg = window.__cfg || {};
+  var mode = cfg.mode || 'unlock';     // 'set' | 'unlock' | 'change'
+  var $ = function (id) { return document.getElementById(id); };
+  var text = {
+    set:    ['Set a PIN for Home Hub', 'You’ll enter this PIN each time you open Home Hub. Use 4 to 8 digits.', 'New PIN', 'Set PIN'],
+    unlock: ['Home Hub is locked', 'Enter your PIN to continue. Router alerts keep working while it’s locked.', 'PIN', 'Unlock'],
+    change: ['Change your PIN', 'Enter your current PIN, then the new one (4 to 8 digits). To stop using a PIN, enter only the current one and choose Turn the PIN off.', 'New PIN', 'Change PIN']
+  }[mode];
+  $('title').textContent = text[0]; $('sub').textContent = text[1];
+  $('pinLabel').textContent = text[2]; $('go').textContent = text[3];
+  $('curRow').classList.toggle('hide', mode !== 'change');
+  $('confRow').classList.toggle('hide', mode === 'unlock');
+  $('forgot').classList.toggle('hide', mode !== 'unlock');
+  $('cancel').classList.toggle('hide', mode !== 'change');
+  $('nopin').classList.toggle('hide', mode !== 'set');
+  $('remove').classList.toggle('hide', mode !== 'change');
+  $('pin').parentNode.querySelector('label').classList.toggle('hide', mode === 'unlock');
+
+  ['cur', 'pin', 'conf'].forEach(function (id) {
+    $(id).addEventListener('input', function () { this.value = this.value.replace(/\D/g, '').slice(0, 8); });
+  });
+  function post(o) { o.nonce = cfg.nonce; window.chrome.webview.postMessage(JSON.stringify(o)); }
+  var timer = null;
+  window.hub = {
+    setStatus: function (msg, kind) { var s = $('status'); s.textContent = msg || ''; s.className = kind || 'info'; },
+    setBusy: function (b) { ['cur', 'pin', 'conf', 'go'].forEach(function (id) { $(id).disabled = !!b; }); },
+    wrong: function () {
+      var c = $('form'); c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake');
+      $('pin').value = ''; $('cur').value = ''; (mode === 'change' ? $('cur') : $('pin')).focus();
+    },
+    wait: function (seconds, msg) {
+      clearInterval(timer);
+      var left = seconds;
+      function tick() {
+        if (left <= 0) { clearInterval(timer); window.hub.setBusy(false); window.hub.setStatus('', 'info'); $('pin').focus(); return; }
+        window.hub.setBusy(true);
+        var m = Math.floor(left / 60), s = left % 60;
+        window.hub.setStatus((msg ? msg + '\n' : '') + 'Try again in ' + (m ? m + ' min ' : '') + s + ' s.', 'err');
+        left--;
+      }
+      tick(); timer = setInterval(tick, 1000);
+    }
+  };
+  if (cfg.message) window.hub.setStatus(cfg.message, cfg.kind || 'info');
+  if (cfg.wait > 0) window.hub.wait(cfg.wait, 'Too many wrong PINs.');
+
+  $('form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var pin = $('pin').value, conf = $('conf').value, cur = $('cur').value;
+    if (mode === 'change' && cur.length < 4) { window.hub.setStatus('Enter your current PIN.', 'err'); $('cur').focus(); return; }
+    if (pin.length < 4) { window.hub.setStatus('Use 4 to 8 digits.', 'err'); $('pin').focus(); return; }
+    if (mode !== 'unlock' && pin !== conf) {
+      window.hub.setStatus('The two PINs don’t match.', 'err'); $('conf').value = ''; $('conf').focus(); return;
+    }
+    post({ type: mode, pin: pin, current: cur });
+  });
+  $('forgot').addEventListener('click', function () { post({ type: 'forgot' }); });
+  $('cancel').addEventListener('click', function () { post({ type: 'cancel' }); });
+  $('nopin').addEventListener('click', function () { post({ type: 'nopin' }); });
+  $('remove').addEventListener('click', function () {
+    var cur = $('cur').value;
+    if (cur.length < 4) { window.hub.setStatus('Enter your current PIN to turn it off.', 'err'); $('cur').focus(); return; }
+    post({ type: 'remove', current: cur });
+  });
+  (mode === 'change' ? $('cur') : $('pin')).focus();
+})();
+</script>
+</body>
+</html>

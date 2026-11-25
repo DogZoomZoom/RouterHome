@@ -1,0 +1,1901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Weather</title>
+    <meta name="theme-color" content="#2E7BD6">
+    <link id="favicon" rel="icon" type="image/png" href="/icon.png">
+    
+    <!-- Libraries (bundled with Home Hub; see THIRD_PARTY_NOTICES.md) -->
+    <link rel="stylesheet" href="/tailwind.css">
+    <script src="/chart.umd.js"></script>
+    <script src="/suncalc.js"></script>
+    <script src="/icons.js"></script>
+    <style>
+        @font-face { font-family: 'Inter'; src: url('/InterVariable.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+    </style>
+
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            min-height: 100vh; 
+            overflow-x: hidden;
+            font-feature-settings: "cv11", "ss01";
+        }
+
+        /* --- Dynamic Background System --- */
+        #bg-canvas {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -3;
+            transition: opacity 1.5s ease-in-out;
+            opacity: 0.7;
+        }
+        
+        .noise-overlay {
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* --- Glassmorphism --- */
+        .glass-panel {
+            background-color: rgba(11, 15, 25, 0.75);
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
+            backdrop-filter: blur(24px) saturate(100%);
+            -webkit-backdrop-filter: blur(24px) saturate(100%);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .glass-panel:hover {
+            background-color: rgba(15, 23, 42, 0.85);
+            border-color: rgba(255, 255, 255, 0.08);
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        /* --- Smart Single-Page Bento Grid --- */
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 1rem; 
+            width: 100%;
+            max-width: 1800px; 
+            margin: 0 auto;
+            flex-grow: 1; 
+            min-height: 650px; 
+        }
+
+        @media (min-width: 1024px) {
+            .bento-grid {
+                grid-template-columns: repeat(12, 1fr);
+                grid-template-rows: max-content max-content minmax(220px, 1fr);
+            }
+            .area-main     { grid-column: 1 / 4; grid-row: 1 / 3; } 
+            .area-astro    { grid-column: 1 / 4; grid-row: 3 / 4; } 
+            .area-stats    { grid-column: 4 / 10; grid-row: 1 / 2; } 
+            .area-chart    { grid-column: 4 / 10; grid-row: 2 / 3; } 
+            .area-map      { grid-column: 4 / 10; grid-row: 3 / 4; } 
+            .area-air      { grid-column: 10 / 13; grid-row: 1 / 2; } 
+            .area-forecast { grid-column: 10 / 13; grid-row: 2 / 4; } 
+        }
+        
+        @media (max-width: 1023px) {
+            .area-main, .area-stats, .area-chart, .area-map, .area-air, .area-forecast, .area-astro {
+                grid-column: span 12;
+            }
+            .area-map { min-height: 400px; }
+            .area-chart { min-height: 300px; }
+        }
+
+        .weather-icon-anim {
+            filter: drop-shadow(0 0 25px rgba(56, 189, 248, 0.4));
+            animation: float 6s ease-in-out infinite;
+        }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+        
+        .detail-row {
+            transition: all 0.3s ease-in-out;
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+        }
+        .detail-row.open {
+            max-height: 250px;
+            opacity: 1;
+            margin-top: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+        
+        @keyframes lightning {
+            0%, 91%, 93%, 95%, 100% { opacity: 0; }
+            92%, 94% { opacity: 0.6; }
+        }
+        @keyframes drift {
+            0% { transform: translateX(-20vw); }
+            100% { transform: translateX(120vw); }
+        }
+    </style>
+    <!-- iOS theme (layered over the original design; Tailwind injects its styles later, hence the !important) -->
+    <style id="ios-theme">
+        html body.ios {
+            --ios-label: #fff;
+            --ios-2: rgba(255,255,255,.72);
+            --ios-3: rgba(255,255,255,.55);
+            --ios-sep: rgba(255,255,255,.16);
+            --ios-card: rgba(20, 34, 58, .24);
+            --ios-cyan: #64D2FF;
+            font-family: -apple-system, "SF Pro Text", "SF Pro Display", "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif !important;
+            background: #2E7BD6 !important;
+            color: var(--ios-label) !important;
+            -webkit-font-smoothing: antialiased;
+            font-feature-settings: "cv11", "ss01", "tnum";
+        }
+        body.ios .font-mono { font-family: inherit !important; font-variant-numeric: tabular-nums; }
+        body.ios .noise-overlay { display: none !important; }
+        body.ios #bg-canvas { opacity: 1 !important; transition: background 1.2s ease !important; }
+
+        /* frosted cards */
+        body.ios .glass-panel {
+            background: var(--ios-card) !important;
+            background-image: none !important;
+            backdrop-filter: blur(12px) saturate(150%) !important;
+            -webkit-backdrop-filter: blur(12px) saturate(150%) !important;
+            border: .5px solid rgba(255,255,255,.14) !important;
+            box-shadow: none !important;
+            border-radius: 18px !important;
+        }
+        body.ios .glass-panel:hover { background: var(--ios-card) !important; }
+        body.ios .hover\:scale-\[1\.02\]:hover, body.ios .hover\:scale-105:hover { transform: none !important; }
+
+        /* section headers: small caps, muted, hairline underneath */
+        body.ios .glass-panel h3 { color: var(--ios-3) !important; font-size: 12px !important; font-weight: 600 !important; letter-spacing: .02em !important; text-transform: uppercase; }
+        body.ios .glass-panel > h3 {
+            color: var(--ios-3) !important; font-size: 12px !important; font-weight: 600 !important;
+            letter-spacing: .02em !important; text-transform: uppercase;
+            padding-bottom: 8px; border-bottom: .5px solid var(--ios-sep); width: 100%;
+        }
+        body.ios .glass-panel h3 svg { color: var(--ios-3) !important; }
+        body.ios .ios-cap { color: var(--ios-3) !important; font-size: 12px !important; font-weight: 600 !important; letter-spacing: .02em !important; }
+        body.ios .ios-dot, body.ios .ios-hide { display: none !important; }
+
+        /* monochrome text */
+        body.ios .text-white { color: #fff !important; }
+        body.ios .text-slate-200, body.ios .text-slate-300 { color: rgba(255,255,255,.92) !important; }
+        body.ios .text-slate-400, body.ios .text-blue-200, body.ios .text-blue-400, body.ios .text-emerald-400,
+        body.ios .text-indigo-300, body.ios .text-amber-200 { color: var(--ios-2) !important; }
+        body.ios .text-slate-500, body.ios .text-slate-600, body.ios .text-slate-700 { color: var(--ios-3) !important; }
+        body.ios .border-white\/10, body.ios .border-white\/5 { border-color: var(--ios-sep) !important; }
+
+        /* header */
+        body.ios header h1 { background: none !important; -webkit-text-fill-color: #fff !important; color: #fff !important; font-weight: 600 !important; letter-spacing: -.01em !important; }
+        body.ios header h1 span { color: rgba(255,255,255,.7) !important; -webkit-text-fill-color: rgba(255,255,255,.7) !important; font-weight: 400; }
+        body.ios .ios-appicon { background: linear-gradient(180deg, #4FA3F7, #1D6FD8) !important; box-shadow: 0 2px 8px rgba(0,0,0,.18) !important; border-radius: 12px !important; }
+        body.ios .ios-pill { background: rgba(255,255,255,.14) !important; border: none !important; font-family: inherit !important; color: rgba(255,255,255,.85) !important; border-radius: 10px !important; }
+        body.ios .ios-searchbar { background: rgba(255,255,255,.14) !important; border: none !important; box-shadow: none !important; border-radius: 12px !important; backdrop-filter: blur(20px) !important; }
+        body.ios #city-search { background: transparent !important; border: none !important; box-shadow: none !important; font-size: 15px !important; color: #fff !important; }
+        body.ios #city-search::placeholder { color: rgba(255,255,255,.6) !important; }
+        body.ios #search-history, body.ios #toast-host .glass-panel { background: rgba(28, 36, 52, .82) !important; backdrop-filter: blur(30px) saturate(170%) !important; border: .5px solid rgba(255,255,255,.14) !important; }
+        body.ios #unit-toggle { font-family: inherit !important; border: none !important; color: rgba(255,255,255,.85) !important; }
+
+        /* current conditions, iOS-style hero */
+        body.ios .ios-hero-city { font-size: clamp(28px, 2.6vw, 34px); font-weight: 400; letter-spacing: .01em; line-height: 1.1; }
+        body.ios .ios-hero-temp { font-size: clamp(76px, 7.2vw, 104px) !important; font-weight: 200 !important; line-height: 1 !important; letter-spacing: -.02em !important;
+            background: none !important; -webkit-text-fill-color: #fff !important; color: #fff !important; font-family: inherit !important; margin-left: .18em; }
+        body.ios .ios-hero-deg { font-size: inherit; font-weight: 200; }
+        body.ios .ios-hero-cond { font-size: 20px !important; font-weight: 500 !important; border: none !important; background: none !important; box-shadow: none !important; padding: 0 !important; color: rgba(255,255,255,.85) !important; text-transform: none !important; letter-spacing: 0 !important; }
+        body.ios .ios-hero-hilo { font-size: 20px; font-weight: 500; color: #fff; }
+        body.ios .ios-tile { background: rgba(255,255,255,.10) !important; border: none !important; backdrop-filter: none !important; border-radius: 16px !important; }
+        body.ios .ios-tile p:first-child { color: var(--ios-3) !important; font-size: 12px !important; font-weight: 600 !important; letter-spacing: .02em !important; }
+        body.ios .ios-tile p:last-child { font-size: 28px !important; font-weight: 400 !important; }
+        body.ios .weather-icon-anim { filter: none !important; animation: none !important; }
+
+        /* stat tiles: big light numbers like iOS widgets */
+        body.ios .area-stats .glass-panel p[id] { font-weight: 400 !important; }
+        body.ios #wind-speed, body.ios #uv-index, body.ios #humidity, body.ios #visibility { font-size: 28px !important; font-weight: 400 !important; }
+        body.ios #uv-text { background: none !important; border: none !important; padding: 0 !important; font-size: 16px !important; font-weight: 600 !important; color: #fff !important; }
+        body.ios #uv-bar { background: linear-gradient(90deg, #30D158, #FFD60A, #FF9F0A, #FF453A, #BF5AF2) !important; }
+        body.ios .area-stats .glass-panel > div:first-child { opacity: .06 !important; }
+
+        /* segmented control */
+        body.ios .ios-seg { background: rgba(255,255,255,.14) !important; border: none !important; border-radius: 9px !important; padding: 2px !important; }
+        body.ios .ios-seg button { white-space: nowrap; border-radius: 7px !important; font-size: 12px !important; font-weight: 600 !important; padding: 3px 12px !important; color: rgba(255,255,255,.8) !important; background: transparent !important; box-shadow: none !important; text-transform: none; }
+        body.ios .ios-seg button.on { background: rgba(255,255,255,.32) !important; color: #fff !important; box-shadow: 0 1px 3px rgba(0,0,0,.15) !important; }
+
+        /* daily list */
+        body.ios .ios-row { display: grid; grid-template-columns: 3.6rem 2.2rem 2.3rem minmax(60px, 1fr) 2.3rem; align-items: center; gap: .55rem;
+            padding: .7rem .25rem; border-top: .5px solid var(--ios-sep); cursor: pointer; }
+        body.ios .group:first-child .ios-row { border-top: none; }
+        body.ios .ios-row .day { font-size: 17px; font-weight: 500; }
+        body.ios .ios-row .ic { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+        body.ios .ios-row .pp { color: var(--ios-cyan); font-size: 12px; font-weight: 600; margin-top: 2px; }
+        body.ios .ios-row .lo { text-align: right; font-size: 17px; color: var(--ios-3); }
+        body.ios .ios-row .hi { text-align: right; font-size: 17px; font-weight: 500; }
+        body.ios .ios-bar { position: relative; height: 5px; border-radius: 3px; background: rgba(0,0,0,.22); }
+        body.ios .ios-bar .fill { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+        body.ios .ios-bar .now { position: absolute; top: 50%; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1.5px rgba(0,0,0,.25); }
+        body.ios .ios-row .chev { display: none; }
+        body.ios .ios-row:hover { background: rgba(255,255,255,.06); border-radius: 10px; }
+        body.ios .detail-row { background: rgba(255,255,255,.07) !important; border-radius: 12px !important; }
+
+        /* radar + air quality + astronomy */
+        body.ios #radar-frame { opacity: 1 !important; filter: none !important; border-radius: 14px !important; }
+        body.ios .area-map .bg-slate-900\/80 { background: rgba(20,34,58,.45) !important; backdrop-filter: blur(20px) !important; border: none !important; }
+        body.ios .radar-btn { background: rgba(20,34,58,.45) !important; border: none !important; border-radius: 9px !important; color: #fff !important; backdrop-filter: blur(20px) !important; }
+        body.ios .radar-btn.active { background: rgba(255,255,255,.35) !important; }
+        body.ios #astro-orb { background: rgba(255,255,255,.18) !important; border: none !important; backdrop-filter: blur(10px); }
+        body.ios #moon-phase-text { font-family: inherit !important; letter-spacing: .02em !important; }
+        body.ios footer { color: rgba(255,255,255,.5) !important; }
+        body.ios .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.25); }
+
+        /* dark mode: deeper frosted glass, dimmed scenes, softer whites */
+        body.ios.dark { --ios-card: rgba(12, 14, 20, .58); --ios-sep: rgba(255,255,255,.10); --ios-2: rgba(255,255,255,.66); --ios-3: rgba(255,255,255,.48); }
+        body.ios.dark.scene-light { --ios-card: rgba(12, 14, 20, .62); }
+        body.ios.dark #bg-canvas { filter: brightness(.52) saturate(.85); }
+        body.ios.dark #weather-canvas { opacity: .7; }
+        body.ios.dark .glass-panel { border-color: rgba(255,255,255,.07) !important; backdrop-filter: blur(16px) saturate(130%) !important; -webkit-backdrop-filter: blur(16px) saturate(130%) !important; }
+        body.ios.dark .ios-tile { background: rgba(255,255,255,.06) !important; }
+        body.ios.dark .text-white, body.ios.dark .ios-hero-temp, body.ios.dark .ios-hero-hilo { color: rgba(255,255,255,.92) !important; -webkit-text-fill-color: rgba(255,255,255,.92) !important; }
+        body.ios.dark .ios-searchbar, body.ios.dark .ios-pill, body.ios.dark .ios-seg { background: rgba(0,0,0,.30) !important; }
+        body.ios.dark .ios-appicon { filter: brightness(.85); }
+        body.ios.dark .area-main, body.ios.dark header h1, body.ios.dark footer { text-shadow: none !important; }
+        body.ios.dark .ios-bar { background: rgba(255,255,255,.10); }
+        body.ios.dark footer { color: rgba(255,255,255,.4) !important; }
+
+        /* Week Ahead (fills the space under the daily list) */
+        body.ios .week-ahead { flex: 1 1 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 10px;
+            margin-top: 6px; padding-top: 12px; border-top: .5px solid var(--ios-sep); }
+        body.ios .week-ahead.hidden { display: none; }
+        body.ios .week-summary { font-size: 14px; line-height: 1.5; color: rgba(255,255,255,.9); }
+        body.ios .week-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        body.ios .week-chip { background: rgba(255,255,255,.08); border-radius: 12px; padding: 9px 11px; min-width: 0; }
+        body.ios.dark .week-chip { background: rgba(255,255,255,.05); }
+        body.ios .week-chip .lbl { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--ios-3); display: flex; align-items: center; gap: 5px; }
+        body.ios .week-chip .val { font-size: 17px; font-weight: 600; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        body.ios .week-chip .sub { font-size: 12px; color: var(--ios-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        body.ios .week-ahead.compact .week-chip { padding: 6px 10px; }
+        body.ios .week-ahead.compact .week-chip .sub { display: none; }
+        body.ios .week-ahead.compact .week-chip .val { font-size: 15px; }
+        body.ios .week-ahead.clamp .week-summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--lines, 3); overflow: hidden; }
+
+        /* weather scene picker */
+        body.ios #scene-pop { background: rgba(28, 36, 52, .86); backdrop-filter: blur(30px) saturate(170%); -webkit-backdrop-filter: blur(30px) saturate(170%);
+            border: .5px solid rgba(255,255,255,.14); border-radius: 14px; overflow: hidden; box-shadow: 0 18px 40px rgba(0,0,0,.25); }
+        body.ios .scene-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; font-size: 13px; font-weight: 600; border-bottom: .5px solid var(--ios-sep); }
+        body.ios .scene-night { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 8px; background: rgba(255,255,255,.12); color: rgba(255,255,255,.85); }
+        body.ios .scene-night.on { background: rgba(255,255,255,.32); color: #fff; }
+        body.ios .scene-list { max-height: min(60vh, 520px); overflow-y: auto; padding: 4px 6px 8px; }
+        body.ios .scene-group { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--ios-3); padding: 10px 8px 4px; }
+        body.ios .scene-opt { display: block; width: 100%; text-align: left; font-size: 14px; padding: 6px 8px; border-radius: 8px; color: #fff; }
+        body.ios .scene-opt:hover { background: rgba(255,255,255,.10); }
+        body.ios .scene-opt.on { background: rgba(255,255,255,.22); font-weight: 600; }
+
+        /* bright scenes (fog, snow, dust, heat…): deeper cards and a soft shadow keep white text readable */
+        body.ios.scene-light { --ios-card: rgba(30, 40, 56, .38); }
+        body.ios.scene-light .area-main { text-shadow: 0 1px 6px rgba(0,0,0,.28); }
+        body.ios.scene-light footer { color: rgba(255,255,255,.85) !important; }
+        body.ios.scene-light footer span { color: rgba(255,255,255,.85) !important; }
+        body.ios.scene-light header h1, body.ios.scene-light footer { text-shadow: 0 1px 4px rgba(0,0,0,.3); }
+        body.ios[data-scene="golden"] .area-main, body.ios[data-scene="heat"] .area-main { text-shadow: 0 1px 6px rgba(0,0,0,.25); }
+    </style>
+</head>
+<body class="ios flex flex-col p-3 md:p-4 relative selection:bg-white/30">
+    <script>
+        (function () {
+            var v = null; try { v = localStorage.getItem('yw_dark'); } catch (e) {}
+            var dark = v === null ? (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) : v === '1';
+            if (dark) document.body.classList.add('dark');
+        })();
+    </script>
+
+    <!-- Background Layers -->
+    <div id="bg-canvas" class="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950"></div>
+    <canvas id="weather-canvas" class="fixed inset-0 pointer-events-none z-[-2]"></canvas>
+    <div id="css-effects" class="fixed inset-0 pointer-events-none z-[-2] overflow-hidden"></div>
+    <div class="noise-overlay"></div>
+
+    <!-- Header (Tighter Margins) -->
+    <header class="w-full max-w-[1800px] mx-auto flex-none flex items-center justify-between gap-4 mb-4 z-50 relative">
+        <div class="flex items-center gap-4">
+            <div class="ios-appicon w-10 h-10 md:w-11 md:h-11 rounded-xl flex items-center justify-center">
+                <i data-lucide="cloud-sun" class="w-5 h-5 md:w-6 md:h-6 text-white"></i>
+            </div>
+            <div class="flex items-center gap-3 md:gap-4">
+                <h1 class="font-bold text-xl md:text-2xl tracking-tighter">Your Weather</h1>
+                <div class="ios-pill hidden md:flex items-center gap-2 text-sm px-3 py-1">
+                    <span id="clock">--:--</span>
+                    <span class="w-1 h-1 bg-slate-500 rounded-full"></span>
+                    <span id="current-date-header">--</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="ios-searchbar flex items-center gap-2 p-1.5">
+            <div class="relative group w-40 md:w-72">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 group-focus-within:text-blue-400 transition-colors"></i>
+                </div>
+                <input type="text" id="city-search" 
+                    class="w-full bg-slate-950/50 border border-transparent hover:border-white/10 text-white text-sm rounded-xl pl-9 pr-4 py-1.5 focus:bg-slate-900 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/50 transition-all placeholder-slate-500" 
+                    placeholder="Search for a city">
+                <div id="search-history" class="absolute top-full mt-2 left-0 w-full bg-[#0f172a]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden hidden z-50"></div>
+            </div>
+            <div class="h-6 w-[1px] bg-white/10 mx-0.5"></div>
+            <button id="locate-btn" class="p-1.5 hover:bg-white/5 rounded-xl text-slate-400 hover:text-blue-400 transition-colors" title="Locate me">
+                <i data-lucide="crosshair" class="w-4 h-4 md:w-5 md:h-5"></i>
+            </button>
+            <button id="dark-btn" class="p-1.5 hover:bg-white/5 rounded-xl text-white/80 transition-colors" title="Dark mode"></button>
+            <div class="relative">
+                <button id="scene-btn" class="p-1.5 hover:bg-white/5 rounded-xl text-white/80 transition-colors" title="Weather scenes">
+                    <i data-lucide="sparkles" class="w-4 h-4 md:w-5 md:h-5"></i>
+                </button>
+                <div id="scene-pop" class="hidden absolute right-0 top-full mt-3 w-60 z-50">
+                    <div class="scene-head"><span>Weather scenes</span><button id="scene-night" class="scene-night" title="Show the night version">Night</button></div>
+                    <div id="scene-list" class="scene-list custom-scrollbar"></div>
+                </div>
+            </div>
+            <button id="unit-toggle" class="px-2 md:px-3 py-1 hover:bg-white/5 rounded-xl text-slate-400 font-mono text-xs md:text-sm font-bold transition-colors border border-white/5 hover:border-white/10">
+                °F
+            </button>
+        </div>
+    </header>
+
+    <!-- Severe weather alerts (filled by JS) -->
+    <div id="alert-banner" class="hidden w-full max-w-[1800px] mx-auto mb-3 relative z-40"></div>
+    <!-- Toasts -->
+    <div id="toast-host" class="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Main Dashboard Grid -->
+    <main class="bento-grid relative z-10">
+        
+        <!-- 1. Current Weather (iOS-style hero) -->
+        <div class="glass-panel area-main rounded-[2rem] p-5 flex flex-col justify-between relative overflow-hidden">
+            <div class="flex justify-end">
+                <button id="refresh-btn" title="Refresh (R)" class="text-white/70 hover:text-white transition-colors p-1.5 rounded-full hover:bg-white/10">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <div class="flex flex-col items-center justify-center flex-grow text-center -mt-4">
+                <div class="ios-cap uppercase flex items-center gap-1"><i data-lucide="navigation" class="w-3 h-3"></i> My Location</div>
+                <h2 id="location-name" class="ios-hero-city text-white mt-1">Loading…</h2>
+                <div id="weather-icon-lg" class="ios-hide"><i data-lucide="loader-2" class="w-16 h-16"></i></div>
+                <div class="flex items-start mt-1">
+                    <span id="current-temp" class="ios-hero-temp">-</span><span class="ios-hero-temp ios-hero-deg" style="margin-left:0">°</span>
+                </div>
+                <p id="weather-desc" class="ios-hero-cond">--</p>
+                <p id="hilo" class="ios-hero-hilo mt-0.5">H:--° &nbsp;L:--°</p>
+                <p id="daily-summary" class="text-[13px] text-center text-white/80 mt-5 px-2 leading-relaxed animate-pulse">
+                    Loading detailed forecast…
+                </p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mt-4">
+                <div class="ios-tile p-3 text-left">
+                    <p class="uppercase mb-1">Feels Like</p>
+                    <p id="feels-like" class="text-white">--</p>
+                </div>
+                <div class="ios-tile p-3 text-left">
+                    <p class="uppercase mb-1">Dew Point</p>
+                    <p id="dew-point" class="text-white">--</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Quick Stats Row -->
+        <div class="area-stats grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <!-- Wind -->
+            <div class="glass-panel rounded-[1.5rem] p-4 flex flex-col justify-between relative overflow-hidden group">
+                <div class="absolute right-0 top-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <i data-lucide="wind" class="w-10 h-10 rotate-12"></i>
+                </div>
+                <div class="ios-cap uppercase flex items-center gap-1.5">
+                    <span class="ios-dot"></span> Wind
+                </div>
+                <div class="mt-1 relative z-10">
+                    <p id="wind-speed" class="text-xl font-bold font-mono text-white leading-none">--</p>
+                    <p id="wind-dir" class="text-[11px] text-slate-500 mt-1 font-medium leading-none">--</p>
+                </div>
+            </div>
+            <!-- UV -->
+            <div class="glass-panel rounded-[1.5rem] p-4 flex flex-col justify-between relative overflow-hidden group">
+                 <div class="absolute right-0 top-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <i data-lucide="sun" class="w-10 h-10 rotate-12"></i>
+                </div>
+                <div class="ios-cap uppercase flex items-center gap-1.5">
+                    <span class="ios-dot"></span> UV Index
+                </div>
+                <div class="mt-1 relative z-10 w-full">
+                    <div class="flex items-baseline gap-2 leading-none">
+                        <p id="uv-index" class="text-xl font-bold font-mono text-white">--</p>
+                        <p id="uv-text" class="text-[10px] text-amber-200 font-medium px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">--</p>
+                    </div>
+                    <div class="w-full h-1 bg-slate-800 mt-2 rounded-full overflow-hidden">
+                        <div id="uv-bar" class="h-full bg-gradient-to-r from-teal-400 via-amber-400 to-red-500 w-0 transition-all duration-1000"></div>
+                    </div>
+                </div>
+            </div>
+            <!-- Humidity -->
+            <div class="glass-panel rounded-[1.5rem] p-4 flex flex-col justify-between relative overflow-hidden group">
+                <div class="absolute right-0 top-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <i data-lucide="droplet" class="w-10 h-10 rotate-12"></i>
+                </div>
+                <div class="ios-cap uppercase flex items-center gap-1.5">
+                    <span class="ios-dot"></span> Humidity
+                </div>
+                <div class="mt-1 relative z-10">
+                    <p id="humidity" class="text-xl font-bold font-mono text-white leading-none">--</p>
+                    <p class="text-[11px] text-slate-500 mt-1 leading-none">Dew Point: <span id="stat-dew" class="text-slate-400">--</span></p>
+                </div>
+            </div>
+            <!-- Visibility -->
+            <div class="glass-panel rounded-[1.5rem] p-4 flex flex-col justify-between relative overflow-hidden group">
+                 <div class="absolute right-0 top-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <i data-lucide="eye" class="w-10 h-10 rotate-12"></i>
+                </div>
+                <div class="ios-cap uppercase flex items-center gap-1.5">
+                    <span class="ios-dot"></span> Visibility
+                </div>
+                <div class="mt-1 relative z-10">
+                    <p id="visibility" class="text-xl font-bold font-mono text-white leading-none">--</p>
+                    <p id="pressure" class="text-[11px] text-slate-500 mt-1 leading-none">Pressure --</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Air Quality -->
+        <div class="glass-panel area-air rounded-[1.5rem] p-4 flex flex-row items-center gap-3">
+            <div class="flex items-center gap-3 border-r border-white/10 pr-3">
+                <div id="panel-aqi-ring" class="w-10 h-10 rounded-full border-[3px] border-slate-700 flex items-center justify-center font-bold text-sm text-white">--</div>
+                <div>
+                    <p class="ios-cap uppercase leading-none mb-1">Air Quality</p>
+                    <p class="text-base font-bold text-white leading-none" id="panel-aqi-desc">Loading</p>
+                </div>
+            </div>
+            <div class="flex-grow grid grid-cols-2 sm:grid-cols-4 gap-1 w-full text-center">
+                <div class="flex flex-col"><span class="text-[9px] text-slate-500 uppercase mb-0.5">PM2.5</span><span class="text-xs font-bold text-slate-200" id="aqi-pm25">--</span></div>
+                <div class="flex flex-col"><span class="text-[9px] text-slate-500 uppercase mb-0.5">PM10</span><span class="text-xs font-bold text-slate-200" id="aqi-pm10">--</span></div>
+                <div class="flex flex-col"><span class="text-[9px] text-slate-500 uppercase mb-0.5">O3</span><span class="text-xs font-bold text-slate-200" id="aqi-o3">--</span></div>
+                <div class="flex flex-col"><span class="text-[9px] text-slate-500 uppercase mb-0.5">NO2</span><span class="text-xs font-bold text-slate-200" id="aqi-no2">--</span></div>
+            </div>
+        </div>
+
+        <!-- 4. Hourly Chart (Shrunk Height) -->
+        <div class="glass-panel area-chart rounded-[2rem] p-4 flex flex-col min-h-[170px]">
+            <div class="flex items-center justify-between mb-1.5">
+                <div class="flex items-center gap-2">
+                    <h3 class="font-bold text-slate-200 flex items-center gap-1.5 text-xs uppercase tracking-wider">
+                        <i data-lucide="trending-up" class="w-3.5 h-3.5 text-emerald-400"></i> 
+                        <span id="chart-title">24-Hour Trend</span>
+                    </h3>
+                    <div class="ios-seg flex ml-2">
+                        <button id="btn-chart-24h" class="on" onclick="switchChart('hourly')">24H</button>
+                        <button id="btn-chart-7d" class="" onclick="switchChart('daily')">7 Days</button>
+                    </div>
+                </div>
+            </div>
+            <!-- Canvas container automatically fills remaining space nicely -->
+            <div class="relative flex-1 min-h-0 w-full mt-1">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+
+        <!-- 5. Radar Map (Shrunk Height) -->
+        <div class="glass-panel area-map rounded-[2rem] p-1.5 relative overflow-hidden group flex flex-col min-h-[220px]">
+            <div class="absolute top-3 left-3 z-20 flex gap-2">
+                 <div class="bg-slate-900/80 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/10 flex items-center gap-1.5 shadow-xl">
+                    <span class="relative flex h-1.5 w-1.5">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                    </span>
+                    <span class="text-[11px] font-bold text-white tracking-wide">LIVE RADAR</span>
+                </div>
+            </div>
+            <div class="absolute top-3 right-3 z-20 flex flex-col gap-1.5">
+                <button class="radar-btn active w-7 h-7 flex items-center justify-center bg-blue-600 text-white rounded-md shadow-lg border border-blue-400 hover:scale-105 transition-transform" data-layer="radar" title="Precipitation">
+                    <i data-lucide="cloud-rain" class="w-3.5 h-3.5"></i>
+                </button>
+                <button class="radar-btn w-7 h-7 flex items-center justify-center bg-slate-900/80 text-slate-300 rounded-md shadow-lg border border-white/10 hover:bg-slate-800 transition-colors" data-layer="wind-10m" title="Wind">
+                    <i data-lucide="wind" class="w-3.5 h-3.5"></i>
+                </button>
+            </div>
+            <iframe id="radar-frame" class="w-full h-full rounded-[1.5rem] opacity-75 group-hover:opacity-100 transition-opacity duration-500 grayscale-[30%] group-hover:grayscale-0" src="" frameborder="0"></iframe>
+        </div>
+
+        <!-- 6. 7-Day Forecast (Dead Space Removed, Text Increased) -->
+        <div class="glass-panel area-forecast rounded-[2rem] p-4 flex flex-col min-h-0">
+            <h3 class="font-bold text-slate-200 mb-2 flex items-center gap-1.5 text-xs uppercase tracking-wider flex-none">
+                <i data-lucide="calendar-days" class="w-3.5 h-3.5"></i> 7-Day Forecast
+            </h3>
+            <!-- Removed justify-between. The JS will now pad the items to fill naturally -->
+            <div id="forecast-list" class="flex flex-col overflow-y-auto pr-1 custom-scrollbar" style="flex: 0 1 auto; min-height: 0;">
+                <div class="text-center text-xs text-slate-500 py-4">Loading...</div>
+            </div>
+            <section id="week-ahead" class="week-ahead hidden">
+                <h4 class="ios-cap uppercase flex items-center gap-1.5"><i data-lucide="calendar-range" class="w-3.5 h-3.5"></i> Week Ahead</h4>
+                <p id="week-summary" class="week-summary"></p>
+                <div id="week-chips" class="week-chips"></div>
+            </section>
+        </div>
+
+        <!-- 7. Astronomy -->
+        <div class="glass-panel area-astro rounded-[2rem] p-4 relative overflow-hidden flex flex-col justify-between">
+             <h3 class="font-bold text-slate-200 mb-1 flex items-center gap-1.5 text-xs uppercase tracking-wider">
+                <i data-lucide="moon-star" class="w-3.5 h-3.5 text-indigo-400"></i> Astronomy
+            </h3>
+            
+            <div class="flex-grow flex flex-col justify-center relative">
+                <!-- Arc Visual Wrapper (Slightly shorter) -->
+                <div class="relative h-16 w-full max-w-[240px] mx-auto mt-2">
+                    <div class="absolute bottom-0 left-0 flex flex-col items-center z-10">
+                         <span id="astro-start-label" class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Sunrise</span>
+                         <span id="astro-start-time" class="text-xs font-mono text-slate-300">--:--</span>
+                    </div>
+                    <div class="absolute bottom-0 right-0 flex flex-col items-center z-10">
+                         <span id="astro-end-label" class="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-0.5">Sunset</span>
+                         <span id="astro-end-time" class="text-xs font-mono text-slate-300">--:--</span>
+                    </div>
+                    
+                    <div class="absolute top-0 bottom-1 left-12 right-12">
+                        <svg class="w-full h-full overflow-visible" viewBox="0 0 200 100" preserveAspectRatio="none">
+                            <path d="M 0 100 A 100 100 0 0 1 200 100" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"></path>
+                        </svg>
+                        <div id="astro-orb" class="absolute w-6 h-6 flex items-center justify-center bg-slate-900 rounded-full border border-white/10 shadow-lg z-20 transition-all duration-700" style="transform: translate(-50%, 50%);">
+                            <i data-lucide="sun" class="w-3.5 h-3.5 text-amber-400"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-1 border-t border-white/10 pt-3 mt-2">
+                <div class="flex flex-col items-center text-center">
+                    <span class="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Daylight</span>
+                    <span id="daylight-duration" class="text-xs font-bold text-white">--h --m</span>
+                </div>
+                <div class="flex flex-col items-center text-center border-l border-white/10">
+                    <span class="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Moonrise</span>
+                    <span id="moonrise-time" class="text-xs font-bold text-white">--:--</span>
+                </div>
+                <div class="flex flex-col items-center text-center border-l border-white/10">
+                    <span class="text-[10px] text-slate-500 uppercase tracking-wider mb-0.5">Phase</span>
+                    <span id="moon-illumination" class="text-xs font-bold text-indigo-300">--%</span>
+                </div>
+            </div>
+            <div id="moon-phase-text" class="text-center text-[11px] text-slate-600 mt-2 font-mono uppercase tracking-widest leading-none">--</div>
+        </div>
+
+    </main>
+    
+    <footer class="text-center text-slate-700 text-[10px] uppercase tracking-widest py-2 mt-2 relative z-10 flex-none">
+        <p>Your Weather • NOAA • Open-Meteo • OpenStreetMap • Ventusky <span id="updated" class="ml-2 text-slate-600"></span></p>
+    </footer>
+
+    <!-- Logic -->
+    <script>
+        // --- Configuration & State ---
+        const CONFIG = {
+            defaultLat: 38.8951,   // Washington, DC: only used when the location can't be found
+            defaultLon: -77.0364,
+            units: localStorage.getItem('weather_units') || 'imperial',
+            refreshMs: 15 * 60 * 1000
+        };
+
+        let state = {
+            lat: null, lon: null, city: null, region: null, tz: null,
+            weatherData: null, hourlyData: [], dailyData: [],
+            meteo: null, aqi: null, alerts: [], updatedAt: null,
+            requestId: 0, radarLayer: 'radar', radarUrl: null,
+            chartMode: 'hourly', chartInstance: null
+        };
+
+        const $ = (id) => document.getElementById(id);
+        const safeJSON = (k, fallback) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? fallback : v; } catch (e) { return fallback; } };
+        const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+        // Times are shown in the *forecast location's* time zone, not the computer's.
+        const formatTime = (date) => new Date(date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: state.tz || undefined });
+        const formatWhen = (date) => new Date(date).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: state.tz || undefined });
+        const hourLabel = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', timeZone: state.tz || undefined }).replace(/\s/g, '').toLowerCase();
+
+        const displayTemp = (tempF) => CONFIG.units === 'metric' ? Math.round((tempF - 32) * 5/9) : Math.round(tempF);
+        const displaySpeed = (mph) => CONFIG.units === 'metric' ? Math.round(mph * 1.60934) + ' km/h' : Math.round(mph) + ' mph';
+        const displayDist = (mi) => {
+            const v = CONFIG.units === 'metric' ? mi * 1.60934 : mi;
+            return (v >= 10 ? Math.round(v) : v.toFixed(1)) + (CONFIG.units === 'metric' ? ' km' : ' mi');
+        };
+
+        function toast(msg, kind = 'info') {
+            const el = document.createElement('div');
+            const tone = kind === 'error' ? 'text-red-200' : kind === 'warn' ? 'text-amber-200' : 'text-slate-200';
+            el.className = `pointer-events-auto glass-panel rounded-xl px-4 py-2.5 text-sm max-w-sm ${tone}`;
+            el.textContent = msg;
+            $('toast-host').appendChild(el);
+            setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 500); }, 5000);
+        }
+
+        const getSimpleCondition = (t) => {
+            if(!t) return '';
+            t = t.toLowerCase();
+            if(t.includes('snow') || t.includes('flurr') || t.includes('wintry') || t.includes('blizzard')) return 'Snow';
+            if(t.includes('rain') || t.includes('drizzle') || t.includes('shower')) return 'Rain';
+            if(t.includes('thunder') || t.includes('t-storm')) return 'Storm';
+            if(t.includes('sleet') || t.includes('freez') || t.includes('ice')) return 'Ice';
+            if(t.includes('fog') || t.includes('haze') || t.includes('smoke') || t.includes('mist')) return 'Fog';
+            if(t.includes('cloud') || t.includes('overcast')) return 'Cloudy';
+            if(t.includes('sunny')) return 'Sunny';
+            if(t.includes('clear')) return 'Clear';
+            if(t.includes('wind') || t.includes('breez')) return 'Windy';
+            return 'Fair';
+        };
+
+        function init() {
+            lucide.createIcons();
+
+            const tick = () => {
+                const now = new Date();
+                $('clock').textContent = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                $('current-date-header').textContent = now.toLocaleDateString([], {weekday:'short', day:'numeric'});
+            };
+            tick(); setInterval(tick, 1000);
+
+            const searchBox = $('city-search'), hist = $('search-history');
+            searchBox.addEventListener('keydown', (e) => { if (e.key === 'Enter') { hist.classList.add('hidden'); handleSearch(); searchBox.blur(); } });
+            searchBox.addEventListener('focus', () => { if (hist.children.length) hist.classList.remove('hidden'); });
+            document.addEventListener('click', (e) => { if (!searchBox.contains(e.target) && !hist.contains(e.target)) hist.classList.add('hidden'); });
+            hist.addEventListener('click', (e) => {
+                const row = e.target.closest('[data-city]');
+                if (row) { hist.classList.add('hidden'); searchBox.value = ''; geocodeCity(row.dataset.city); }
+            });
+
+            $('locate-btn').addEventListener('click', handleLocate);
+            $('unit-toggle').addEventListener('click', toggleUnits);
+            $('unit-toggle').textContent = CONFIG.units === 'imperial' ? '°F' : '°C';
+            $('refresh-btn').addEventListener('click', () => refresh(true));
+
+            document.querySelectorAll('.radar-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const targetBtn = e.target.closest('button');
+                    if(!targetBtn) return;
+                    document.querySelectorAll('.radar-btn').forEach(b => {
+                        b.classList.remove('active', 'bg-blue-600', 'text-white', 'border-blue-400');
+                        b.classList.add('bg-slate-900/80', 'text-slate-300', 'border-white/10');
+                    });
+                    targetBtn.classList.remove('bg-slate-900/80', 'text-slate-300', 'border-white/10');
+                    targetBtn.classList.add('active', 'bg-blue-600', 'text-white', 'border-blue-400');
+                    updateRadar(targetBtn.dataset.layer);
+                });
+            });
+
+            // Keyboard shortcuts: "/" to search, "R" to refresh
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey || e.metaKey || e.altKey) return;
+                if (e.target.matches && e.target.matches('input, textarea')) return;
+                if (e.key === '/') { e.preventDefault(); searchBox.focus(); }
+                else if (e.key.toLowerCase() === 'r') refresh(true);
+            });
+
+            // Keep an always-open app window fresh
+            setInterval(() => refresh(), CONFIG.refreshMs);
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden && Date.now() - (state.updatedAt || 0) > 10 * 60 * 1000) refresh();
+            });
+
+            updateSearchHistoryUI();
+            setupScenePicker();
+            setupDarkMode();
+
+            // Paint instantly from the last session's data, then refresh in the background
+            const cache = safeJSON('wx_cache', null);
+            let start = { lat: CONFIG.defaultLat, lon: CONFIG.defaultLon };
+            if (cache && cache.hourlyData && cache.hourlyData.length) {
+                Object.assign(state, {
+                    lat: cache.lat, lon: cache.lon, city: cache.city, region: cache.region, tz: cache.tz,
+                    hourlyData: cache.hourlyData, dailyData: cache.dailyData || [],
+                    meteo: cache.meteo, aqi: cache.aqi, alerts: cache.alerts || [], updatedAt: cache.updatedAt
+                });
+                applyData();
+                updateRadar(state.radarLayer);
+                start = { lat: cache.lat, lon: cache.lon };
+            }
+            if (cache) fetchWeatherData(start.lat, start.lon, { silent: true });
+            else fetchIPLocation(true); // first run: start near you
+        }
+
+        function refresh(manual = false) {
+            if (state.lat == null) return;
+            if (manual && $('refresh-btn').firstElementChild) $('refresh-btn').firstElementChild.classList.add('animate-spin');
+            fetchWeatherData(state.lat, state.lon, { silent: !manual });
+        }
+
+        const slimAlert = (f) => {
+            const p = (f && f.properties) || {};
+            return { event: p.event, headline: p.headline, severity: p.severity, description: p.description, instruction: p.instruction, ends: p.ends, expires: p.expires };
+        };
+
+        async function fetchWeatherData(lat, lon, { silent = false } = {}) {
+            lat = +Number(lat).toFixed(4); lon = +Number(lon).toFixed(4);
+            const reqId = ++state.requestId;
+            if (!silent) { $('weather-desc').textContent = 'Loading...'; $('location-name').textContent = 'Updating...'; }
+
+            try {
+                const pointsRes = await fetch(`https://api.weather.gov/points/${lat},${lon}`);
+                if (!pointsRes.ok) throw new Error(pointsRes.status === 404 ? 'NOAA only covers US locations' : 'NOAA grid error');
+                const props = (await pointsRes.json()).properties;
+
+                const optional = (url) => fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
+                const meteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,visibility,dew_point_2m,apparent_temperature,pressure_msl,wind_gusts_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=2`;
+                const aqiUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi,pm10,pm2_5,ozone,nitrogen_dioxide`;
+                const alertsUrl = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
+
+                const [forecastRes, hourlyRes, meteo, aqi, alerts] = await Promise.all([
+                    fetch(props.forecast), fetch(props.forecastHourly),
+                    optional(meteoUrl), optional(aqiUrl), optional(alertsUrl)
+                ]);
+                if (!forecastRes.ok || !hourlyRes.ok) throw new Error('Forecast data error');
+                const [forecastData, hourlyData] = await Promise.all([forecastRes.json(), hourlyRes.json()]);
+
+                if (reqId !== state.requestId) return; // a newer request superseded this one
+
+                Object.assign(state, {
+                    lat, lon,
+                    city: props.relativeLocation.properties.city,
+                    region: props.relativeLocation.properties.state,
+                    tz: props.timeZone,
+                    hourlyData: hourlyData.properties.periods,
+                    dailyData: forecastData.properties.periods,
+                    meteo, aqi,
+                    alerts: ((alerts && alerts.features) || []).map(slimAlert),
+                    updatedAt: Date.now()
+                });
+                applyData();
+                updateRadar(state.radarLayer);
+                addToHistory(`${state.city}, ${state.region}`);
+                saveCache();
+            } catch (err) {
+                console.error(err);
+                if (reqId !== state.requestId) return;
+                if (state.hourlyData.length) {
+                    applyData(); // put back whatever we had before the failed request
+                    if (!silent) toast(`Couldn't refresh (${err.message}). Showing data from ${state.updatedAt ? new Date(state.updatedAt).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : 'earlier'}.`, 'warn');
+                } else {
+                    $('location-name').textContent = 'Offline';
+                    $('weather-desc').textContent = '--';
+                    toast(`Could not load weather data: ${err.message}`, 'error');
+                }
+            } finally {
+                if ($('refresh-btn').firstElementChild) $('refresh-btn').firstElementChild.classList.remove('animate-spin');
+            }
+        }
+
+        // Render everything from `state` (used after fetches, cache loads and unit changes)
+        function applyData() {
+            const now = Date.now();
+            state.hourlyData = state.hourlyData.filter(p => new Date(p.endTime) > now);
+            if (!state.hourlyData.length) return;
+            state.weatherData = state.hourlyData[0];
+
+            $('location-name').textContent = `${state.city}, ${state.region}`;
+            renderCurrent(state.hourlyData[0], state.meteo);
+            renderAirQuality(state.aqi);
+            renderDaily(state.dailyData);
+            switchChart(state.chartMode);
+            updateAstro(state.lat, state.lon);
+            renderAlerts(state.alerts);
+
+            const summary = $('daily-summary');
+            summary.textContent = (state.dailyData[0] && state.dailyData[0].detailedForecast) || '';
+            summary.classList.remove('animate-pulse');
+            $('updated').textContent = state.updatedAt ? `• Updated ${new Date(state.updatedAt).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}` : '';
+            document.title = `${displayTemp(state.hourlyData[0].temperature)}° ${state.city} – Your Weather`;
+        }
+
+        function saveCache() {
+            try {
+                localStorage.setItem('wx_cache', JSON.stringify({
+                    lat: state.lat, lon: state.lon, city: state.city, region: state.region, tz: state.tz,
+                    hourlyData: state.hourlyData.slice(0, 48), dailyData: state.dailyData,
+                    meteo: state.meteo, aqi: state.aqi, alerts: state.alerts, updatedAt: state.updatedAt
+                }));
+            } catch (e) { /* storage full or blocked: not critical */ }
+        }
+
+        // --- Charting ---
+        function switchChart(mode) {
+            state.chartMode = mode;
+            const btn24 = $('btn-chart-24h');
+            const btn7d = $('btn-chart-7d');
+            const title = $('chart-title');
+            
+            if (mode === 'hourly') {
+                btn24.className = "on"; btn7d.className = "";
+                title.textContent = "24-Hour Trend";
+                renderChart(processHourlyData(state.hourlyData));
+            } else {
+                btn7d.className = "on"; btn24.className = "";
+                title.textContent = "7-Day Trend";
+                renderChart(processDailyData(state.dailyData));
+            }
+        }
+
+        function processHourlyData(periods) {
+            const slice = periods.slice(0, 24);
+            return {
+                labels: slice.map(h => [hourLabel(h.startTime), getSimpleCondition(h.shortForecast), `${displayTemp(h.temperature)}°`]),
+                temps: slice.map(h => displayTemp(h.temperature)),
+                precip: slice.map(h => h.probabilityOfPrecipitation.value || 0)
+            };
+        }
+
+        function processDailyData(periods) {
+            let days = {};
+            periods.forEach(p => {
+                const d = p.startTime.slice(0, 10); // the forecast location's calendar date
+                if(!days[d]) days[d] = { name: p.name, high: null, precip: 0, date: p.startTime, desc: p.shortForecast };
+                if(p.isDaytime) {
+                    days[d].high = p.temperature;
+                    days[d].name = new Date(d + 'T12:00:00').toLocaleDateString([], {weekday: 'short'});
+                    days[d].precip = Math.max(days[d].precip, p.probabilityOfPrecipitation.value || 0);
+                    days[d].desc = p.shortForecast;
+                } else {
+                    if(days[d].high === null) days[d].high = p.temperature;
+                    days[d].precip = Math.max(days[d].precip, p.probabilityOfPrecipitation.value || 0);
+                    if (!days[d].desc || !days[d].name) days[d].desc = p.shortForecast;
+                }
+            });
+
+            const dayValues = Object.values(days).slice(0, 7);
+            return {
+                labels: dayValues.map(d => [d.name, getSimpleCondition(d.desc), `${displayTemp(d.high)}°`]),
+                temps: dayValues.map(d => displayTemp(d.high)),
+                precip: dayValues.map(d => d.precip)
+            };
+        }
+
+        function renderChart(data) {
+            const ctx = $('trendChart').getContext('2d');
+            if (state.chartInstance) state.chartInstance.destroy();
+
+            const gradientTemp = ctx.createLinearGradient(0, 0, 0, 300);
+            gradientTemp.addColorStop(0, 'rgba(255, 255, 255, 0.28)');
+            gradientTemp.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+            state.chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        {
+                            label: 'Temp', data: data.temps, borderColor: 'rgba(255,255,255,0.95)', backgroundColor: gradientTemp,
+                            borderWidth: 2, tension: 0.4, fill: true, yAxisID: 'y', pointRadius: 0, pointHoverRadius: 4
+                        },
+                        {
+                            type: 'bar', label: 'Precip %', data: data.precip, backgroundColor: 'rgba(100, 210, 255, 0.45)',
+                            yAxisID: 'y1', barThickness: 10, borderRadius: 3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { 
+                        legend: { display: false }, 
+                        tooltip: { 
+                            backgroundColor: 'rgba(28, 36, 52, 0.92)', titleColor:'#fff', bodyColor:'rgba(255,255,255,0.85)', padding: 10, cornerRadius: 10,
+                            callbacks: {
+                                title: (items) => Array.isArray(data.labels[items[0].dataIndex]) ? data.labels[items[0].dataIndex][0] : data.labels[items[0].dataIndex],
+                                label: (ctx) => ctx.dataset.yAxisID === 'y' ? `${ctx.raw}° Temp` : `${ctx.raw}% Precip`
+                            }
+                        } 
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.8)', maxTicksLimit: 8, font: { size: 11, family: "'Inter', sans-serif" } } },
+                        y: { display: true, min: Math.min(...data.temps) - 5, max: Math.max(...data.temps) + 5, ticks: { color: 'rgba(255,255,255,0.55)', font: { size: 11, family: "'Inter', sans-serif" } }, grid: { color: 'rgba(255,255,255,0.10)' }, border: { display: false } },
+                        y1: { display: false, min: 0, max: 100 }
+                    }
+                }
+            });
+        }
+
+        // --- Renderers ---
+
+        // Pick the Open-Meteo hour that matches "now" at the forecast location
+        function meteoAt(meteo) {
+            if (!meteo || !meteo.hourly || !meteo.hourly.time) return null;
+            const localHour = new Date(Date.now() + (meteo.utc_offset_seconds || 0) * 1000).toISOString().slice(0, 13);
+            const i = meteo.hourly.time.findIndex(t => t.startsWith(localHour));
+            if (i < 0) return null;
+            const h = meteo.hourly;
+            return { uv: h.uv_index[i], vis: h.visibility[i], dew: h.dew_point_2m[i], feels: h.apparent_temperature[i], pressure: h.pressure_msl[i], gust: h.wind_gusts_10m[i] };
+        }
+
+        function renderCurrent(current, meteo) {
+            $('current-temp').textContent = displayTemp(current.temperature);
+            $('weather-desc').textContent = current.shortForecast;
+            $('weather-icon-lg').innerHTML = getLucideIcon(current.shortForecast, current.isDaytime, 'w-16 h-16');
+            updateDynamicBackground(current.shortForecast, current.isDaytime);
+
+            const speeds = (current.windSpeed || '').match(/\d+/g);
+            const windSpeedVal = speeds ? Math.max(...speeds.map(Number)) : 0;
+            const humidity = current.relativeHumidity && current.relativeHumidity.value != null ? current.relativeHumidity.value : null;
+            const m = meteoAt(meteo);
+            const T = current.temperature;
+
+            // Feels like: real apparent temperature when available, otherwise wind chill / heat index
+            let feelsLike = T;
+            if (m && m.feels != null) feelsLike = m.feels;
+            else if (T <= 50 && windSpeedVal > 3) feelsLike = 35.74 + 0.6215 * T - 35.75 * Math.pow(windSpeedVal, 0.16) + 0.4275 * T * Math.pow(windSpeedVal, 0.16);
+            else if (T >= 80 && humidity != null) feelsLike = 0.5 * (T + 61.0 + ((T - 68.0) * 1.2) + (humidity * 0.094));
+
+            // Dew point: Open-Meteo, then NOAA, then a rough estimate
+            let dewPoint = null;
+            if (m && m.dew != null) dewPoint = m.dew;
+            else if (current.dewpoint && current.dewpoint.value != null) dewPoint = current.dewpoint.value * 9 / 5 + 32;
+            else if (humidity != null) dewPoint = T - ((100 - humidity) / 5);
+            const dewTxt = dewPoint != null ? displayTemp(dewPoint) + '°' : '--';
+
+            $('feels-like').textContent = displayTemp(feelsLike) + '°';
+            $('dew-point').textContent = dewTxt;
+            $('stat-dew').textContent = dewTxt;
+
+            $('wind-speed').textContent = displaySpeed(windSpeedVal);
+            $('wind-dir').textContent = current.windDirection + (m && m.gust != null && m.gust >= windSpeedVal + 5 ? ` · gusts ${displaySpeed(m.gust)}` : '');
+            $('humidity').textContent = humidity != null ? humidity + '%' : '--';
+            $('visibility').textContent = m && m.vis != null ? displayDist(m.vis / 1609.34) : '--';
+            $('pressure').textContent = 'Pressure ' + (m && m.pressure != null
+                ? (CONFIG.units === 'metric' ? Math.round(m.pressure) + ' hPa' : (m.pressure * 0.02953).toFixed(2) + ' inHg')
+                : '--');
+
+            const uvIndex = m && m.uv != null ? Math.round(m.uv * 10) / 10 : 0;
+            $('uv-index').textContent = uvIndex;
+            $('uv-bar').style.width = `${Math.min((uvIndex / 11) * 100, 100)}%`;
+            let uvText = 'Low';
+            if (uvIndex >= 3) uvText = 'Mod';
+            if (uvIndex >= 6) uvText = 'High';
+            if (uvIndex >= 8) uvText = 'V.High';
+            if (uvIndex >= 11) uvText = 'Extr';
+            $('uv-text').textContent = uvText;
+        }
+
+        function renderAlerts(list) {
+            const host = $('alert-banner');
+            const now = Date.now();
+            const rank = { Extreme: 4, Severe: 3, Moderate: 2, Minor: 1 };
+            const active = (list || [])
+                .filter(a => a.event && (!a.expires || new Date(a.expires) > now))
+                .sort((a, b) => (rank[b.severity] || 0) - (rank[a.severity] || 0));
+            if (!active.length) { host.classList.add('hidden'); host.innerHTML = ''; return; }
+
+            const tone = (s) => (s === 'Extreme' || s === 'Severe')
+                ? 'border-red-500/40 bg-red-950/70 text-red-100'
+                : 'border-amber-500/40 bg-amber-950/60 text-amber-100';
+            host.innerHTML = active.map(a => {
+                const until = a.ends || a.expires;
+                const body = [a.headline, a.description, a.instruction].filter(Boolean).map(esc).join('\n\n');
+                return `<details class="backdrop-blur-xl rounded-2xl border px-4 py-2.5 mb-2 ${tone(a.severity)}">
+                    <summary class="cursor-pointer list-none flex items-center gap-2 text-sm font-semibold">
+                        <i data-lucide="triangle-alert" class="w-4 h-4 flex-none"></i>
+                        <span class="flex-1 truncate">${esc(a.event)}${until ? ' · until ' + esc(formatWhen(until)) : ''}</span>
+                        <i data-lucide="chevron-down" class="w-4 h-4 flex-none opacity-60"></i>
+                    </summary>
+                    <div class="mt-2 text-xs leading-relaxed whitespace-pre-line text-slate-200/90 max-h-48 overflow-y-auto custom-scrollbar">${body}</div>
+                </details>`;
+            }).join('');
+            host.classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function renderAirQuality(aqiData) {
+            if (!aqiData || !aqiData.current) { $('panel-aqi-desc').textContent = 'N/A'; return; }
+            const curr = aqiData.current;
+            const aqi = curr.us_aqi || 0;
+            $('panel-aqi-ring').textContent = aqi;
+            
+            let desc = "Good", color = "border-emerald-500 text-emerald-400";
+            if (aqi > 50) { desc = "Moderate"; color = "border-yellow-500 text-yellow-400"; }
+            if (aqi > 100) { desc = "Unhealthy(SG)"; color = "border-orange-500 text-orange-400"; }
+            if (aqi > 150) { desc = "Unhealthy"; color = "border-red-500 text-red-400"; }
+            if (aqi > 200) { desc = "V.Unhealthy"; color = "border-purple-500 text-purple-400"; }
+            if (aqi > 300) { desc = "Hazardous"; color = "border-rose-900 text-rose-500"; }
+
+            $('panel-aqi-desc').textContent = desc;
+            $('panel-aqi-ring').className = `w-10 h-10 rounded-full border-[3px] flex items-center justify-center font-bold text-sm ${color}`;
+
+            $('aqi-pm25').textContent = curr.pm2_5 != null ? Math.round(curr.pm2_5) : '--';
+            $('aqi-pm10').textContent = curr.pm10 != null ? Math.round(curr.pm10) : '--';
+            $('aqi-o3').textContent = curr.ozone != null ? Math.round(curr.ozone) : '--';
+            $('aqi-no2').textContent = curr.nitrogen_dioxide != null ? Math.round(curr.nitrogen_dioxide) : '--';
+        }
+
+        function renderDaily(periods) {
+            const container = $('forecast-list');
+            container.innerHTML = '';
+            
+            let days = {};
+            periods.forEach(p => {
+                const d = p.startTime.slice(0, 10);
+                if(!days[d]) days[d] = { name: p.name, dateKey: d, dayHigh: null, dayIcon: null, dayDesc: null, dayDetailed: null, dayPrecip: 0, nightLow: null, nightIcon: null, nightDesc: null, nightDetailed: null, nightPrecip: 0 };
+                if(p.isDaytime) {
+                    days[d].dayHigh = p.temperature; days[d].dayIcon = p.shortForecast; days[d].dayDesc = p.shortForecast; days[d].dayDetailed = p.detailedForecast; days[d].dayPrecip = Math.max(days[d].dayPrecip, p.probabilityOfPrecipitation.value || 0);
+                } else {
+                    days[d].nightLow = p.temperature; days[d].nightIcon = p.shortForecast; days[d].nightDesc = p.shortForecast; days[d].nightDetailed = p.detailedForecast; days[d].nightPrecip = Math.max(days[d].nightPrecip, p.probabilityOfPrecipitation.value || 0);
+                }
+            });
+
+            const keys = Object.keys(days).slice(0, 7);
+            renderWeekAhead(keys.map(k => days[k]));
+            // the week's overall range positions every bar on the same scale
+            const temps = [];
+            keys.forEach(k => { const d = days[k]; if (d.dayHigh != null) temps.push(d.dayHigh); if (d.nightLow != null) temps.push(d.nightLow); });
+            const nowF = state.weatherData ? state.weatherData.temperature : null;
+            if (nowF != null) temps.push(nowF);
+            const wMin = Math.min(...temps), wMax = Math.max(...temps), span = Math.max(1, wMax - wMin);
+
+            keys.forEach((key, index) => {
+                const day = days[key];
+                const hiF = day.dayHigh != null ? day.dayHigh : (index === 0 && nowF != null ? Math.max(nowF, day.nightLow ?? nowF) : day.nightLow);
+                const loF = day.nightLow != null ? day.nightLow : hiF;
+                const high = hiF != null ? displayTemp(hiF) : '--';
+                const low = loF != null ? displayTemp(loF) : '--';
+                const dt = new Date(key + 'T12:00:00');
+                const dName = index === 0 ? 'Today' : dt.toLocaleDateString([], { weekday: 'short' });
+                const cond = day.dayDesc || day.nightDesc;
+                const pop = Math.max(day.dayPrecip || 0, day.nightPrecip || 0);
+                const left = loF != null ? ((loF - wMin) / span) * 100 : 0;
+                const width = (hiF != null && loF != null) ? Math.max(4, ((hiF - loF) / span) * 100) : 0;
+                const fill = (hiF != null && loF != null) ? `left:${left}%;width:${width}%;background:linear-gradient(90deg, ${tempColor(loF)}, ${tempColor(hiF)});` : '';
+                const nowDot = (index === 0 && nowF != null) ? `<span class="now" style="left:${((nowF - wMin) / span) * 100}%"></span>` : '';
+                const renderIcon = (c, isDay) => c ? iosIcon(c, isDay, 'w-5 h-5') : '<span class="w-5 h-5"></span>';
+
+                if (index === 0) $('hilo').innerHTML = `H:${high}° &nbsp;L:${low}°`;
+
+                const item = document.createElement('div');
+                item.className = 'group';
+                item.innerHTML = `
+                    <div class="ios-row" onclick="toggleDetails('detail-${index}')">
+                        <span class="day">${dName}</span>
+                        <span class="ic">${renderIcon(cond, !!day.dayDesc)}${pop >= 20 ? `<span class="pp">${pop}%</span>` : ''}</span>
+                        <span class="lo">${low}°</span>
+                        <span class="ios-bar"><span class="fill" style="${fill}"></span>${nowDot}</span>
+                        <span class="hi">${high}°</span>
+                        <span class="chev"><i data-lucide="chevron-down" class="w-4 h-4"></i></span>
+                    </div>
+                    <div id="detail-${index}" class="detail-row px-3 text-sm mx-1">
+                        <div class="py-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            ${day.dayDetailed ? `<div class="space-y-1.5"><div class="flex items-center gap-1.5">${renderIcon(day.dayIcon, true)}<span class="ios-cap uppercase">Day</span></div><p class="text-[12px] text-white/85 leading-relaxed">${day.dayDetailed}</p></div>` : '<div class="hidden sm:block"></div>'}
+                            ${day.nightDetailed ? `<div class="space-y-1.5 sm:border-l sm:border-white/10 sm:pl-4"><div class="flex items-center gap-1.5">${renderIcon(day.nightIcon, false)}<span class="ios-cap uppercase">Night</span></div><p class="text-[12px] text-white/85 leading-relaxed">${day.nightDetailed}</p></div>` : ''}
+                        </div>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+            lucide.createIcons();
+        }
+
+        window.toggleDetails = (id) => {
+            const el = $(id);
+            document.querySelectorAll('.detail-row').forEach(row => { if(row.id !== id) row.classList.remove('open'); });
+            el.classList.toggle('open');
+        }
+
+        function updateAstro(lat, lon) {
+            const now = new Date(), times = SunCalc.getTimes(now, lat, lon), moon = SunCalc.getMoonIllumination(now), moonTimes = SunCalc.getMoonTimes(now, lat, lon);
+            const isDay = now >= times.sunrise && now <= times.sunset;
+            
+            let start, end, startLabel, endLabel, iconHtml;
+            if (isDay) { start = times.sunrise; end = times.sunset; startLabel = 'Sunrise'; endLabel = 'Sunset'; iconHtml = `<i data-lucide="sun" class="w-3.5 h-3.5 text-amber-400"></i>`; } 
+            else {
+                startLabel = 'Sunset'; endLabel = 'Sunrise'; iconHtml = `<i data-lucide="moon" class="w-3.5 h-3.5 text-indigo-300"></i>`;
+                if (now < times.sunrise) { const y = new Date(now); y.setDate(now.getDate() - 1); start = SunCalc.getTimes(y, lat, lon).sunset; end = times.sunrise; } 
+                else { const t = new Date(now); t.setDate(now.getDate() + 1); start = times.sunset; end = SunCalc.getTimes(t, lat, lon).sunrise; }
+            }
+
+            $('astro-start-label').textContent = startLabel; $('astro-end-label').textContent = endLabel;
+            $('astro-start-time').textContent = formatTime(start); $('astro-end-time').textContent = formatTime(end);
+            
+            const orb = $('astro-orb'); orb.innerHTML = iconHtml;
+            let pct = Math.max(0, Math.min(100, ((now - start) / (end - start)) * 100));
+            const x = (pct - 50) / 50, y = Math.sqrt(1 - Math.max(-1, Math.min(1, x)) * Math.max(-1, Math.min(1, x)));
+            orb.style.left = `${pct}%`; orb.style.bottom = `${y * 100}%`;
+
+            const dayMs = times.sunset - times.sunrise;
+            $('daylight-duration').textContent = `${Math.floor(dayMs / 3600000)}h ${Math.floor((dayMs % 3600000) / 60000)}m`;
+            $('moonrise-time').textContent = moonTimes.rise ? formatTime(moonTimes.rise) : 'Down';
+            $('moon-illumination').textContent = `${Math.round(moon.fraction * 100)}%`;
+            
+            const pi = moon.phase;
+            $('moon-phase-text').textContent = pi<0.03?"New Moon":pi<0.22?"Waxing Crescent":pi<0.28?"First Quarter":pi<0.47?"Waxing Gibbous":pi<0.53?"Full Moon":pi<0.72?"Waning Gibbous":pi<0.78?"Last Quarter":"Waning Crescent";
+            lucide.createIcons();
+        }
+
+        function updateRadar(layer) {
+            state.radarLayer = layer;
+            if (state.lat == null) return;
+            const url = `https://www.ventusky.com/?p=${state.lat};${state.lon};8&l=${layer}&m`;
+            if (state.radarUrl !== url) { state.radarUrl = url; $('radar-frame').src = url; }
+        }
+
+        // --- Weather scenes: animated backgrounds for every kind of weather (no sound) ---
+        const Scenes = (() => {
+            const cv = $('weather-canvas'), ctx = cv.getContext('2d');
+            const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            let W = 0, H = 0, DPR = 1, raf = 0, last = 0, t0 = performance.now();
+            let S = null;          // active scene definition
+            let night = false, intensity = 1, key = '';
+            let parts = [], splashes = [], clouds = [], bands = [], stars = [], debris = [], streaks = [];
+            let bolt = null, flash = 0, nextBolt = 0, gust = 0, nextGust = 0;
+            const sprites = {};
+
+            const rnd = (a, b) => a + Math.random() * (b - a);
+            const area = () => (W * H) / (1440 * 900);
+
+            // ---- palettes: [top, middle, bottom] sky stops, day and night; card tint for readability
+            const SKY = {
+                clear:      { d: ['#1F6FD1', '#3E8EE6', '#7DBDF4'], n: ['#060D22', '#0F1B3C', '#25365F'] },
+                partly:     { d: ['#2B74CC', '#4C8FDB', '#8EBFEA'], n: ['#0A1328', '#15223F', '#2C3B5C'] },
+                cloudy:     { d: ['#4F6C8C', '#6D88A5', '#9CB2C7'], n: ['#141B26', '#212B39', '#384556'] },
+                overcast:   { d: ['#66768A', '#7E8D9E', '#A3AFBB'], n: ['#15191F', '#22272F', '#363C46'] },
+                golden:     { d: ['#3A4F8F', '#D9786A', '#F6B26B'], n: ['#1B1F45', '#7A4A6E', '#E08A5F'] },
+                heat:       { d: ['#C9662E', '#E89344', '#F7C873'], n: ['#2A1A2E', '#5A2F35', '#8A4B3A'] },
+                frigid:     { d: ['#4C86C6', '#8DB8E2', '#D8EAF8'], n: ['#081428', '#16294A', '#3A5578'] },
+                drizzle:    { d: ['#56677A', '#6F8092', '#97A5B3'], n: ['#141A22', '#1F2731', '#333D49'] },
+                showers:    { d: ['#4A6280', '#6B84A0', '#A1B4C6'], n: ['#121923', '#1E2734', '#33404F'] },
+                rain:       { d: ['#3E4D5F', '#56677A', '#7E8D9D'], n: ['#10161E', '#1A222C', '#2E3843'] },
+                heavyrain:  { d: ['#2E3A48', '#435163', '#65758A'], n: ['#0B0F15', '#151B23', '#262F3A'] },
+                storm:      { d: ['#22272F', '#363C48', '#575E6C'], n: ['#08090D', '#12151B', '#252A33'] },
+                hail:       { d: ['#2C3A3A', '#465656', '#6E7F7C'], n: ['#0A0F0F', '#151C1C', '#283232'] },
+                flurries:   { d: ['#6E86A0', '#93A9BF', '#C6D3E0'], n: ['#141C27', '#222D3B', '#3B4858'] },
+                snow:       { d: ['#7088A2', '#9BB0C5', '#D3DEE8'], n: ['#161E29', '#26313F', '#45515F'] },
+                heavysnow:  { d: ['#7C8FA3', '#A6B5C4', '#DCE3EA'], n: ['#1A212B', '#2C3542', '#4B5562'] },
+                blizzard:   { d: ['#A3B0BD', '#C3CDD6', '#E7ECF0'], n: ['#2A313A', '#3E4651', '#5E6670'] },
+                sleet:      { d: ['#56687C', '#75889B', '#A8B7C5'], n: ['#141B24', '#232D39', '#3B4756'] },
+                freezing:   { d: ['#4F6E86', '#7393AB', '#B3CBDC'], n: ['#0F1A24', '#1D2D3B', '#354A5C'] },
+                fog:        { d: ['#7F8B97', '#A1ABB5', '#C8CED4'], n: ['#22282F', '#333A42', '#4D545C'] },
+                haze:       { d: ['#8C9AAA', '#B7B6AE', '#DDD3BD'], n: ['#22252D', '#3A3A3C', '#5A5348'] },
+                smoke:      { d: ['#5E4A3E', '#8E6A4E', '#C49563'], n: ['#1A1412', '#30241D', '#4F3A2A'] },
+                dust:       { d: ['#9C7A4E', '#C29A62', '#E3C58E'], n: ['#2A2116', '#463624', '#6B5434'] },
+                windy:      { d: ['#2F78CF', '#5596DE', '#9AC6EE'], n: ['#0A1328', '#15223F', '#2C3B5C'] },
+                tornado:    { d: ['#2A332B', '#4A5A47', '#7E8C6E'], n: ['#0B0E0B', '#171D17', '#2B3428'] },
+                hurricane:  { d: ['#26353B', '#3B4E55', '#61767B'], n: ['#090E10', '#131B1E', '#253236'] },
+            };
+            const LIGHT = new Set(['fog', 'haze', 'blizzard', 'heavysnow', 'snow', 'flurries', 'frigid', 'dust', 'heat']);
+
+            // ---- scene definitions: which layers to draw
+            const DEF = {
+                clear:     { celestial: 'full', clouds: 0 },
+                partly:    { celestial: 'full', clouds: 5, cloudTone: 'white' },
+                cloudy:    { celestial: 'dim', clouds: 10, cloudTone: 'grey' },
+                overcast:  { clouds: 14, cloudTone: 'dark', deck: true },
+                golden:    { celestial: 'low', clouds: 3, cloudTone: 'warm' },
+                heat:      { celestial: 'hot', clouds: 0, shimmer: true },
+                frigid:    { celestial: 'full', clouds: 1, cloudTone: 'white', frost: true, sparkle: true },
+                drizzle:   { clouds: 10, cloudTone: 'grey', deck: true, rain: 0.35, drop: 'fine' },
+                showers:   { celestial: 'dim', clouds: 8, cloudTone: 'grey', rain: 0.6 },
+                rain:      { clouds: 12, cloudTone: 'dark', deck: true, rain: 1, splash: true },
+                heavyrain: { clouds: 14, cloudTone: 'dark', deck: true, rain: 1.9, splash: true, angle: 0.18, mist: true },
+                storm:     { clouds: 14, cloudTone: 'storm', deck: true, rain: 1.6, splash: true, angle: 0.15, lightning: [2.5, 7] },
+                hail:      { clouds: 14, cloudTone: 'storm', deck: true, rain: 0.9, hail: 1, splash: true, lightning: [4, 10] },
+                flurries:  { celestial: 'dim', clouds: 8, cloudTone: 'grey', snow: 0.25 },
+                snow:      { clouds: 12, cloudTone: 'grey', deck: true, snow: 1 },
+                heavysnow: { clouds: 14, cloudTone: 'grey', deck: true, snow: 2.2, whiteout: 0.12 },
+                blizzard:  { clouds: 10, cloudTone: 'grey', deck: true, snow: 2.6, wind: 9, whiteout: 0.16, gusts: true },
+                sleet:     { clouds: 12, cloudTone: 'dark', deck: true, rain: 0.7, pellets: 0.8 },
+                freezing:  { clouds: 12, cloudTone: 'grey', deck: true, rain: 0.8, glaze: true, frost: true, splash: true },
+                fog:       { clouds: 0, fog: 9 },
+                haze:      { celestial: 'dim', haze: true, fog: 3 },
+                smoke:     { celestial: 'red', smoke: true, fog: 5 },
+                dust:      { celestial: 'dim', dust: 1, haze: true },
+                windy:     { celestial: 'full', clouds: 6, cloudTone: 'white', cloudSpeed: 5, streaks: true, leaves: true },
+                tornado:   { clouds: 12, cloudTone: 'storm', deck: true, funnel: true, rain: 0.5, angle: 0.5, debris: true, lightning: [5, 12] },
+                hurricane: { clouds: 16, cloudTone: 'storm', deck: true, rain: 2.2, angle: 0.75, cloudSpeed: 7, splash: true, gusts: true, mist: true },
+            };
+            const NAMES = {
+                clear: 'Clear', partly: 'Partly cloudy', cloudy: 'Cloudy', overcast: 'Overcast', golden: 'Golden hour', heat: 'Heat wave', frigid: 'Frigid',
+                drizzle: 'Drizzle', showers: 'Showers', rain: 'Rain', heavyrain: 'Heavy rain', storm: 'Thunderstorm', hail: 'Hail',
+                flurries: 'Flurries', snow: 'Snow', heavysnow: 'Heavy snow', blizzard: 'Blizzard', sleet: 'Sleet', freezing: 'Freezing rain',
+                fog: 'Fog', haze: 'Haze', smoke: 'Smoke', dust: 'Dust', windy: 'Windy', tornado: 'Tornado', hurricane: 'Hurricane',
+            };
+
+            // ---- choose a scene from alerts, forecast wording, temperature and sun position
+            function classify(forecast, isDay, alerts, tempF) {
+                const f = (forecast || '').toLowerCase();
+                const ev = (alerts || []).map(a => (a.event || '').toLowerCase()).join(' | ');
+                let k = null;
+                if (/tornado/.test(ev)) k = 'tornado';
+                else if (/hurricane|typhoon|tropical storm/.test(ev)) k = 'hurricane';
+                else if (/blizzard|snow squall/.test(ev)) k = 'blizzard';
+                else if (/ice storm/.test(ev)) k = 'freezing';
+                else if (/dust storm|blowing dust/.test(ev)) k = 'dust';
+                else if (/severe thunderstorm warning/.test(ev)) k = 'storm';
+                else if (/dense smoke/.test(ev)) k = 'smoke';
+                else if (/dense fog/.test(ev)) k = 'fog';
+                else if (/excessive heat|extreme heat|heat advisory/.test(ev) && isDay) k = 'heat';
+                if (!k) {
+                    if (/tornado|funnel/.test(f)) k = 'tornado';
+                    else if (/hurricane|tropical storm/.test(f)) k = 'hurricane';
+                    else if (/hail/.test(f)) k = 'hail';
+                    else if (/thunder|t-storm|tstorm/.test(f)) k = 'storm';
+                    else if (/blizzard|blowing snow/.test(f)) k = 'blizzard';
+                    else if (/freezing (rain|drizzle)|\bice\b|glaze/.test(f)) k = 'freezing';
+                    else if (/sleet|ice pellets|wintry mix|rain and snow|snow and rain/.test(f)) k = 'sleet';
+                    else if (/heavy snow/.test(f)) k = 'heavysnow';
+                    else if (/flurr/.test(f)) k = 'flurries';
+                    else if (/snow/.test(f)) k = 'snow';
+                    else if (/heavy rain|downpour/.test(f)) k = 'heavyrain';
+                    else if (/drizzle/.test(f)) k = 'drizzle';
+                    else if (/shower/.test(f)) k = 'showers';
+                    else if (/rain/.test(f)) k = 'rain';
+                    else if (/smoke/.test(f)) k = 'smoke';
+                    else if (/dust|sand/.test(f)) k = 'dust';
+                    else if (/haze/.test(f)) k = 'haze';
+                    else if (/fog|mist/.test(f)) k = 'fog';
+                    else if (/windy|breezy|blustery|gust/.test(f)) k = 'windy';
+                    else if (/overcast/.test(f)) k = 'overcast';
+                    else if (/partly|mostly sunny|mostly clear|few clouds/.test(f)) k = 'partly';
+                    else if (/cloud/.test(f)) k = 'cloudy';
+                    else if (/sunny|clear|fair/.test(f)) k = 'clear';
+                    else k = 'cloudy';
+                }
+                if (k === 'clear' || k === 'partly' || k === 'windy') {
+                    if (tempF != null && tempF >= 95 && isDay) k = 'heat';
+                    else if (tempF != null && tempF <= 15) k = 'frigid';
+                    else if (nearSunEdge()) k = 'golden';
+                }
+                // "slight chance" / "chance" make precipitation lighter
+                const level = /slight chance/.test(f) ? 0.4 : /chance|isolated|scattered/.test(f) ? 0.65 : /heavy|severe/.test(f) ? 1.25 : 1;
+                return { key: k, level };
+            }
+            function nearSunEdge() {
+                if (state.lat == null || typeof SunCalc === 'undefined') return false;
+                const now = Date.now(), t = SunCalc.getTimes(new Date(), state.lat, state.lon);
+                return [t.sunrise, t.sunset].some(x => x && Math.abs(now - x) < 40 * 60 * 1000);
+            }
+
+            // ---- sprites (pre-rendered for speed)
+            function cloudSprite(tone, seed) {
+                const id = tone + seed;
+                if (sprites[id]) return sprites[id];
+                const w = 520, h = 260, c = document.createElement('canvas'); c.width = w; c.height = h;
+                const g = c.getContext('2d');
+                const col = { white: [255, 255, 255, .9], grey: [214, 222, 232, .75], dark: [150, 162, 176, .75], storm: [70, 78, 92, .85], warm: [255, 214, 190, .85] }[tone] || [255, 255, 255, .85];
+                g.filter = 'blur(10px)';
+                let s = seed * 9301 + 49297;
+                const r = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
+                for (let i = 0; i < 9; i++) {
+                    const cx = 90 + r() * (w - 180), cy = 120 + r() * 60 - (Math.abs(cx - w / 2) < 120 ? 30 : 0), rad = 50 + r() * 60;
+                    const grad = g.createRadialGradient(cx, cy - rad * .3, rad * .1, cx, cy, rad);
+                    grad.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},${col[3]})`);
+                    grad.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},0)`);
+                    g.fillStyle = grad; g.beginPath(); g.arc(cx, cy, rad, 0, Math.PI * 2); g.fill();
+                }
+                return (sprites[id] = c);
+            }
+            function fogSprite() {
+                if (sprites.fog) return sprites.fog;
+                const c = document.createElement('canvas'); c.width = 900; c.height = 220;
+                const g = c.getContext('2d'); g.filter = 'blur(28px)';
+                for (let i = 0; i < 7; i++) {
+                    g.fillStyle = 'rgba(255,255,255,.22)';
+                    g.beginPath(); g.ellipse(120 + i * 110, 110 + Math.sin(i) * 20, 200, 55, 0, 0, Math.PI * 2); g.fill();
+                }
+                return (sprites.fog = c);
+            }
+
+            // ---- build the particles for the current scene
+            function build() {
+                const a = Math.max(0.35, area()), L = intensity;
+                parts = []; splashes = []; clouds = []; bands = []; stars = []; debris = []; streaks = [];
+                const n = (k) => Math.round(k * a * L);
+                if (S.rain) for (let i = 0; i < n(260 * S.rain); i++) parts.push(rainDrop(true));
+                if (S.hail) for (let i = 0; i < n(70 * S.hail); i++) parts.push(hailStone(true));
+                if (S.pellets) for (let i = 0; i < n(90 * S.pellets); i++) parts.push(pellet(true));
+                if (S.snow) for (let i = 0; i < n(170 * S.snow); i++) parts.push(flake(true));
+                if (S.dust) for (let i = 0; i < n(320 * S.dust); i++) parts.push(dustMote(true));
+                const cc = Math.round((S.clouds || 0) * Math.max(0.6, Math.min(1.4, W / 1440)));
+                for (let i = 0; i < cc; i++) {
+                    const layer = i / Math.max(1, cc - 1);
+                    clouds.push({ x: rnd(-300, W), y: rnd(-60, H * (S.deck ? 0.32 : 0.45)), s: rnd(0.7, 1.6) * (0.7 + layer * 0.6),
+                        v: (S.cloudSpeed || 1) * rnd(4, 10) * (0.5 + layer), seed: (i % 6) + 1, o: S.deck ? rnd(.55, .9) : rnd(.6, 1) });
+                }
+                if (S.fog) for (let i = 0; i < S.fog; i++) bands.push({ x: rnd(-900, W), y: H * (0.25 + i / S.fog * 0.75) + rnd(-30, 30), v: rnd(6, 16) * (i % 2 ? 1 : -1), s: rnd(1, 1.8) });
+                if (night || S.sparkle) for (let i = 0; i < Math.round(160 * a); i++) stars.push({ x: rnd(0, W), y: rnd(0, H * 0.7), r: rnd(.4, 1.5), p: rnd(0, 6.28), sp: rnd(.6, 2) });
+                if (S.debris) for (let i = 0; i < 70; i++) debris.push({ a: rnd(0, 6.28), r: rnd(20, 120), h: rnd(0, 1), sp: rnd(1.5, 4), sz: rnd(1.5, 4) });
+                if (S.streaks) for (let i = 0; i < Math.round(26 * a); i++) streaks.push(windStreak(true));
+                nextBolt = S.lightning ? performance.now() + rnd(1000, 3000) : 0;
+                nextGust = performance.now() + rnd(2000, 5000);
+            }
+            const windX = () => (S.wind || 0) + (S.angle || 0) * 14 + (S.streaks ? 2 : 0);
+            function rainDrop(init) {
+                const fine = S.drop === 'fine';
+                return { k: 'r', x: rnd(-W * .2, W * 1.1), y: init ? rnd(-H, H) : rnd(-120, -20), l: fine ? rnd(5, 9) : rnd(12, 26), v: fine ? rnd(6, 9) : rnd(15, 24), o: fine ? rnd(.2, .4) : rnd(.25, .5) };
+            }
+            const hailStone = (init) => ({ k: 'h', x: rnd(0, W), y: init ? rnd(-H, H) : rnd(-80, -10), r: rnd(1.6, 3.6), v: rnd(12, 18), b: 0 });
+            const pellet = (init) => ({ k: 'p', x: rnd(0, W), y: init ? rnd(-H, H) : rnd(-60, -10), r: rnd(.9, 1.6), v: rnd(9, 13) });
+            const flake = (init) => ({ k: 's', x: rnd(-50, W + 50), y: init ? rnd(-H, H) : rnd(-40, -5), r: rnd(1, 3.6), v: rnd(.6, 1.8), p: rnd(0, 6.28), o: rnd(.5, .95) });
+            const dustMote = (init) => ({ k: 'd', x: init ? rnd(0, W) : rnd(-60, -5), y: rnd(0, H), r: rnd(.6, 2), v: rnd(6, 14), o: rnd(.2, .55) });
+            const windStreak = (init) => ({ x: init ? rnd(0, W) : rnd(-400, -100), y: rnd(H * .1, H * .9), l: rnd(80, 220), v: rnd(10, 22), o: rnd(.08, .22), w: rnd(0, 6.28) });
+
+            // ---- drawing helpers
+            function drawCelestial(time) {
+                const mode = S.celestial;
+                if (!mode) return;
+                // open sky: the header gap on wide layouts, beside the location when cards stack
+                const wide = W >= 1024;
+                const spot = wide ? { x: W * 0.5, y: 40, r: 22 } : { x: W * 0.84, y: Math.min(H * 0.17, 150), r: 20 };
+                if (night) {
+                    // moon with its real phase
+                    const mx = spot.x, my = spot.y, mr = spot.r;
+                    const glow = ctx.createRadialGradient(mx, my, mr * .5, mx, my, mr * 5);
+                    glow.addColorStop(0, `rgba(220,230,255,${mode === 'dim' ? .12 : .22})`); glow.addColorStop(1, 'rgba(220,230,255,0)');
+                    ctx.fillStyle = glow; ctx.fillRect(mx - mr * 5, my - mr * 5, mr * 10, mr * 10);
+                    drawMoon(mx, my, mr, mode === 'dim' ? .55 : .95);
+                    return;
+                }
+                let x = spot.x, y = spot.y, r = spot.r * 1.2, core = 'rgba(255,248,220,', halo = 'rgba(255,220,140,', hs = 16;
+                if (mode === 'low') { x = W * 0.8; y = H * 0.9; r *= 2.2; core = 'rgba(255,220,170,'; halo = 'rgba(255,150,90,'; hs = 12; }
+                if (mode === 'hot') { r *= 1.4; halo = 'rgba(255,170,80,'; hs = 22; }
+                if (mode === 'red') { core = 'rgba(255,120,70,'; halo = 'rgba(200,80,40,'; hs = 8; }
+                const k = mode === 'dim' ? .45 : 1;
+                const g = ctx.createRadialGradient(x, y, r * .2, x, y, r * hs);
+                g.addColorStop(0, halo + (.55 * k) + ')'); g.addColorStop(.25, halo + (.18 * k) + ')'); g.addColorStop(1, halo + '0)');
+                ctx.fillStyle = g; ctx.fillRect(x - r * hs, y - r * hs, r * hs * 2, r * hs * 2);
+                if (mode === 'full' || mode === 'hot' || mode === 'low') {
+                    // slowly turning rays
+                    ctx.save(); ctx.translate(x, y); ctx.rotate(time * 0.00004);
+                    for (let i = 0; i < 12; i++) {
+                        ctx.rotate(Math.PI / 6);
+                        const rg = ctx.createLinearGradient(0, 0, r * 14, 0);
+                        rg.addColorStop(0, halo + (.10 * k) + ')'); rg.addColorStop(1, halo + '0)');
+                        ctx.fillStyle = rg; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(r * 14, -r * .8); ctx.lineTo(r * 14, r * .8); ctx.fill();
+                    }
+                    ctx.restore();
+                }
+                ctx.fillStyle = core + (mode === 'dim' ? .55 : .95) + ')';
+                ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+            }
+            function drawMoon(x, y, r, alpha) {
+                let phase = typeof SunCalc !== 'undefined' ? SunCalc.getMoonIllumination(new Date()).phase : 0.5; // 0 new, .5 full
+                // near a new moon, still show a slim crescent so the moon reads as a moon
+                if (phase < 0.06) phase = 0.06; else if (phase > 0.94) phase = 0.94;
+                const c = sprites.moon || (sprites.moon = document.createElement('canvas'));
+                const size = Math.ceil(r * 2 + 4), cx = size / 2;
+                c.width = c.height = size;
+                const g = c.getContext('2d');
+                const lit = '#F4F1E6';
+                g.fillStyle = lit; g.beginPath(); g.arc(cx, cx, r, 0, Math.PI * 2); g.fill();
+                const waxing = phase < 0.5;            // lit on the right while waxing
+                const k = Math.cos(phase * 2 * Math.PI); // 1 new, 0 quarter, -1 full
+                // erase the dark half
+                g.save(); g.beginPath(); g.rect(waxing ? 0 : cx, 0, cx, size); g.clip();
+                g.globalCompositeOperation = 'destination-out'; g.beginPath(); g.arc(cx, cx, r + 1, 0, Math.PI * 2); g.fill(); g.restore();
+                // middle ellipse: cut light back (crescent) or add it (gibbous)
+                g.globalCompositeOperation = k > 0 ? 'destination-out' : 'source-over';
+                g.fillStyle = lit; g.beginPath(); g.ellipse(cx, cx, Math.max(.01, r * Math.abs(k)), r, 0, 0, Math.PI * 2); g.fill();
+                g.globalCompositeOperation = 'source-over';
+                // faint earthshine so a thin moon still reads as a disc
+                g.globalCompositeOperation = 'destination-over'; g.fillStyle = 'rgba(244,241,230,.12)'; g.beginPath(); g.arc(cx, cx, r, 0, Math.PI * 2); g.fill();
+                g.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = alpha; ctx.drawImage(c, x - cx, y - cx); ctx.globalAlpha = 1;
+            }
+            function drawStars(time) {
+                for (const s of stars) {
+                    const tw = .5 + .5 * Math.sin(time * .001 * s.sp + s.p);
+                    ctx.fillStyle = S.sparkle && !night ? `rgba(255,255,255,${tw * .8})` : `rgba(255,255,255,${.25 + tw * .6})`;
+                    if (S.sparkle && !night && tw < .85) continue;
+                    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+                }
+                // an occasional shooting star on clear nights
+                if (night && (key === 'clear' || key === 'frigid') && !reduceMotion) {
+                    const cyc = (time % 14000) / 14000;
+                    if (cyc < .06) {
+                        const p = cyc / .06, sx = W * .15 + p * W * .35, sy = H * .08 + p * H * .18;
+                        const g = ctx.createLinearGradient(sx, sy, sx - 120, sy - 60);
+                        g.addColorStop(0, `rgba(255,255,255,${.9 * (1 - p)})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+                        ctx.strokeStyle = g; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx - 120, sy - 60); ctx.stroke();
+                    }
+                }
+            }
+            function drawClouds(dt) {
+                const tone = S.cloudTone || 'white';
+                if (S.deck) {
+                    const g = ctx.createLinearGradient(0, 0, 0, H * .45);
+                    const c = { grey: '120,132,146', dark: '70,80,94', storm: '28,32,40', white: '200,210,220' }[tone] || '120,132,146';
+                    g.addColorStop(0, `rgba(${c},${night ? .75 : .6})`); g.addColorStop(1, `rgba(${c},0)`);
+                    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H * .45);
+                }
+                for (const c of clouds) {
+                    const sp = cloudSprite(night && tone === 'white' ? 'grey' : tone, c.seed);
+                    c.x += c.v * dt * (S.gusts ? 1 + gust * 2 : 1);
+                    if (c.x > W + 50) { c.x = -sp.width * c.s - rnd(0, 200); c.y = rnd(-60, H * (S.deck ? .32 : .45)); }
+                    ctx.globalAlpha = c.o * (night ? .55 : 1);
+                    ctx.drawImage(sp, c.x, c.y, sp.width * c.s, sp.height * c.s);
+                }
+                ctx.globalAlpha = 1;
+            }
+            function drawFunnel(time) {
+                const bx = W * (W >= 1024 ? 0.6 : 0.7) + Math.sin(time * .00025) * W * .05, top = H * .18, bottom = H * .97;
+                // wall cloud
+                const wc = ctx.createRadialGradient(bx, top, 20, bx, top, W * .3);
+                wc.addColorStop(0, 'rgba(20,24,20,.85)'); wc.addColorStop(1, 'rgba(20,24,20,0)');
+                ctx.fillStyle = wc; ctx.fillRect(bx - W * .3, top - W * .3, W * .6, W * .45);
+                const steps = 46;
+                for (let i = 0; i < steps; i++) {
+                    const p = i / (steps - 1), y = top + (bottom - top) * p;
+                    const w = (1 - p) * (1 - p) * W * .13 + 16 + Math.sin(time * .004 + p * 9) * 4;
+                    const x = bx + Math.sin(p * 3.2 + time * .0012) * (p * W * .035) + (p * p) * W * .03;
+                    const shade = 14 + p * 22;
+                    ctx.fillStyle = `rgba(${shade},${shade + 4},${shade},${.32 + (1 - p) * .2})`;
+                    ctx.beginPath(); ctx.ellipse(x, y, w, 9 + (1 - p) * 10, 0, 0, Math.PI * 2); ctx.fill();
+                    if (p > .85) { // dust cloud at the ground
+                        ctx.fillStyle = 'rgba(80,72,60,.06)'; ctx.beginPath(); ctx.ellipse(x, y, w * 3.5, 22, 0, 0, Math.PI * 2); ctx.fill();
+                    }
+                }
+                const gx = bx + W * .03 + Math.sin(3.2 + time * .0012) * W * .035, gy = bottom - 30;
+                for (const d of debris) {
+                    d.a += d.sp * .02; const r = d.r * (0.6 + d.h);
+                    const x = gx + Math.cos(d.a) * r, y = gy - d.h * 140 + Math.sin(d.a) * r * .25;
+                    ctx.fillStyle = 'rgba(40,36,30,.7)'; ctx.fillRect(x, y, d.sz, d.sz * .6);
+                }
+            }
+            function drawParticles(dt) {
+                const wx = windX();
+                ctx.lineCap = 'round';
+                for (let i = 0; i < parts.length; i++) {
+                    const p = parts[i];
+                    if (p.k === 'r') {
+                        p.y += p.v * dt * 60; p.x += wx * dt * 60 * (S.gusts ? 1 + gust : 1);
+                        ctx.strokeStyle = S.glaze ? `rgba(220,240,255,${p.o + .1})` : `rgba(210,225,240,${p.o})`; ctx.lineWidth = S.drop === 'fine' ? .8 : 1.1;
+                        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - wx * p.l / p.v, p.y - p.l); ctx.stroke();
+                        if (p.y > H) { if (S.splash && Math.random() < .35) splashes.push({ x: p.x, y: H - rnd(2, 40), r: 0, o: .5 }); parts[i] = rainDrop(false); }
+                    } else if (p.k === 'h') {
+                        p.y += p.v * dt * 60; p.x += wx * .4 * dt * 60;
+                        if (p.y > H - 6 && !p.b) { p.b = 1; p.v = -p.v * .35; }
+                        if (p.b) p.v += .9 * dt * 60;
+                        ctx.fillStyle = 'rgba(245,250,255,.9)'; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+                        if (p.b && p.y > H + 10) parts[i] = hailStone(false);
+                    } else if (p.k === 'p') {
+                        p.y += p.v * dt * 60; p.x += wx * .6 * dt * 60;
+                        ctx.fillStyle = 'rgba(230,240,250,.8)'; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+                        if (p.y > H) parts[i] = pellet(false);
+                    } else if (p.k === 's') {
+                        p.p += dt * 1.5; p.y += p.v * dt * 60 * (1 + p.r * .15); p.x += (Math.sin(p.p) * .6 + wx * (0.4 + p.r * .2) * (S.gusts ? 1 + gust * 2 : 1)) * dt * 60;
+                        ctx.fillStyle = `rgba(255,255,255,${p.o})`; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+                        if (p.y > H + 5 || p.x > W + 60) { parts[i] = flake(false); if (wx > 3) { parts[i].x = rnd(-W * .5, W); parts[i].y = rnd(-40, H * .5); } }
+                    } else if (p.k === 'd') {
+                        p.x += p.v * dt * 60 * (1 + gust); p.y += Math.sin((p.x + p.y) * .01) * .4;
+                        ctx.fillStyle = `rgba(120,90,50,${p.o})`; ctx.fillRect(p.x, p.y, p.r * 2.4, p.r);
+                        if (p.x > W + 10) parts[i] = dustMote(false);
+                    }
+                }
+                for (let i = splashes.length - 1; i >= 0; i--) {
+                    const s = splashes[i]; s.r += 40 * dt; s.o -= 1.4 * dt;
+                    if (s.o <= 0) { splashes.splice(i, 1); continue; }
+                    ctx.strokeStyle = `rgba(220,232,245,${s.o})`; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.ellipse(s.x, s.y, s.r, s.r * .3, 0, Math.PI, Math.PI * 2); ctx.stroke();
+                }
+            }
+            function drawBands(dt) {
+                const sp = fogSprite();
+                for (const b of bands) {
+                    b.x += b.v * dt;
+                    if (b.v > 0 && b.x > W) b.x = -sp.width * b.s;
+                    if (b.v < 0 && b.x < -sp.width * b.s) b.x = W;
+                    ctx.globalAlpha = night ? .5 : .85;
+                    ctx.drawImage(sp, b.x, b.y - sp.height * b.s / 2, sp.width * b.s, sp.height * b.s);
+                }
+                ctx.globalAlpha = 1;
+            }
+            function overlay(color) { ctx.fillStyle = color; ctx.fillRect(0, 0, W, H); }
+            function drawStreaks(dt, time) {
+                ctx.lineWidth = 1.2;
+                for (let i = 0; i < streaks.length; i++) {
+                    const s = streaks[i]; s.x += s.v * dt * 60;
+                    ctx.strokeStyle = `rgba(255,255,255,${s.o})`;
+                    ctx.beginPath(); ctx.moveTo(s.x, s.y);
+                    ctx.bezierCurveTo(s.x + s.l * .3, s.y - 8 * Math.sin(time * .002 + s.w), s.x + s.l * .6, s.y + 8, s.x + s.l, s.y);
+                    ctx.stroke();
+                    if (s.x > W + 40) streaks[i] = windStreak(false);
+                }
+                if (S.leaves) {
+                    for (let i = 0; i < 6; i++) {
+                        const p = ((time * .00012 + i / 6) % 1), x = p * (W + 200) - 100, y = H * (.3 + .1 * i) + Math.sin(time * .002 + i) * 30;
+                        ctx.save(); ctx.translate(x, y); ctx.rotate(time * .004 + i);
+                        ctx.fillStyle = i % 2 ? 'rgba(232,160,70,.75)' : 'rgba(120,170,80,.7)';
+                        ctx.beginPath(); ctx.ellipse(0, 0, 6, 3, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+                    }
+                }
+            }
+            function drawShimmer(time) {
+                for (let i = 0; i < 6; i++) {
+                    const y = H * (.62 + i * .06) + Math.sin(time * .002 + i) * 6;
+                    const g = ctx.createLinearGradient(0, y - 18, 0, y + 18);
+                    g.addColorStop(0, 'rgba(255,230,180,0)'); g.addColorStop(.5, `rgba(255,230,180,${.06 + .03 * Math.sin(time * .003 + i * 2)})`); g.addColorStop(1, 'rgba(255,230,180,0)');
+                    ctx.fillStyle = g; ctx.fillRect(0, y - 18, W, 36);
+                }
+            }
+            function drawFrost() {
+                const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .45, W / 2, H / 2, Math.max(W, H) * .75);
+                g.addColorStop(0, 'rgba(230,245,255,0)'); g.addColorStop(1, `rgba(230,245,255,${S.glaze ? .28 : .22})`);
+                ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+            }
+            function makeBolt() {
+                const x0 = rnd(W * .15, W * .85), pts = [[x0, -10]], end = rnd(H * .45, H * .9);
+                let x = x0, y = -10;
+                while (y < end) { y += rnd(18, 42); x += rnd(-38, 38); pts.push([x, y]); }
+                const branches = [];
+                for (let i = 2; i < pts.length - 2; i += 3) if (Math.random() < .5) {
+                    const br = [pts[i]]; let bx = pts[i][0], by = pts[i][1];
+                    for (let j = 0; j < 4; j++) { by += rnd(15, 30); bx += rnd(-35, 35) + (Math.random() < .5 ? -12 : 12); br.push([bx, by]); }
+                    branches.push(br);
+                }
+                return { pts, branches, life: 1 };
+            }
+            function drawLightning(now, dt) {
+                if (!S.lightning) return;
+                if (now > nextBolt) {
+                    bolt = makeBolt(); flash = 1;
+                    nextBolt = now + rnd(S.lightning[0], S.lightning[1]) * 1000 / Math.max(.5, intensity);
+                }
+                if (flash > 0) { overlay(`rgba(225,232,255,${flash * .32})`); flash -= dt * 4; }
+                if (bolt && bolt.life > 0) {
+                    const line = (pts, w) => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const p of pts) ctx.lineTo(p[0], p[1]); ctx.lineWidth = w; ctx.stroke(); };
+                    ctx.save(); ctx.shadowColor = 'rgba(190,210,255,1)'; ctx.shadowBlur = 18;
+                    ctx.strokeStyle = `rgba(245,248,255,${bolt.life})`;
+                    line(bolt.pts, 2.4); bolt.branches.forEach(b => line(b, 1.2));
+                    ctx.restore();
+                    bolt.life -= dt * 3.5;
+                }
+            }
+
+            // ---- main loop
+            function frame(now) {
+                raf = 0;
+                const dt = Math.min(.05, (now - (last || now)) / 1000); last = now;
+                const time = now - t0;
+                if (S.gusts && now > nextGust) { gust = 1; nextGust = now + rnd(3000, 7000); }
+                gust = Math.max(0, gust - dt * .6);
+                ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+                ctx.clearRect(0, 0, W, H);
+                drawStars(time);
+                drawCelestial(time);
+                if (S.haze) overlay(night ? 'rgba(90,80,60,.18)' : 'rgba(225,205,160,.22)');
+                if (S.smoke) overlay(night ? 'rgba(60,35,20,.35)' : 'rgba(150,90,40,.28)');
+                drawClouds(dt);
+                if (S.funnel) drawFunnel(time);
+                if (S.fog) drawBands(dt);
+                drawParticles(dt);
+                if (S.streaks) drawStreaks(dt, time);
+                if (S.shimmer) drawShimmer(time);
+                if (S.mist) overlay(`rgba(200,210,220,${.06 + gust * .08})`);
+                if (S.whiteout) overlay(`rgba(240,244,248,${S.whiteout * (0.7 + gust * .6)})`);
+                if (S.frost) drawFrost();
+                drawLightning(now, dt);
+                if (!reduceMotion && !document.hidden) raf = requestAnimationFrame(frame);
+            }
+            function resize() {
+                DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+                W = window.innerWidth; H = window.innerHeight;
+                cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+                cv.style.width = W + 'px'; cv.style.height = H + 'px';
+                if (S) { build(); kick(); }
+            }
+            function kick() { if (!raf) { last = 0; raf = requestAnimationFrame(frame); } }
+
+            function apply(k, isNight, level) {
+                const changed = k !== key || isNight !== night || level !== intensity;
+                key = k; night = isNight; intensity = level; S = DEF[k] || DEF.cloudy;
+                const sky = (SKY[k] || SKY.cloudy)[night ? 'n' : 'd'];
+                const bg = $('bg-canvas');
+                bg.className = 'fixed inset-0';
+                bg.style.background = `linear-gradient(180deg, ${sky[0]} 0%, ${sky[1]} 55%, ${sky[2]} 100%)`;
+                document.body.style.setProperty('background', sky[0], 'important');
+                document.body.dataset.scene = k;
+                document.body.classList.toggle('scene-light', LIGHT.has(k) && !night);
+                const meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = sky[0];
+                $('css-effects').innerHTML = '';
+                if (changed) build();
+                kick();
+            }
+
+            window.addEventListener('resize', resize);
+            document.addEventListener('visibilitychange', () => { if (!document.hidden) kick(); });
+            resize();
+
+            let preview = null; // { key, night } while previewing a scene
+            let live = { key: 'clear', night: false, level: 1 };
+            return {
+                NAMES, classify,
+                live(forecast, isDay, alerts, tempF) {
+                    const c = classify(forecast, isDay, alerts, tempF);
+                    live = { key: c.key, night: !isDay, level: c.level };
+                    if (!preview) apply(live.key, live.night, live.level);
+                    return c.key;
+                },
+                preview(k, isNight) { preview = k ? { key: k, night: !!isNight } : null; if (preview) apply(k, !!isNight, 1); else apply(live.key, live.night, live.level); },
+                current: () => ({ key, night, previewing: !!preview }),
+            };
+        })();
+
+        function updateDynamicBackground(forecast, isDay) {
+            const T = state.weatherData ? state.weatherData.temperature : null;
+            Scenes.live(forecast, isDay, state.alerts, T);
+            renderScenePicker();
+        }
+
+        // --- Week Ahead: a plain-English look at the coming days, worked out from the forecast itself
+        function renderWeekAhead(list) {
+            const box = $('week-ahead');
+            const metric = CONFIG.units === 'metric';
+            const T = (f) => displayTemp(f) + '°';
+            const days = list.map((d, i) => {
+                const dt = new Date(d.dateKey + 'T12:00:00');
+                const texts = [d.dayDesc, d.nightDesc].filter(Boolean).join(' ').toLowerCase();
+                return {
+                    i, dt, short: dt.toLocaleDateString([], { weekday: 'short' }),
+                    long: i === 0 ? 'today' : dt.toLocaleDateString([], { weekday: 'long' }),
+                    dow: dt.getDay(), hi: d.dayHigh, lo: d.nightLow,
+                    pop: Math.max(d.dayPrecip || 0, d.nightPrecip || 0),
+                    cond: d.dayDesc || d.nightDesc || '',
+                    snow: /snow|flurr|sleet|wintry|ice/.test(texts), storm: /thunder|t-storm/.test(texts),
+                    sunny: /sunny|clear|fair/.test((d.dayDesc || d.nightDesc || '').toLowerCase()),
+                };
+            });
+            if (days.length < 3) { box.classList.add('hidden'); return; }
+
+            const his = days.filter(d => d.hi != null), los = days.filter(d => d.lo != null);
+            const feel = (f) => f >= 88 ? 'hot' : f >= 76 ? 'warm' : f >= 58 ? 'mild' : f >= 47 ? 'cool' : f >= 34 ? 'chilly' : 'cold';
+            const precipWord = (d) => d.storm ? 'Storms' : d.snow ? 'Snow' : 'Rain';
+            const join = (a) => a.length < 2 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+            const cap = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+            const band = (lo, hi) => {     // "the low to mid 40s"
+                if (metric) return lo === hi ? `around ${T(lo)}` : `${T(lo)} to ${T(hi)}`;
+                const part = (v) => { const u = Math.round(v) % 10; return u <= 3 ? 'low' : u <= 6 ? 'mid' : 'upper'; };
+                const dec = (v) => Math.floor(Math.round(v) / 10) * 10;
+                if (dec(lo) === dec(hi)) return part(lo) === part(hi) ? `the ${part(lo)} ${dec(lo)}s` : `the ${part(lo)} to ${part(hi)} ${dec(lo)}s`;
+                return `the ${part(lo)} ${dec(lo)}s to ${part(hi)} ${dec(hi)}s`;
+            };
+
+            const sentences = [];
+            // 1) how the week starts
+            let run = 0; while (run < days.length && days[run].pop < 40) run++;
+            const opener = days.slice(0, Math.max(1, run));
+            const avgHi = (arr) => { const v = arr.filter(d => d.hi != null).map(d => d.hi); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+            const startHi = avgHi(opener);
+            const sky = opener.filter(d => d.sunny).length >= opener.length / 2 ? 'Sunny' : 'Mostly cloudy';
+            if (run >= 2 && startHi != null) sentences.push(`${sky} and ${feel(startHi)} through ${days[run - 1].long}`);
+            else if (startHi != null) sentences.push(`${cap(feel(startHi))} to start the week`);
+
+            // 2) the temperature trend
+            const a = avgHi(days.slice(0, 3)), b = avgHi(days.slice(-3));
+            if (a != null && b != null) {
+                const diff = b - a;
+                const trend = diff <= -6 ? 'then a cooling trend' : diff >= 6 ? 'then a warming trend' : 'with temperatures holding fairly steady';
+                sentences[sentences.length - 1] = (sentences[sentences.length - 1] || 'This week') + ', ' + trend + '.';
+            } else if (sentences.length) sentences[0] += '.';
+
+            // 3) rain / snow / storms
+            const wet = days.filter(d => d.pop >= 40);
+            const wettest = days.reduce((m, d) => d.pop > m.pop ? d : m, days[0]);
+            if (wet.length) sentences.push(`${precipWord(wettest)} ${wet.length > 1 ? 'chances peak' : 'is most likely'} ${wettest.long} (${wettest.pop}%)${wet.length > 1 ? `, with more chances ${join(wet.filter(d => d !== wettest).map(d => d.long))}` : ''}.`);
+            else if (wettest.pop >= 20) sentences.push(`Mostly dry, with only a slight chance of ${precipWord(wettest).toLowerCase()} ${wettest.long}.`);
+            else sentences.push('No rain or snow expected.');
+            // a chance of snow is worth calling out even below "likely"
+            const snowy = days.filter(d => d.snow && d.pop >= 20 && !(wet.length && d === wettest && wettest.snow));
+            if (snowy.length) sentences.push(`${snowy.length > 1 ? 'Snow showers possible' : 'A chance of snow showers'} ${join(snowy.map(d => d.long))}${snowy.length === 1 ? ` (${snowy[0].pop}%)` : ''}.`);
+
+            // 4) freezing nights
+            const coldest = los.reduce((m, d) => (m == null || d.lo < m.lo) ? d : m, null);
+            const firstFreeze = los.find(d => d.lo <= 32);
+            if (firstFreeze && coldest) {
+                sentences.push(firstFreeze === coldest
+                    ? `Freezing night ${firstFreeze.long} at ${T(coldest.lo)}.`
+                    : `Nights drop below freezing from ${firstFreeze.long}, coldest ${coldest.long} at ${T(coldest.lo)}.`);
+            }
+
+            // 5) the weekend
+            const wk = days.filter(d => d.i > 0 && (d.dow === 6 || d.dow === 0));
+            if (wk.length) {
+                const wkHi = wk.filter(d => d.hi != null).map(d => d.hi);
+                const wkWet = wk.some(d => d.pop >= 40);
+                const wkFeel = wkHi.length ? feel(wkHi.reduce((x, y) => x + y, 0) / wkHi.length) : null;
+                let t = `The weekend looks ${wkWet ? 'unsettled' : 'dry'}${wkFeel ? ' and ' + wkFeel : ''}`;
+                if (wkHi.length) t += `, highs in ${band(Math.min(...wkHi), Math.max(...wkHi))}`;
+                sentences.push(t + '.');
+            }
+            // severe weather first, if any
+            const alerts = (state.alerts || []).map(x => x.event).filter(Boolean);
+            if (alerts.length) sentences.unshift(`${[...new Set(alerts)].slice(0, 2).join(' and ')} in effect.`);
+            $('week-summary').textContent = sentences.join(' ');
+
+            // highlight chips
+            const warmest = his.reduce((m, d) => (m == null || d.hi > m.hi) ? d : m, null);
+            const chip = (icon, lbl, val, sub) => `<div class="week-chip"><div class="lbl"><i data-lucide="${icon}" class="w-3 h-3"></i>${lbl}</div><div class="val">${val}</div><div class="sub">${sub}</div></div>`;
+            const chips = [];
+            if (warmest) chips.push(chip('thermometer-sun', 'Warmest', `${warmest.short} ${T(warmest.hi)}`, getSimpleCondition(warmest.cond)));
+            chips.push(wettest.pop >= 20 ? chip(wettest.snow ? 'snowflake' : 'umbrella', 'Wettest', `${wettest.short} ${wettest.pop}%`, precipWord(wettest).toLowerCase() + ' chance')
+                                         : chip('sun', 'Dry week', 'No rain', 'expected'));
+            if (coldest) chips.push(chip('thermometer-snowflake', 'Coldest night', `${coldest.short} ${T(coldest.lo)}`, coldest.lo <= 32 ? 'freezing' : 'low'));
+            if (wk.length) {
+                const v = wk.filter(d => d.hi != null).map(d => d.hi);
+                const lo = Math.min(...v), hi = Math.max(...v);
+                chips.push(chip('calendar-heart', 'Weekend', wk.some(d => d.pop >= 40) ? 'Unsettled' : 'Dry', !v.length ? '' : displayTemp(lo) === displayTemp(hi) ? `high ${T(hi)}` : `highs ${T(lo)}–${T(hi)}`));
+            }
+            $('week-chips').innerHTML = chips.slice(0, 4).join('');
+            box.classList.remove('hidden');
+            lucide.createIcons();
+            fitWeekAhead();
+        }
+
+        // Show as much of Week Ahead as fits; never squeeze the daily list.
+        // Re-checked whenever the forecast card changes size.
+        function fitWeekAhead() {
+            const box = $('week-ahead');
+            if (!box || box.classList.contains('hidden')) return;
+            const sum = $('week-summary'), chips = [...$('week-chips').children];
+            box.style.display = ''; box.classList.remove('clamp', 'compact'); chips.forEach(c => c.style.display = '');
+            if (window.innerWidth < 1024) return;              // stacked layout: natural height
+            const room = box.clientHeight, fits = () => box.scrollHeight <= room + 1;
+            if (fits()) return;
+            box.classList.add('compact');                        // all chips, slimmer
+            if (fits()) return;
+            for (let n = chips.length - 2; n >= 0; n -= 2) {    // fewer rows: full-size first, then slim
+                chips.forEach((c, k) => c.style.display = k < n ? '' : 'none');
+                box.classList.remove('compact'); if (fits()) return;
+                box.classList.add('compact'); if (fits()) return;
+            }
+            box.classList.remove('compact');
+            const lh = parseFloat(getComputedStyle(sum).lineHeight) || 21;
+            const top = sum.getBoundingClientRect().top - box.getBoundingClientRect().top;
+            const lines = Math.floor((room - top) / lh);
+            if (lines >= 2) { box.classList.add('clamp'); box.style.setProperty('--lines', lines); return; }
+            box.style.display = 'none';
+        }
+        if (window.ResizeObserver) new ResizeObserver(() => requestAnimationFrame(fitWeekAhead)).observe(document.querySelector('.area-forecast'));
+        window.addEventListener('resize', () => requestAnimationFrame(fitWeekAhead));
+
+        // Dark mode: remembered per computer; follows Windows until chosen
+        function setupDarkMode() {
+            const btn = $('dark-btn');
+            const paint = () => {
+                const on = document.body.classList.contains('dark');
+                btn.innerHTML = `<i data-lucide="${on ? 'sun' : 'moon'}" class="w-4 h-4 md:w-5 md:h-5"></i>`;
+                btn.title = on ? 'Light mode' : 'Dark mode';
+                const meta = document.querySelector('meta[name="theme-color"]');
+                if (meta && on) meta.content = '#0c0e14';
+                lucide.createIcons();
+            };
+            btn.addEventListener('click', () => {
+                const on = document.body.classList.toggle('dark');
+                try { localStorage.setItem('yw_dark', on ? '1' : '0'); } catch (e) {}
+                paint();
+            });
+            if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+                let v = null; try { v = localStorage.getItem('yw_dark'); } catch (er) {}
+                if (v === null) { document.body.classList.toggle('dark', e.matches); paint(); }
+            });
+            paint();
+        }
+
+        // Scene picker: preview every background
+        function renderScenePicker() {
+            const list = $('scene-list'); if (!list) return;
+            const cur = Scenes.current();
+            const groups = [
+                ['Sky', ['clear', 'partly', 'cloudy', 'overcast', 'golden', 'heat', 'frigid']],
+                ['Rain & storms', ['drizzle', 'showers', 'rain', 'heavyrain', 'storm', 'hail']],
+                ['Winter', ['flurries', 'snow', 'heavysnow', 'blizzard', 'sleet', 'freezing']],
+                ['Other', ['fog', 'haze', 'smoke', 'dust', 'windy', 'tornado', 'hurricane']],
+            ];
+            list.innerHTML = `<button class="scene-opt ${cur.previewing ? '' : 'on'}" data-scene="">Match the weather</button>` +
+                groups.map(([g, ks]) => `<div class="scene-group">${g}</div>` + ks.map(k =>
+                    `<button class="scene-opt ${cur.previewing && cur.key === k ? 'on' : ''}" data-scene="${k}">${Scenes.NAMES[k]}</button>`).join('')).join('');
+            $('scene-night').classList.toggle('on', cur.night);
+        }
+        function setupScenePicker() {
+            const btn = $('scene-btn'), pop = $('scene-pop');
+            btn.addEventListener('click', (e) => { e.stopPropagation(); renderScenePicker(); pop.classList.toggle('hidden'); });
+            document.addEventListener('click', (e) => { if (!pop.contains(e.target) && e.target !== btn) pop.classList.add('hidden'); });
+            pop.addEventListener('click', (e) => {
+                const opt = e.target.closest('[data-scene]');
+                if (opt) {
+                    const k = opt.dataset.scene;
+                    Scenes.preview(k || null, k ? Scenes.current().night : false);
+                    renderScenePicker();
+                    return;
+                }
+                if (e.target.closest('#scene-night')) {
+                    const c = Scenes.current();
+                    Scenes.preview(c.key, !c.night);
+                    renderScenePicker();
+                }
+            });
+        }
+
+        function getLucideIcon(f, isDay, c) {
+            const t = f ? f.toLowerCase() : ''; let i = 'cloud';
+            if (t.includes('tornado') || t.includes('funnel')) i = 'tornado';
+            else if (t.includes('hail')) i = 'cloud-hail';
+            else if (t.includes('thunder') || t.includes('t-storm')) i = 'cloud-lightning';
+            else if (t.includes('sleet') || t.includes('freezing') || t.includes('ice') || t.includes('wintry')) i = 'cloud-hail';
+            else if (t.includes('snow') || t.includes('flurr') || t.includes('blizzard')) i = 'cloud-snow';
+            else if (t.includes('drizzle')) i = 'cloud-drizzle';
+            else if (t.includes('rain') || t.includes('shower')) i = 'cloud-rain';
+            else if (t.includes('fog') || t.includes('mist')) i = 'cloud-fog';
+            else if (t.includes('haze') || t.includes('smoke') || t.includes('dust')) i = 'haze';
+            else if (t.includes('wind') || t.includes('breez') || t.includes('blustery')) i = 'wind';
+            else if (t.includes('partly') || t.includes('mostly sunny') || t.includes('mostly clear')) i = isDay ? 'cloud-sun' : 'cloud-moon';
+            else if (t.includes('sunny') || t.includes('clear') || t.includes('fair')) i = isDay ? 'sun' : 'moon';
+            else if (t.includes('cloud') || t.includes('overcast')) i = 'cloudy';
+            return `<i data-lucide="${i}" class="${c}"></i>`;
+        }
+        // iOS colouring: yellow for sun, white for everything else
+        function iosIcon(f, isDay, size) {
+            const t = (f || '').toLowerCase();
+            const sunny = isDay && (t.includes('sunny') || t.includes('clear'));
+            return getLucideIcon(f, isDay, `${size} ${sunny ? 'text-[#FFD60A]' : 'text-white'}`);
+        }
+        // Apple-like temperature colour scale (input in °F)
+        function tempColor(f) {
+            const stops = [[10, '#5E5CE6'], [32, '#64D2FF'], [50, '#63E6BE'], [65, '#A6E36E'], [75, '#FFD60A'], [85, '#FF9F0A'], [100, '#FF453A']];
+            if (f <= stops[0][0]) return stops[0][1];
+            for (let k = 1; k < stops.length; k++) if (f <= stops[k][0]) return stops[k][1];
+            return stops[stops.length - 1][1];
+        }
+
+        // --- Geolocation & Search ---
+        async function geocodeCity(city) {
+            try {
+                // NOAA only forecasts US locations, so search the US only
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city)}&format=json&limit=1&countrycodes=us`);
+                const data = await res.json();
+                if (!data.length) { toast(`Couldn't find "${city}".`, 'warn'); return; }
+                fetchWeatherData(data[0].lat, data[0].lon);
+            } catch (e) { toast('Search failed. Check your connection.', 'error'); }
+        }
+        function handleSearch() { const t = $('city-search').value.trim(); if (t) { geocodeCity(t); $('city-search').value = ''; } }
+        function handleLocate() {
+            toast('Finding your location...');
+            if (navigator.geolocation) navigator.geolocation.getCurrentPosition(p => fetchWeatherData(p.coords.latitude, p.coords.longitude), () => fetchIPLocation(), { enableHighAccuracy: false, timeout: 6000 });
+            else fetchIPLocation();
+        }
+        async function fetchIPLocation(firstRun) {
+            try { const res = await fetch('https://ipapi.co/json/'); const data = await res.json(); if (data.latitude) return fetchWeatherData(data.latitude, data.longitude); throw new Error(); }
+            catch (e) {
+                try { const r2 = await fetch('https://ipwho.is/'); const d2 = await r2.json(); if (d2.latitude) return fetchWeatherData(d2.latitude, d2.longitude); throw new Error(); }
+                catch (e2) {
+                    toast('Could not detect your location. Please search for a city.', 'error');
+                    if (firstRun) fetchWeatherData(CONFIG.defaultLat, CONFIG.defaultLon);
+                }
+            }
+        }
+        function toggleUnits() {
+            CONFIG.units = CONFIG.units === 'imperial' ? 'metric' : 'imperial';
+            localStorage.setItem('weather_units', CONFIG.units);
+            $('unit-toggle').textContent = CONFIG.units === 'imperial' ? '°F' : '°C';
+            applyData(); // no network needed, just re-render
+        }
+        function addToHistory(city) {
+            const h = safeJSON('search_history', []).filter(c => c !== city);
+            h.unshift(city);
+            localStorage.setItem('search_history', JSON.stringify(h.slice(0, 5)));
+            updateSearchHistoryUI();
+        }
+        function updateSearchHistoryUI() {
+            const h = safeJSON('search_history', []);
+            $('search-history').innerHTML = h.map(city => `<div data-city="${esc(city)}" class="px-4 py-2 hover:bg-white/10 cursor-pointer text-sm text-slate-300 border-b border-white/5 last:border-0">${esc(city)}</div>`).join('');
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

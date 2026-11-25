@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in to your Brume 3</title>
+<style>
+  :root {
+    --bg: #f3f4f7; --card: #ffffff; --text: #1d2330; --muted: #5d6675; --line: #d9dde5;
+    --field: #ffffff; --accent: #3d7be8; --accent-text: #ffffff; --err: #c62828; --ok: #2e7d32;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #17181c; --card: #222429; --text: #eceef2; --muted: #a2a8b3; --line: #383b43;
+      --field: #1a1c20; --accent: #5b92f0; --err: #ff7b72; --ok: #6fcf7a; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+  .card { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 28px 28px 24px; box-shadow: 0 8px 30px rgba(0,0,0,.08); }
+  h1 { font: 600 20px/1.25 "Segoe UI Semibold", "Segoe UI", sans-serif; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+  label.f { display: block; font-size: 12.5px; color: var(--muted); margin: 14px 0 5px; }
+  input[type=text], input[type=password] { width: 100%; padding: 9px 11px; font: inherit; color: var(--text);
+    background: var(--field); border: 1px solid var(--line); border-radius: 8px; outline: none; }
+  input[type=text]:focus, input[type=password]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .pw { position: relative; }
+  .pw input { padding-right: 64px; }
+  .pw button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: none;
+    color: var(--accent); font: 600 12px "Segoe UI", sans-serif; cursor: pointer; padding: 4px 6px; }
+  .checks { margin-top: 16px; display: grid; gap: 8px; }
+  .checks label { display: flex; gap: 9px; align-items: flex-start; font-size: 13px; cursor: pointer; }
+  .checks input { margin-top: 3px; accent-color: var(--accent); }
+  .actions { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
+  .primary, .secondary { font: 600 14px "Segoe UI", sans-serif; border-radius: 8px; padding: 9px 18px; cursor: pointer; }
+  .primary { background: var(--accent); color: var(--accent-text); border: 1px solid var(--accent); }
+  .secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: .55; cursor: default; }
+  #status { margin-top: 16px; font-size: 13px; min-height: 1.2em; white-space: pre-line; }
+  #status.err { color: var(--err); } #status.ok { color: var(--ok); } #status.info { color: var(--muted); }
+  .note { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<form class="card" id="form" autocomplete="off">
+  <h1 id="title">Sign in to your router</h1>
+  <p class="sub">Same login as the router's admin page. Your password never leaves this PC in plain text.</p>
+
+  <label class="f" for="host" id="hostLabel">Router IP / address</label>
+  <input type="text" id="host" spellcheck="false">
+
+  <label class="f" for="user">Username</label>
+  <input type="text" id="user" spellcheck="false">
+
+  <label class="f" for="pass">Password</label>
+  <div class="pw"><input type="password" id="pass" autocomplete="off"><button type="button" id="show">Show</button></div>
+
+  <div class="checks">
+    <label><input type="checkbox" id="remember"> Remember my login (stored securely in Windows Credential Manager)</label>
+    <label><input type="checkbox" id="alerts"> Show desktop alerts when something is wrong</label>
+    <label id="startupRow"><input type="checkbox" id="startup"> Start Home Hub with Windows (in the system tray)</label>
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="go" type="submit">Sign in</button>
+    <button class="secondary" id="retry" type="button" hidden>Retry saved login</button>
+  </div>
+  <div id="status" role="status"></div>
+  <p class="note" id="note">Home Hub keeps watching your router in the background and alerts you from the system tray.</p>
+</form>
+<script>
+(function () {
+  var cfg = window.__cfg || {};
+  var $ = function (id) { return document.getElementById(id); };
+  var dev = cfg.device || 'router';
+  document.title = 'Sign in to your ' + dev;
+  $('title').textContent = 'Sign in to your ' + dev;
+  $('hostLabel').textContent = dev + ' IP address';
+  if (cfg.showStartup === false) $('startupRow').style.display = 'none';
+  if (cfg.ipMay) {
+    $('note').textContent = 'The ' + dev + '\u2019s IP address isn\u2019t fixed. If Home Hub can\u2019t reach it, it asks for the new address here. ' +
+      'Home Hub keeps watching it in the background and alerts you from the system tray.';
+  } else {
+    $('note').textContent = 'Home Hub keeps watching your ' + dev + ' in the background and alerts you from the system tray.';
+  }
+  if (cfg.savedLogin) $('pass').placeholder = 'Leave blank to use your saved password';
+  $('host').value = cfg.host || (cfg.ipMay ? '' : '192.168.8.1');
+  $('user').value = cfg.user || 'root';
+  $('remember').checked = cfg.remember !== false;
+  $('alerts').checked = !!cfg.alerts;
+  $('startup').checked = !!cfg.startup;
+  $('retry').hidden = !cfg.savedLogin;
+
+  function post(o) { o.nonce = cfg.nonce; window.chrome.webview.postMessage(JSON.stringify(o)); }
+
+  window.hub = {
+    setStatus: function (msg, kind) { var s = $('status'); s.textContent = msg || ''; s.className = kind || 'info'; },
+    setBusy: function (b) {
+      ['host', 'user', 'pass', 'remember', 'alerts', 'startup', 'go', 'retry'].forEach(function (id) { $(id).disabled = !!b; });
+      $('go').textContent = b ? 'Signing in…' : 'Sign in';
+    },
+    focusPassword: function () { $('pass').focus(); $('pass').select(); }
+  };
+  if (cfg.message) window.hub.setStatus(cfg.message, cfg.kind || 'err');
+
+  $('show').addEventListener('click', function () {
+    var p = $('pass'); var hidden = p.type === 'password';
+    p.type = hidden ? 'text' : 'password'; this.textContent = hidden ? 'Hide' : 'Show';
+  });
+  $('retry').addEventListener('click', function () { post({ type: 'retry' }); });
+  $('form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var host = $('host').value.trim(), user = $('user').value.trim(), pass = $('pass').value;
+    if (!host || !user || (!pass && !cfg.savedLogin)) { window.hub.setStatus('Enter the ' + dev + '\u2019s IP address, username and password.', 'err'); return; }
+    post({ type: 'signin', host: host, user: user, pass: pass,
+      remember: $('remember').checked, alerts: $('alerts').checked, startup: $('startup').checked });
+  });
+  var focus = (cfg.host && cfg.user && !(cfg.ipMay && cfg.kind === 'err')) ? $('pass') : $('host');
+  focus.focus(); focus.select && focus.select();
+})();
+</script>
+</body>
+</html>

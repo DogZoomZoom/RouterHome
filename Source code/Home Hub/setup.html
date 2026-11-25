@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set up Home Hub</title>
+<style>
+  :root {
+    --bg: #eef0f4; --card: #ffffff; --text: #1d2330; --muted: #5d6675; --line: #d9dde5; --soft: #f4f6f9;
+    --field: #ffffff; --accent: #3d7be8; --accent-text: #ffffff; --err: #c62828; --ok: #2e7d32; --warn: #b26a00;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #131417; --card: #1f2125; --text: #eceef2; --muted: #a2a8b3; --line: #34373e; --soft: #26292e;
+      --field: #17191c; --accent: #5b92f0; --err: #ff7b72; --ok: #6fcf7a; --warn: #f0b45b; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+    display: flex; justify-content: center; padding: 28px 16px 40px; }
+  .card { width: 100%; max-width: 780px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 16px; padding: 28px 30px 24px; box-shadow: 0 10px 40px rgba(0,0,0,.10); align-self: flex-start; }
+  .steps { display: flex; gap: 6px; margin-bottom: 18px; }
+  .steps span { height: 4px; flex: 1; border-radius: 2px; background: var(--line); }
+  .steps span.on { background: var(--accent); }
+  h1 { font: 600 22px/1.25 "Segoe UI Semibold", "Segoe UI", sans-serif; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 13.5px; }
+  .hide { display: none !important; }
+
+  /* step 1: pick */
+  .pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+  .opt { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border: 1px solid var(--line); border-radius: 12px;
+    background: var(--soft); cursor: pointer; user-select: none; transition: border-color .12s, box-shadow .12s; }
+  .opt:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  .opt.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); background: var(--card); }
+  .opt img { width: 36px; height: 36px; flex: none; }
+  .opt b { display: block; font-weight: 600; font-size: 14px; }
+  .opt small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .opt .tick { margin-left: auto; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line); flex: none; display: grid; place-items: center; }
+  .opt.on .tick { background: var(--accent); border-color: var(--accent); }
+  .opt.on .tick::after { content: ""; width: 9px; height: 5px; border: 2px solid #fff; border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px, -1px); }
+  .count { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .count button { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--text);
+    font: 600 15px/1 "Segoe UI", sans-serif; cursor: pointer; padding: 0; }
+  .count output { min-width: 14px; text-align: center; font-weight: 600; }
+
+  /* step 2: rows */
+  .rows { display: grid; gap: 10px; }
+  .row { border: 1px solid var(--line); border-radius: 12px; padding: 12px 12px 10px; background: var(--soft); }
+  .row .top { display: flex; gap: 10px; align-items: center; }
+  .row img { width: 30px; height: 30px; flex: none; }
+  .row .name { flex: 1; min-width: 0; font-weight: 600; }
+  .row .kind { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .tools { display: flex; gap: 2px; }
+  .tools button { border: 0; background: none; color: var(--muted); cursor: pointer; width: 28px; height: 28px; border-radius: 6px; font: 15px/1 "Segoe UI Symbol", "Segoe UI", sans-serif; }
+  .tools button:hover:not(:disabled) { background: var(--line); color: var(--text); }
+  .tools button:disabled { opacity: .3; cursor: default; }
+  .addr { display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
+  .addr label { color: var(--muted); font-size: 12px; width: 100%; margin-bottom: -4px; }
+  .addr input { flex: 1; min-width: 200px; }
+  input[type=text] { padding: 8px 10px; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line);
+    border-radius: 8px; outline: none; }
+  input[type=text]:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  input.bad { border-color: var(--err); }
+  select { padding: 7px 8px; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 8px; outline: none; }
+  .extra { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--muted); }
+  .extra label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .extra input { accent-color: var(--accent); }
+  .msg { font-size: 12.5px; margin-top: 6px; min-height: 1em; }
+  .msg.ok { color: var(--ok); } .msg.err { color: var(--err); } .msg.info { color: var(--muted); } .msg.warn { color: var(--warn); }
+  .msg a, .note a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+  .adds { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .adds button { display: flex; gap: 6px; align-items: center; border: 1px dashed var(--line); background: none; color: var(--text);
+    border-radius: 8px; padding: 6px 10px; font: 13px "Segoe UI", sans-serif; cursor: pointer; }
+  .adds button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .adds button:disabled { opacity: .4; cursor: default; }
+  .adds img { width: 18px; height: 18px; }
+  .empty { padding: 26px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; }
+
+  /* step 3 */
+  .finish { display: grid; gap: 12px; }
+  .choice { display: flex; gap: 12px; align-items: flex-start; padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); cursor: pointer; }
+  .choice input { margin-top: 3px; accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+  .choice b { display: block; font-weight: 600; }
+  .choice small { display: block; color: var(--muted); font-size: 12.5px; }
+  .note { margin-top: 18px; padding: 12px 14px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 9%, transparent); color: var(--text); font-size: 13px; }
+
+  .actions { display: flex; gap: 10px; margin-top: 22px; align-items: center; }
+  .actions .grow { flex: 1; }
+  .primary, .secondary { font: 600 14px "Segoe UI", sans-serif; border-radius: 9px; padding: 9px 20px; cursor: pointer; }
+  .primary { background: var(--accent); color: var(--accent-text); border: 1px solid var(--accent); }
+  .secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button:disabled { opacity: .55; cursor: default; }
+  #status { font-size: 13px; color: var(--err); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="steps" id="steps"><span></span><span></span><span></span></div>
+
+  <!-- step 1 -->
+  <section id="s1">
+    <h1>Welcome to Home Hub</h1>
+    <p class="sub">Home Hub puts the pages you use to run your home network in one window, and watches your GL.iNet routers from the system tray. Choose what you want as tabs. You can change this any time.</p>
+    <div class="pick" id="pick"></div>
+  </section>
+
+  <!-- step 2 -->
+  <section id="s2" class="hide">
+    <h1 id="s2title">Where is each one?</h1>
+    <p class="sub" id="s2sub">Enter the address you'd type in a browser. For a router, just its IP address. Use <b>Check</b> to make sure Home Hub can reach it.</p>
+    <div class="rows" id="rows"></div>
+    <div class="adds" id="adds"></div>
+  </section>
+
+  <!-- step 3 -->
+  <section id="s3" class="hide">
+    <h1>Last few things</h1>
+    <p class="sub">Next, Home Hub opens your tabs. Each one asks you to sign in the first time: routers on Home Hub's own sign-in page (the password is kept in Windows Credential Manager), everything else on its usual login page.</p>
+    <div class="finish">
+      <label class="choice" id="pinYesRow"><input type="radio" name="pin" id="pinYes" checked>
+        <span><b>Protect Home Hub with a PIN</b><small>Asked each time you open Home Hub. Router alerts keep working while it's locked. Recommended: Home Hub stays signed in to everything.</small></span></label>
+      <label class="choice" id="pinNoRow"><input type="radio" name="pin" id="pinNo">
+        <span><b>No PIN</b><small>Anyone using this Windows account can open your tabs. You can set a PIN later from the tray icon.</small></span></label>
+      <label class="choice"><input type="checkbox" id="startup">
+        <span><b>Start Home Hub with Windows</b><small>It starts quietly in the system tray, so router alerts work without opening it.</small></span></label>
+    </div>
+    <div class="note" id="rhNote"></div>
+  </section>
+
+  <div class="actions">
+    <button class="secondary" id="back" type="button">Back</button>
+    <span class="grow" id="status" role="status"></span>
+    <button class="secondary" id="cancel" type="button">Cancel</button>
+    <button class="primary" id="next" type="button">Next</button>
+  </div>
+</div>
+<script>
+(function () {
+  var cfg = window.__cfg || {};
+  var $ = function (id) { return document.getElementById(id); };
+  var icons = cfg.icons || {};
+  var first = !!cfg.first;
+  var KINDS = {
+    homeassistant: { label: 'Home Assistant', hint: 'Your smart home dashboard', ph: 'http://192.168.1.10:8123', addr: 'Address' },
+    adguard: { label: 'AdGuard Home', hint: 'Network-wide ad blocking', ph: 'http://192.168.1.10:3000', addr: 'Address' },
+    weather: { label: 'Your Weather', hint: 'Forecast, radar and alerts', addr: '' },
+    glinet: { label: 'GL.iNet router', hint: 'Admin page with automatic sign-in, plus tray alerts', ph: '192.168.8.1', addr: 'Router IP address' },
+    web: { label: 'Other web page', hint: 'NAS, Pi-hole, printer, camera…', ph: 'http://192.168.1.20', addr: 'Address' }
+  };
+  var ORDER = ['homeassistant', 'adguard', 'weather', 'glinet', 'web'];
+  var MAX = 12, uid = 0;
+  var rows = (cfg.tabs || []).map(function (t) { t.key = 'r' + (++uid); return t; });
+  var step = first && (rows.length === 0 || cfg.suggested) ? 1 : 2;
+  var reviewing = first && rows.length > 0 && !cfg.suggested;
+
+  function iconFor(r) { return r.kind === 'glinet' ? (icons[r.icon || 'router'] || icons.router) : icons[r.kind]; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function post(o) { o.nonce = cfg.nonce; window.chrome.webview.postMessage(JSON.stringify(o)); }
+  function count(kind) { return rows.filter(function (r) { return r.kind === kind; }).length; }
+  function newRow(kind) {
+    var n = count(kind), name = KINDS[kind].label;
+    if (kind === 'glinet') name = n ? 'Router ' + (n + 1) : 'Router';
+    else if (kind === 'web') name = n ? 'Web page ' + (n + 1) : 'Web page';
+    else if (n) name += ' ' + (n + 1);
+    return { key: 'r' + (++uid), id: '', kind: kind, name: name, address: '', icon: kind === 'glinet' ? 'router' : '', ipMay: false };
+  }
+
+  // ---- step 1
+  var multi = { glinet: 4, web: 6 };
+  function renderPick() {
+    $('pick').innerHTML = ORDER.map(function (k) {
+      var n = count(k), on = n > 0, K = KINDS[k];
+      var ctl = multi[k] ? '<span class="count"><button type="button" data-k="' + k + '" data-d="-1" aria-label="Fewer">−</button><output>' + n + '</output>' +
+        '<button type="button" data-k="' + k + '" data-d="1" aria-label="More">+</button></span>' : '<span class="tick"></span>';
+      return '<div class="opt' + (on ? ' on' : '') + '" data-k="' + k + '" role="checkbox" aria-checked="' + on + '" tabindex="0"><img alt="" src="' + (k === 'glinet' ? icons.router : icons[k]) + '">' +
+        '<span><b>' + K.label + '</b><small>' + K.hint + '</small>' + (multi[k] ? ctl : '') + '</span>' + (multi[k] ? '' : ctl) + '</div>';
+    }).join('');
+  }
+  function setCount(k, n) {
+    n = Math.max(0, Math.min(n, multi[k] || 1));
+    var have = rows.filter(function (r) { return r.kind === k; });
+    while (have.length > n) { var gone = have.pop(); rows.splice(rows.indexOf(gone), 1); }
+    while (have.length < n && rows.length < MAX) { var r = newRow(k); have.push(r); rows.push(r); }
+    rows.sort(function (a, b) { return ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind); });
+    renderPick(); status('');
+  }
+  $('pick').addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (b) { setCount(b.dataset.k, count(b.dataset.k) + (+b.dataset.d)); e.stopPropagation(); return; }
+    var o = e.target.closest('.opt'); if (!o) return;
+    var k = o.dataset.k; setCount(k, count(k) ? 0 : 1);
+  });
+  $('pick').addEventListener('keydown', function (e) {
+    if ((e.key === ' ' || e.key === 'Enter') && e.target.classList.contains('opt')) { e.preventDefault(); var k = e.target.dataset.k; setCount(k, count(k) ? 0 : 1); var el = $('pick').querySelector('[data-k="' + k + '"]'); el && el.focus(); }
+  });
+
+  // ---- step 2
+  function renderRows() {
+    if (!rows.length) { $('rows').innerHTML = '<div class="empty">No tabs yet. Add one below.</div>'; }
+    else $('rows').innerHTML = rows.map(function (r, i) {
+      var K = KINDS[r.kind], h = '<div class="row" data-key="' + r.key + '"><div class="top"><img alt="" src="' + iconFor(r) + '">' +
+        '<input type="text" class="name" data-f="name" maxlength="40" value="' + esc(r.name) + '" aria-label="Tab name" spellcheck="false">' +
+        '<span class="kind">' + K.label + '</span><span class="tools">' +
+        '<button type="button" data-a="up" title="Move left"' + (i ? '' : ' disabled') + '>▲</button>' +
+        '<button type="button" data-a="down" title="Move right"' + (i < rows.length - 1 ? '' : ' disabled') + '>▼</button>' +
+        '<button type="button" data-a="del" title="Remove this tab">✕</button></span></div>';
+      if (K.addr) {
+        h += '<div class="addr"><label>' + K.addr + '</label><input type="text" data-f="address" spellcheck="false" placeholder="' + K.ph + '" value="' + esc(r.address) + '">' +
+          '<button type="button" class="secondary" data-a="check">Check</button></div>';
+      } else {
+        h += '<div class="extra">You pick your location inside the tab. Nothing to enter here.</div>';
+      }
+      if (r.kind === 'glinet') {
+        h += '<div class="extra"><label>Icon <select data-f="icon"><option value="router">Router</option><option value="firewall">Firewall</option><option value="wifi">Wi-Fi / access point</option></select></label>' +
+          '<label><input type="checkbox" data-f="ipMay"' + (r.ipMay ? ' checked' : '') + '> Its IP address can change (Home Hub asks for the new one)</label></div>';
+      }
+      return h + '<div class="msg ' + (r.msgKind || 'info') + '" data-msg>' + (r.msgHtml || esc(r.msg || '')) + '</div></div>';
+    }).join('');
+    rows.forEach(function (r) { if (r.kind === 'glinet') { var s = rowEl(r).querySelector('select'); s.value = r.icon || 'router'; } });
+    $('adds').innerHTML = ORDER.map(function (k) {
+      var dis = rows.length >= MAX || (k === 'weather' && count('weather') > 0);
+      return '<button type="button" data-add="' + k + '"' + (dis ? ' disabled' : '') + '><img alt="" src="' + (k === 'glinet' ? icons.router : icons[k]) + '">+ ' + KINDS[k].label + '</button>';
+    }).join('');
+  }
+  function rowEl(r) { return $('rows').querySelector('[data-key="' + r.key + '"]'); }
+  function rowOf(el) { var d = el.closest('.row'); if (!d) return null; for (var i = 0; i < rows.length; i++) if (rows[i].key === d.dataset.key) return rows[i]; return null; }
+  function setMsg(r, text, kind, html) {
+    r.msg = text; r.msgKind = kind; r.msgHtml = html || '';
+    var d = rowEl(r); if (!d) return;
+    var m = d.querySelector('[data-msg]'); m.className = 'msg ' + (kind || 'info');
+    if (html) m.innerHTML = html; else m.textContent = text || '';
+  }
+  $('rows').addEventListener('input', function (e) {
+    var r = rowOf(e.target), f = e.target.dataset.f; if (!r || !f) return;
+    if (f === 'ipMay') r.ipMay = e.target.checked;
+    else if (f === 'icon') { r.icon = e.target.value; rowEl(r).querySelector('img').src = iconFor(r); }
+    else { r[f] = e.target.value; e.target.classList.remove('bad'); if (f === 'address') setMsg(r, '', 'info'); }
+    status('');
+  });
+  $('rows').addEventListener('change', function (e) { if (e.target.dataset.f === 'icon') { var r = rowOf(e.target); r.icon = e.target.value; rowEl(r).querySelector('img').src = iconFor(r); } });
+  $('rows').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    var a = b.dataset.a, r = rowOf(b); if (!r) return;
+    var i = rows.indexOf(r);
+    if (a === 'up' && i > 0) { rows.splice(i, 1); rows.splice(i - 1, 0, r); renderRows(); }
+    else if (a === 'down' && i < rows.length - 1) { rows.splice(i, 1); rows.splice(i + 1, 0, r); renderRows(); }
+    else if (a === 'del') { rows.splice(i, 1); renderRows(); }
+    else if (a === 'check') {
+      if (!(r.address || '').trim()) { setMsg(r, 'Enter an address first.', 'err'); return; }
+      setMsg(r, 'Checking…', 'info');
+      post({ type: 'check', key: r.key, kind: r.kind, address: r.address });
+    }
+  });
+  $('rows').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target.dataset.f === 'address') { e.preventDefault(); var b = e.target.parentNode.querySelector('[data-a=check]'); b && b.click(); }
+  });
+  $('adds').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-add]'); if (!b || b.disabled) return;
+    var r = newRow(b.dataset.add); rows.push(r); renderRows();
+    var el = rowEl(r).querySelector(KINDS[r.kind].addr ? '[data-f=address]' : '[data-f=name]'); el && el.focus();
+  });
+  document.addEventListener('click', function (e) {
+    var l = e.target.closest('a[data-link]'); if (l) { e.preventDefault(); post({ type: 'link', which: l.dataset.link }); }
+  });
+
+  // ---- navigation
+  function status(t) { $('status').textContent = t || ''; }
+  function show() {
+    $('s1').classList.toggle('hide', step !== 1);
+    $('s2').classList.toggle('hide', step !== 2);
+    $('s3').classList.toggle('hide', step !== 3);
+    var total = first ? 3 : 1, at = first ? step : 1;
+    $('steps').classList.toggle('hide', !first);
+    Array.prototype.forEach.call($('steps').children, function (s, i) { s.className = i < at ? 'on' : ''; });
+    $('back').classList.toggle('hide', !first || step === 1 || (reviewing && step === 2));
+    $('cancel').classList.toggle('hide', first);
+    $('next').textContent = !first ? 'Save' : step === 3 ? 'Finish' : 'Next';
+    if (reviewing) {
+      $('s2title').textContent = 'Your tabs';
+      $('s2sub').innerHTML = 'Home Hub now lets you choose your own tabs. These are the ones you had. Rename, reorder, remove or add tabs, then continue.';
+    } else if (!first) {
+      $('s2title').textContent = 'Edit your tabs';
+      $('s2sub').innerHTML = 'Rename, reorder, remove or add tabs. Removing a router signs Home Hub out of it and forgets its saved password.';
+    }
+    if (step === 1) renderPick();
+    if (step === 2) renderRows();
+    if (step === 3) {
+      $('pinYesRow').classList.toggle('hide', !!cfg.pinSet);
+      $('pinNoRow').classList.toggle('hide', !!cfg.pinSet);
+      $('startup').checked = !!cfg.startup;
+      var gl = count('glinet');
+      $('rhNote').classList.toggle('hide', !gl);
+      $('rhNote').innerHTML = 'Tip: install <a data-link="routerhome">Router Home</a> on your GL.iNet router' + (gl > 1 ? 's' : '') +
+        ' for a Home tab with VPN health, security checks and auto-repair. Home Hub opens it automatically and shows its alerts on your desktop. Without it, Home Hub still signs you in and tells you when the router is offline.';
+    }
+    status('');
+    window.scrollTo(0, 0);
+  }
+  function collect() {
+    return rows.map(function (r) { return { id: r.id || '', kind: r.kind, name: (r.name || '').trim(), address: (r.address || '').trim(), icon: r.icon || '', ipMay: !!r.ipMay }; });
+  }
+  function validate() {
+    var bad = null;
+    rows.forEach(function (r) {
+      var d = rowEl(r);
+      if (!(r.name || '').trim()) { d.querySelector('[data-f=name]').classList.add('bad'); bad = bad || 'Give every tab a name.'; }
+      if (KINDS[r.kind].addr && !(r.address || '').trim()) { d.querySelector('[data-f=address]').classList.add('bad'); bad = bad || 'Enter an address for every tab.'; }
+    });
+    if (!rows.length) bad = 'Add at least one tab.';
+    return bad;
+  }
+  $('next').addEventListener('click', function () {
+    if (step === 1) {
+      if (!rows.length) { status('Choose at least one tab.'); return; }
+      step = 2; show();
+      var f = $('rows').querySelector('[data-f=address]'); f && f.focus();
+      return;
+    }
+    if (step === 2) {
+      var bad = validate(); if (bad) { status(bad); return; }
+      if (!first) { post({ type: 'save', tabs: collect() }); setBusy(true); return; }
+      post({ type: 'validate', tabs: collect() }); setBusy(true); return;
+    }
+    post({ type: 'save', tabs: collect(), startup: $('startup').checked, usePin: cfg.pinSet ? true : $('pinYes').checked });
+    setBusy(true);
+  });
+  $('back').addEventListener('click', function () { if (step > 1) { step--; show(); } });
+  $('cancel').addEventListener('click', function () { post({ type: 'cancel' }); });
+  function setBusy(b) { ['next', 'back', 'cancel'].forEach(function (id) { $(id).disabled = !!b; }); }
+
+  // called by Home Hub
+  window.hub = {
+    checkResult: function (key, ok, msg, kind) {
+      var r = rows.filter(function (x) { return x.key === key; })[0]; if (!r) return;
+      var html = null;
+      if (kind === 'norh') html = esc(msg) + ' <a data-link="routerhome">Get Router Home</a>';
+      setMsg(r, msg, ok ? 'ok' : (kind === 'warn' || kind === 'norh' ? 'warn' : 'err'), html);
+    },
+    invalid: function (index, msg) {
+      setBusy(false);
+      var r = rows[index];
+      if (r) { var d = rowEl(r); var f = d && d.querySelector('[data-f=address]'); if (f) { f.classList.add('bad'); f.focus(); } setMsg(r, msg, 'err'); }
+      status(msg);
+    },
+    validated: function (tabs) {
+      setBusy(false);
+      (tabs || []).forEach(function (t, i) { if (rows[i] && t.address) rows[i].address = t.address; });
+      step = 3; show();
+    },
+    failed: function (msg) { setBusy(false); status(msg); }
+  };
+  show();
+  if (step === 2) { var f = $('rows').querySelector('[data-f=address]'); f && f.focus(); }
+})();
+</script>
+</body>
+</html>
