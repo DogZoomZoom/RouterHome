@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "updated": "2026-11-24",
   "about": "Router Home known-vulnerability list (GL.iNet security notices turned into checks). Signed with the Router Home release key; routers ignore a copy whose signature doesn't match. Format: docs/VULN-CHECKER.md in the Router Home project.",
   "advisories": [
@@ -60,9 +60,15 @@
       "fixed_in": { "mt5000": "4.9.2" },
       "firmware_note": "Fixed in 4.9.2 for the Brume 3 (GL-MT5000), per GL's release notes (\"Fixed vulnerability VDB-submit-1113491 and enhanced the security protection of NAS identity authentication\"). GL's table of fixed versions for other models doesn't line up on their page, so other models aren't listed here yet: install the update GL offers on the Upgrade page from 2026-11-24 or later. Router Home also reads GL's release notes and shows \"Firmware update needed\" when a new firmware for your model describes security fixes.",
       "indicators": [],
-      "exposures": [],
+      "exposures_note": "List v6 (2026-11-26): the three affected router services, checked only while the firmware is older than GL's fix for the model (until_fixed; when GL hasn't confirmed a fixed version for a model, they always count). New check types 'running'/'setting' (Router Home 2.8.0+) so older versions skip them.",
+      "exposures": [
+        { "type": "running", "match": "/usr/bin/gl_nas_sys", "until_fixed": true, "label": "NAS sharing (gl_nas_sys) is running, and this firmware doesn't have GL's fix for its login bypass yet" },
+        { "type": "running", "match": "rtty -h", "until_fixed": true, "label": "GoodCloud's remote terminal (rtty) is running, and this firmware doesn't have GL's fix yet" },
+        { "type": "setting", "key": "mptun.global.enable", "equals": "1", "until_fixed": true, "label": "AstroWarp is turned on, and this firmware doesn't have GL's fix for its command injection yet" }
+      ],
       "fixes": {},
       "advice": {
+        "exposed": "One of the services from GL's Nov 24 advisories is on, and this router's firmware doesn't have GL's fix yet. Install the update from the Upgrade page as soon as it's offered. Until then, turn off what you don't use: NAS sharing in GL's Applications > Network Storage page, the remote terminal in GoodCloud, AstroWarp in its own page.",
         "update": "This router's firmware is older than GL's fix. Install the update from the Upgrade page (use the Home tab's firmware checklist first; Router Home survives with Keep settings). Until then, if you don't use them, turn off NAS sharing (GL's Applications > Network Storage page) and GoodCloud's remote terminal.",
         "ok": "This router's firmware has GL's fix, or GL hasn't confirmed a fixed version for this model yet. If GL's Upgrade page offers an update dated 2026-11-24 or later, install it; until then, turn off NAS sharing and GoodCloud's remote terminal if you don't use them."
       }

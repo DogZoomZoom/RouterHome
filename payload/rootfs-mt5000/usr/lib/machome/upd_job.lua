@@ -6,6 +6,9 @@ local cjson = require "cjson"
 local DIR, W, B = "/tmp/machome", "/tmp/rh-upd", "/root/machome-backup"
 local JOB, CHECK, LOG = DIR .. "/upd_job.json", DIR .. "/upd_check.json", DIR .. "/upd.log"
 local PUB = "/usr/share/machome/release.pub"
+-- 2.8.0 key rotation: the previous release key, accepted ONLY during the switch (2.8.0 itself is signed with it so
+-- older routers can update). Remove release-old.pub and this fallback in the next release.
+local PUB_OLD = "/usr/share/machome/release-old.pub"
 local function readf(p) local f = io.open(p, "r"); if not f then return nil end; local s = f:read("*a"); f:close(); return s end
 local function writef(p, s) local f = io.open(p, "w"); if f then f:write(s); f:close() end end
 local function sh(c) local p = io.popen(c .. " 2>&1"); if not p then return "" end; local s = p:read("*a") or ""; p:close(); return s end
@@ -22,7 +25,7 @@ local function done(err, msg)
     os.execute("rm -rf " .. W)
 end
 -- every file Router Home owns (settings in /etc/machome are never touched)
-local FILES = "usr/share/oui/menu.d/machome.json www/views/gl-sdk4-ui-machome.common.js.gz usr/lib/oui-httpd/rpc/machome usr/bin/machome-sampler usr/lib/machome etc/init.d/machome usr/bin/machome-speedtest etc/init.d/machome-st usr/share/gl-download.d/machome usr/share/gl-validator.d/machome.lua usr/share/machome/release.pub usr/share/machome/advisories.json usr/sbin/machome-vpn-rps"
+local FILES = "usr/share/oui/menu.d/machome.json www/views/gl-sdk4-ui-machome.common.js.gz usr/lib/oui-httpd/rpc/machome usr/bin/machome-sampler usr/lib/machome etc/init.d/machome usr/bin/machome-speedtest etc/init.d/machome-st usr/share/gl-download.d/machome usr/share/gl-validator.d/machome.lua usr/share/machome/release.pub usr/share/machome/release-old.pub usr/share/machome/advisories.json usr/sbin/machome-vpn-rps"
 local function existing() local t = {}; for f in FILES:gmatch("%S+") do if readf("/" .. f) or sh("[ -d /" .. f .. " ] && echo d"):match("d") then t[#t + 1] = f end end; return table.concat(t, " ") end
 local function healthy()
     os.execute("sleep 15")
@@ -59,7 +62,9 @@ step(10, "Downloading " .. tostring(c.pkg.name) .. "…")
 if not run("curl -fsSL -m 300 -A RouterHome-updater -o " .. W .. "/pkg.tgz '" .. tostring(c.pkg.url):gsub("'", "") .. "'") then done("the download failed") return end
 if not run("curl -fsSL -m 60 -A RouterHome-updater -o " .. W .. "/pkg.tgz.sig '" .. tostring(c.sig.url):gsub("'", "") .. "'") then done("the signature download failed") return end
 step(30, "Checking the signature…")
-if not run("usign -V -q -m " .. W .. "/pkg.tgz -p " .. PUB .. " -x " .. W .. "/pkg.tgz.sig") then done("the signature doesn't match the Router Home release key: NOT installed") return end
+if not run("usign -V -q -m " .. W .. "/pkg.tgz -p " .. PUB .. " -x " .. W .. "/pkg.tgz.sig")
+   and not (readf(PUB_OLD) and run("usign -V -q -m " .. W .. "/pkg.tgz -p " .. PUB_OLD .. " -x " .. W .. "/pkg.tgz.sig")) then
+    done("the signature doesn't match the Router Home release key: NOT installed") return end
 step(40, "Unpacking…")
 if not run("mkdir -p " .. W .. "/x && tar xzf " .. W .. "/pkg.tgz -C " .. W .. "/x") then done("the package couldn't be unpacked") return end
 local M = (readf("/tmp/sysinfo/board_name") or ""):match("gl%-mt5000") and "mt5000" or "generic"

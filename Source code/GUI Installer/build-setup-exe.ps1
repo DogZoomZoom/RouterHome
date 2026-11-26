@@ -23,6 +23,7 @@ $inputs = [ordered]@{
   "setup-on-router.sh"   = "$S\setup-on-router.sh"
   "options-on-router.sh" = "$PSScriptRoot\options-on-router.sh"
   "release.pub"          = "$R\routers\brume3\rootfs\usr\share\machome\release.pub"
+  "release-old.pub"      = "$R\routers\brume3\rootfs\usr\share\machome\release-old.pub"   # 2.8.0 key switch only
   "app.manifest"         = "$S\app.manifest"
   "build-setup-exe.ps1"  = "$PSScriptRoot\build-setup-exe.ps1"
 }
@@ -34,7 +35,7 @@ $same = (Test-Path $master) -and (Test-Path $stamp) -and ((Get-Content $stamp -R
 if ($same -and -not $Force) {
   $note = "unchanged, not recompiled"
 } else {
-  $res = @("/resource:`"$($inputs['setup-on-router.sh'])`",setup-on-router.sh", "/resource:`"$($inputs['options-on-router.sh'])`",options-on-router.sh", "/resource:`"$($inputs['release.pub'])`",release.pub")
+  $res = @("/resource:`"$($inputs['setup-on-router.sh'])`",setup-on-router.sh", "/resource:`"$($inputs['options-on-router.sh'])`",options-on-router.sh", "/resource:`"$($inputs['release.pub'])`",release.pub", "/resource:`"$($inputs['release-old.pub'])`",release-old.pub")
   # (not $out: PowerShell names ignore case, so it would overwrite the -Out parameter)
   $cscLog = & $csc /nologo /target:winexe /optimize+ /platform:anycpu "/out:$master" "/win32manifest:$($inputs['app.manifest'])" `
     /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Core.dll /r:System.Web.Extensions.dll $res "$($inputs['RouterHomeSetup.cs'])" 2>&1

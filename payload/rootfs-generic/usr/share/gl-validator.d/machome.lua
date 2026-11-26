@@ -14,4 +14,10 @@ return {
     -- device / person names (e.g. "user's iPhone"); life.lua strips anything unsafe again
     life = { name = function(v) return type(v) == "string" and #v <= 40 and not v:find("[%c<>\"`$\\]") end,
              person = function(v) return type(v) == "string" and #v <= 24 and not v:find("[%c<>\"`$\\]") end },
+    -- 2.7.1 notification providers: Gmail addresses need "@" and "+" (checked again in the rpc; written only to
+    -- mode-600 files, never to a command line). Everything else in set_alerts fits GL's default characters.
+    -- router_name (beta.2): e.g. "Mom's Flint 3"; checked again in the rpc
+    set_alerts = { router_name = function(v) return type(v) == "string" and #v <= 40 and not v:find("[%c<>\"`$\\]") end, prov = { gmail = {
+        user = function(v) return type(v) == "string" and #v <= 254 and v:match("^[%w%._%+%-]+@[%w%.%-]+$") ~= nil end,
+        to = function(v) return type(v) == "string" and #v <= 254 and v:match("^[%w%._%+%-]+@[%w%.%-]+$") ~= nil end } } },
 }

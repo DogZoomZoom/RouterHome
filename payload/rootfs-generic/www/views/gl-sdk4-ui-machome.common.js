@@ -137,6 +137,15 @@ var CSS = [
 "#machome-modal .mh-msw{appearance:none;-webkit-appearance:none;position:relative;width:40px;height:24px;border-radius:12px;background:var(--mh-track);flex:none;cursor:pointer;transition:background .2s;margin:0}",
 "#machome-modal .mh-msw::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}",
 "#machome-modal .mh-msw:checked{background:var(--mh-green)}#machome-modal .mh-msw:checked::after{transform:translateX(16px)}",
+/* Notification providers window (2.7.1) */
+"#machome-modal .mh-pv{padding-bottom:10px}#machome-modal .mh-pv h4{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mh-text);text-transform:none;letter-spacing:0;margin:10px 0 4px}",
+"#machome-modal .mh-pvst{margin-left:auto;font-size:10px;font-weight:700;padding:2px 9px;border-radius:999px;background:rgba(127,127,127,.18);color:var(--mh-text2)}#machome-modal .mh-pvst.on{background:var(--mh-green);color:#fff}",
+"#machome-modal .mh-pvb{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 2px}#machome-modal .mh-pvb .mh-btn{margin:0}",
+"#machome-modal .mh-pvm{font-size:12px;text-align:left;margin:4px 0 0}#machome-modal .mh-pvm:empty{display:none}",
+"#machome-modal .mh-pvh{font-size:12px;text-align:left;margin:8px 0 0}#machome-modal .mh-pvh summary{cursor:pointer;font-weight:600;color:var(--mh-text2)}#machome-modal .mh-pvh ol{margin:6px 0 0 18px;padding:0}#machome-modal .mh-pvh li{margin:4px 0;line-height:1.45}",
+"#machome-modal .mh-pvw{font-size:11px;text-align:left;border:1px solid var(--mh-orange);border-radius:9px;padding:7px 9px;margin:4px 0 8px;line-height:1.45}",
+"#machome-modal .mh-pvy{font-size:11px;text-align:left;background:rgba(127,127,127,.14);border-radius:9px;padding:8px 10px;white-space:pre;overflow:auto;margin:6px 0;font-family:ui-monospace,Menlo,Consolas,monospace}",
+"#machome-modal .mh-pvc{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}#machome-modal .mh-pvc button{margin:0}",
 "#machome-modal select,#machome-modal input[type=number]{padding:6px 8px;border-radius:8px;border:.5px solid var(--mh-sep);background:var(--mh-row);color:var(--mh-text);font:inherit}",
 "#machome-modal .mh-ready>div{text-align:left;padding:9px 12px;border-radius:10px;margin-top:8px;background:var(--mh-row)}",
 "#machome-modal .mh-ready ul{margin:4px 0 0 18px;padding:0}#machome-modal .mh-ready .bad{border-left:3px solid var(--mh-red)}#machome-modal .mh-ready .warn{border-left:3px solid var(--mh-orange)}#machome-modal .mh-ready .ok{border-left:3px solid var(--mh-green)}",
@@ -882,6 +891,8 @@ var ICONS = {
   faucet:'<path d="M6 4.5h4M8 4.5V8"/><path d="M3 8h10a3 3 0 013 3v2h-3v-1a1 1 0 00-1-1H3z"/><path d="M14.5 16.2s-1.4 1.6-1.4 2.6a1.4 1.4 0 002.8 0c0-1-1.4-2.6-1.4-2.6z"/>',
   wifi:'<path d="M2.5 9a14 14 0 0119 0M5.5 12.4a9.5 9.5 0 0113 0M8.6 15.8a5 5 0 016.8 0"/><circle cx="12" cy="19.2" r="1.1"/>'
 };
+/* notification providers (2.7.1): rpc names → shown names */
+var PROV_NAMES = { discord: 'Discord', telegram: 'Telegram', gmail: 'Gmail', slack: 'Slack', ha: 'Home Assistant' };
 /* extra search words for each Settings-window row (Settings search box + the page search bar) */
 var SETK = {
   'Privacy mode':'privacy hide hidden private screenshot share sharing eye mac address ip names personal',
@@ -890,7 +901,8 @@ var SETK = {
   'Colors': 'colors colour theme palette material you playful ocean forest sunset grape rose citrus mint slate',
   'Live wallpaper': 'live wallpaper background animated animation moving morphing colors motion battery',
   'Layout': 'layout cards move resize hide show arrange order rearrange edit size',
-  'Discord alerts': 'discord alerts notifications notify webhook messages vpn upload temperature speed test weekly monthly report offline router home update updates new version github firmware upgrade zram',
+  'Alerts': 'discord telegram gmail email slack home assistant alerts notifications notify webhook messages vpn upload temperature speed test weekly monthly report offline router home update updates new version github firmware upgrade zram digest mute',
+  'Notification providers': 'notification providers provider discord telegram gmail email mail slack home assistant homeassistant ha phone push webhook bot app password test router name friendly',
   'Auto-heal': 'auto-heal autoheal auto fix autofix self-heal self heal repair fixes automatic restart reboot failover tunnel vpn server switch wifi band internet renew dns tailscale',
   'NAS backup': 'nas backup backups ftp ftps webdav scp ssh restore verify schedule copy synology',
   'Cable modem': 'cable modem xfinity the ISP gateway signal snr power docsis uncorrectable errors 10.0.0.1',
@@ -1010,6 +1022,12 @@ function spark(arr, color, id){
     '<path d="' + line + 'L200 34L0 34Z" fill="url(#' + id + ')"/><path d="' + line + '" fill="none" stroke="' + color + '" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>';
 }
 
+/* qrcode-generator 1.4.4 (c) Kazuhiko Arase, MIT License, https://github.com/kazuhikoarase/qrcode-generator
+   (2.8.0 guest Wi-Fi QR code). Wrapped so its module loader can't touch this file's own exports. */
+var QRGEN = (function(){ var define, module, exports;
+var qrcode=function(){function i(t,r){function a(t,r){g=function(t){for(var r=new Array(t),e=0;e<t;e+=1){r[e]=new Array(t);for(var n=0;n<t;n+=1)r[e][n]=null}return r}(l=4*u+17),e(0,0),e(l-7,0),e(0,l-7),i(),o(),v(t,r),7<=u&&h(t),null==n&&(n=w(u,f,c)),d(n,r)}var u=t,f=y[r],g=null,l=0,n=null,c=[],s={},e=function(t,r){for(var e=-1;e<=7;e+=1)if(!(t+e<=-1||l<=t+e))for(var n=-1;n<=7;n+=1)r+n<=-1||l<=r+n||(g[t+e][r+n]=0<=e&&e<=6&&(0==n||6==n)||0<=n&&n<=6&&(0==e||6==e)||2<=e&&e<=4&&2<=n&&n<=4)},o=function(){for(var t=8;t<l-8;t+=1)null==g[t][6]&&(g[t][6]=t%2==0);for(var r=8;r<l-8;r+=1)null==g[6][r]&&(g[6][r]=r%2==0)},i=function(){for(var t=B.getPatternPosition(u),r=0;r<t.length;r+=1)for(var e=0;e<t.length;e+=1){var n=t[r],o=t[e];if(null==g[n][o])for(var i=-2;i<=2;i+=1)for(var a=-2;a<=2;a+=1)g[n+i][o+a]=-2==i||2==i||-2==a||2==a||0==i&&0==a}},h=function(t){for(var r=B.getBCHTypeNumber(u),e=0;e<18;e+=1){var n=!t&&1==(r>>e&1);g[Math.floor(e/3)][e%3+l-8-3]=n}for(e=0;e<18;e+=1){n=!t&&1==(r>>e&1);g[e%3+l-8-3][Math.floor(e/3)]=n}},v=function(t,r){for(var e=f<<3|r,n=B.getBCHTypeInfo(e),o=0;o<15;o+=1){var i=!t&&1==(n>>o&1);o<6?g[o][8]=i:o<8?g[o+1][8]=i:g[l-15+o][8]=i}for(o=0;o<15;o+=1){i=!t&&1==(n>>o&1);o<8?g[8][l-o-1]=i:o<9?g[8][15-o-1+1]=i:g[8][15-o-1]=i}g[l-8][8]=!t},d=function(t,r){for(var e=-1,n=l-1,o=7,i=0,a=B.getMaskFunction(r),u=l-1;0<u;u-=2)for(6==u&&(u-=1);;){for(var f=0;f<2;f+=1)if(null==g[n][u-f]){var c=!1;i<t.length&&(c=1==(t[i]>>>o&1)),a(n,u-f)&&(c=!c),g[n][u-f]=c,-1==(o-=1)&&(i+=1,o=7)}if((n+=e)<0||l<=n){n-=e,e=-e;break}}},w=function(t,r,e){for(var n=b.getRSBlocks(t,r),o=M(),i=0;i<e.length;i+=1){var a=e[i];o.put(a.getMode(),4),o.put(a.getLength(),B.getLengthInBits(a.getMode(),t)),a.write(o)}var u=0;for(i=0;i<n.length;i+=1)u+=n[i].dataCount;if(o.getLengthInBits()>8*u)throw"code length overflow. ("+o.getLengthInBits()+">"+8*u+")";for(o.getLengthInBits()+4<=8*u&&o.put(0,4);o.getLengthInBits()%8!=0;)o.putBit(!1);for(;!(o.getLengthInBits()>=8*u||(o.put(236,8),o.getLengthInBits()>=8*u));)o.put(17,8);return function(t,r){for(var e=0,n=0,o=0,i=new Array(r.length),a=new Array(r.length),u=0;u<r.length;u+=1){var f=r[u].dataCount,c=r[u].totalCount-f;n=Math.max(n,f),o=Math.max(o,c),i[u]=new Array(f);for(var g=0;g<i[u].length;g+=1)i[u][g]=255&t.getBuffer()[g+e];e+=f;var l=B.getErrorCorrectPolynomial(c),h=C(i[u],l.getLength()-1).mod(l);a[u]=new Array(l.getLength()-1);for(g=0;g<a[u].length;g+=1){var s=g+h.getLength()-a[u].length;a[u][g]=0<=s?h.getAt(s):0}}var v=0;for(g=0;g<r.length;g+=1)v+=r[g].totalCount;var d=new Array(v),w=0;for(g=0;g<n;g+=1)for(u=0;u<r.length;u+=1)g<i[u].length&&(d[w]=i[u][g],w+=1);for(g=0;g<o;g+=1)for(u=0;u<r.length;u+=1)g<a[u].length&&(d[w]=a[u][g],w+=1);return d}(o,n)};s.addData=function(t,r){var e=null;switch(r=r||"Byte"){case"Numeric":e=x(t);break;case"Alphanumeric":e=m(t);break;case"Byte":e=L(t);break;case"Kanji":e=D(t);break;default:throw"mode:"+r}c.push(e),n=null},s.isDark=function(t,r){if(t<0||l<=t||r<0||l<=r)throw t+","+r;return g[t][r]},s.getModuleCount=function(){return l},s.make=function(){if(u<1){for(var t=1;t<40;t++){for(var r=b.getRSBlocks(t,f),e=M(),n=0;n<c.length;n++){var o=c[n];e.put(o.getMode(),4),e.put(o.getLength(),B.getLengthInBits(o.getMode(),t)),o.write(e)}var i=0;for(n=0;n<r.length;n++)i+=r[n].dataCount;if(e.getLengthInBits()<=8*i)break}u=t}a(!1,function(){for(var t=0,r=0,e=0;e<8;e+=1){a(!0,e);var n=B.getLostPoint(s);(0==e||n<t)&&(t=n,r=e)}return r}())},s.createTableTag=function(t,r){t=t||2;var e="";e+='<table style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: "+(r=void 0===r?4*t:r)+"px;",e+='">',e+="<tbody>";for(var n=0;n<s.getModuleCount();n+=1){e+="<tr>";for(var o=0;o<s.getModuleCount();o+=1)e+='<td style="',e+=" border-width: 0px; border-style: none;",e+=" border-collapse: collapse;",e+=" padding: 0px; margin: 0px;",e+=" width: "+t+"px;",e+=" height: "+t+"px;",e+=" background-color: ",e+=s.isDark(n,o)?"#000000":"#ffffff",e+=";",e+='"/>';e+="</tr>"}return e+="</tbody>",e+="</table>"},s.createSvgTag=function(t,r,e,n){var o={};"object"==typeof t&&(t=(o=t).cellSize,r=o.margin,e=o.alt,n=o.title),t=t||2,r=void 0===r?4*t:r,(e="string"==typeof e?{text:e}:e||{}).text=e.text||null,e.id=e.text?e.id||"qrcode-description":null,(n="string"==typeof n?{text:n}:n||{}).text=n.text||null,n.id=n.text?n.id||"qrcode-title":null;var i,a,u,f,c=s.getModuleCount()*t+2*r,g="";for(f="l"+t+",0 0,"+t+" -"+t+",0 0,-"+t+"z ",g+='<svg version="1.1" xmlns="http://www.w3.org/2000/svg"',g+=o.scalable?"":' width="'+c+'px" height="'+c+'px"',g+=' viewBox="0 0 '+c+" "+c+'" ',g+=' preserveAspectRatio="xMinYMin meet"',g+=n.text||e.text?' role="img" aria-labelledby="'+p([n.id,e.id].join(" ").trim())+'"':"",g+=">",g+=n.text?'<title id="'+p(n.id)+'">'+p(n.text)+"</title>":"",g+=e.text?'<description id="'+p(e.id)+'">'+p(e.text)+"</description>":"",g+='<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>',g+='<path d="',a=0;a<s.getModuleCount();a+=1)for(u=a*t+r,i=0;i<s.getModuleCount();i+=1)s.isDark(a,i)&&(g+="M"+(i*t+r)+","+u+f);return g+='" stroke="transparent" fill="black"/>',g+="</svg>"},s.createDataURL=function(o,t){o=o||2,t=void 0===t?4*o:t;var r=s.getModuleCount()*o+2*t,i=t,a=r-t;return I(r,r,function(t,r){if(i<=t&&t<a&&i<=r&&r<a){var e=Math.floor((t-i)/o),n=Math.floor((r-i)/o);return s.isDark(n,e)?0:1}return 1})},s.createImgTag=function(t,r,e){t=t||2,r=void 0===r?4*t:r;var n=s.getModuleCount()*t+2*r,o="";return o+="<img",o+=' src="',o+=s.createDataURL(t,r),o+='"',o+=' width="',o+=n,o+='"',o+=' height="',o+=n,o+='"',e&&(o+=' alt="',o+=p(e),o+='"'),o+="/>"};var p=function(t){for(var r="",e=0;e<t.length;e+=1){var n=t.charAt(e);switch(n){case"<":r+="&lt;";break;case">":r+="&gt;";break;case"&":r+="&amp;";break;case'"':r+="&quot;";break;default:r+=n}}return r};return s.createASCII=function(t,r){if((t=t||1)<2)return function(t){t=void 0===t?2:t;var r,e,n,o,i,a=1*s.getModuleCount()+2*t,u=t,f=a-t,c={"██":"█","█ ":"▀"," █":"▄","  ":" "},g={"██":"▀","█ ":"▀"," █":" ","  ":" "},l="";for(r=0;r<a;r+=2){for(n=Math.floor((r-u)/1),o=Math.floor((r+1-u)/1),e=0;e<a;e+=1)i="█",u<=e&&e<f&&u<=r&&r<f&&s.isDark(n,Math.floor((e-u)/1))&&(i=" "),u<=e&&e<f&&u<=r+1&&r+1<f&&s.isDark(o,Math.floor((e-u)/1))?i+=" ":i+="█",l+=t<1&&f<=r+1?g[i]:c[i];l+="\n"}return a%2&&0<t?l.substring(0,l.length-a-1)+Array(1+a).join("▀"):l.substring(0,l.length-1)}(r);t-=1,r=void 0===r?2*t:r;var e,n,o,i,a=s.getModuleCount()*t+2*r,u=r,f=a-r,c=Array(t+1).join("██"),g=Array(t+1).join("  "),l="",h="";for(e=0;e<a;e+=1){for(o=Math.floor((e-u)/t),h="",n=0;n<a;n+=1)i=1,u<=n&&n<f&&u<=e&&e<f&&s.isDark(o,Math.floor((n-u)/t))&&(i=0),h+=i?c:g;for(o=0;o<t;o+=1)l+=h+"\n"}return l.substring(0,l.length-1)},s.renderTo2dContext=function(t,r){r=r||2;for(var e=s.getModuleCount(),n=0;n<e;n++)for(var o=0;o<e;o++)t.fillStyle=s.isDark(n,o)?"black":"white",t.fillRect(n*r,o*r,r,r)},s}i.stringToBytes=(i.stringToBytesFuncs={default:function(t){for(var r=[],e=0;e<t.length;e+=1){var n=t.charCodeAt(e);r.push(255&n)}return r}}).default,i.createStringToBytes=function(u,f){var i=function(){function t(){var t=r.read();if(-1==t)throw"eof";return t}for(var r=S(u),e=0,n={};;){var o=r.read();if(-1==o)break;var i=t(),a=t()<<8|t();n[String.fromCharCode(o<<8|i)]=a,e+=1}if(e!=f)throw e+" != "+f;return n}(),a="?".charCodeAt(0);return function(t){for(var r=[],e=0;e<t.length;e+=1){var n=t.charCodeAt(e);if(n<128)r.push(n);else{var o=i[t.charAt(e)];"number"==typeof o?(255&o)==o?r.push(o):(r.push(o>>>8),r.push(255&o)):r.push(a)}}return r}};var r,t,a=1,u=2,o=4,f=8,y={L:1,M:0,Q:3,H:2},e=0,n=1,c=2,g=3,l=4,h=5,s=6,v=7,B=(r=[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],(t={}).getBCHTypeInfo=function(t){for(var r=t<<10;0<=d(r)-d(1335);)r^=1335<<d(r)-d(1335);return 21522^(t<<10|r)},t.getBCHTypeNumber=function(t){for(var r=t<<12;0<=d(r)-d(7973);)r^=7973<<d(r)-d(7973);return t<<12|r},t.getPatternPosition=function(t){return r[t-1]},t.getMaskFunction=function(t){switch(t){case e:return function(t,r){return(t+r)%2==0};case n:return function(t,r){return t%2==0};case c:return function(t,r){return r%3==0};case g:return function(t,r){return(t+r)%3==0};case l:return function(t,r){return(Math.floor(t/2)+Math.floor(r/3))%2==0};case h:return function(t,r){return t*r%2+t*r%3==0};case s:return function(t,r){return(t*r%2+t*r%3)%2==0};case v:return function(t,r){return(t*r%3+(t+r)%2)%2==0};default:throw"bad maskPattern:"+t}},t.getErrorCorrectPolynomial=function(t){for(var r=C([1],0),e=0;e<t;e+=1)r=r.multiply(C([1,w.gexp(e)],0));return r},t.getLengthInBits=function(t,r){if(1<=r&&r<10)switch(t){case a:return 10;case u:return 9;case o:case f:return 8;default:throw"mode:"+t}else if(r<27)switch(t){case a:return 12;case u:return 11;case o:return 16;case f:return 10;default:throw"mode:"+t}else{if(!(r<41))throw"type:"+r;switch(t){case a:return 14;case u:return 13;case o:return 16;case f:return 12;default:throw"mode:"+t}}},t.getLostPoint=function(t){for(var r=t.getModuleCount(),e=0,n=0;n<r;n+=1)for(var o=0;o<r;o+=1){for(var i=0,a=t.isDark(n,o),u=-1;u<=1;u+=1)if(!(n+u<0||r<=n+u))for(var f=-1;f<=1;f+=1)o+f<0||r<=o+f||0==u&&0==f||a==t.isDark(n+u,o+f)&&(i+=1);5<i&&(e+=3+i-5)}for(n=0;n<r-1;n+=1)for(o=0;o<r-1;o+=1){var c=0;t.isDark(n,o)&&(c+=1),t.isDark(n+1,o)&&(c+=1),t.isDark(n,o+1)&&(c+=1),t.isDark(n+1,o+1)&&(c+=1),0!=c&&4!=c||(e+=3)}for(n=0;n<r;n+=1)for(o=0;o<r-6;o+=1)t.isDark(n,o)&&!t.isDark(n,o+1)&&t.isDark(n,o+2)&&t.isDark(n,o+3)&&t.isDark(n,o+4)&&!t.isDark(n,o+5)&&t.isDark(n,o+6)&&(e+=40);for(o=0;o<r;o+=1)for(n=0;n<r-6;n+=1)t.isDark(n,o)&&!t.isDark(n+1,o)&&t.isDark(n+2,o)&&t.isDark(n+3,o)&&t.isDark(n+4,o)&&!t.isDark(n+5,o)&&t.isDark(n+6,o)&&(e+=40);var g=0;for(o=0;o<r;o+=1)for(n=0;n<r;n+=1)t.isDark(n,o)&&(g+=1);return e+=Math.abs(100*g/r/r-50)/5*10},t);function d(t){for(var r=0;0!=t;)r+=1,t>>>=1;return r}var w=function(){for(var r=new Array(256),e=new Array(256),t=0;t<8;t+=1)r[t]=1<<t;for(t=8;t<256;t+=1)r[t]=r[t-4]^r[t-5]^r[t-6]^r[t-8];for(t=0;t<255;t+=1)e[r[t]]=t;var n={glog:function(t){if(t<1)throw"glog("+t+")";return e[t]},gexp:function(t){for(;t<0;)t+=255;for(;256<=t;)t-=255;return r[t]}};return n}();function C(n,o){if(void 0===n.length)throw n.length+"/"+o;var r=function(){for(var t=0;t<n.length&&0==n[t];)t+=1;for(var r=new Array(n.length-t+o),e=0;e<n.length-t;e+=1)r[e]=n[e+t];return r}(),i={getAt:function(t){return r[t]},getLength:function(){return r.length},multiply:function(t){for(var r=new Array(i.getLength()+t.getLength()-1),e=0;e<i.getLength();e+=1)for(var n=0;n<t.getLength();n+=1)r[e+n]^=w.gexp(w.glog(i.getAt(e))+w.glog(t.getAt(n)));return C(r,0)},mod:function(t){if(i.getLength()-t.getLength()<0)return i;for(var r=w.glog(i.getAt(0))-w.glog(t.getAt(0)),e=new Array(i.getLength()),n=0;n<i.getLength();n+=1)e[n]=i.getAt(n);for(n=0;n<t.getLength();n+=1)e[n]^=w.gexp(w.glog(t.getAt(n))+r);return C(e,0).mod(t)}};return i}function p(){var e=[],o={writeByte:function(t){e.push(255&t)},writeShort:function(t){o.writeByte(t),o.writeByte(t>>>8)},writeBytes:function(t,r,e){r=r||0,e=e||t.length;for(var n=0;n<e;n+=1)o.writeByte(t[n+r])},writeString:function(t){for(var r=0;r<t.length;r+=1)o.writeByte(t.charCodeAt(r))},toByteArray:function(){return e},toString:function(){var t="";t+="[";for(var r=0;r<e.length;r+=1)0<r&&(t+=","),t+=e[r];return t+="]"}};return o}var k,A,b=(k=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12,7,37,13],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]],(A={}).getRSBlocks=function(t,r){var e=function(t,r){switch(r){case y.L:return k[4*(t-1)+0];case y.M:return k[4*(t-1)+1];case y.Q:return k[4*(t-1)+2];case y.H:return k[4*(t-1)+3];default:return}}(t,r);if(void 0===e)throw"bad rs block @ typeNumber:"+t+"/errorCorrectionLevel:"+r;for(var n,o,i=e.length/3,a=[],u=0;u<i;u+=1)for(var f=e[3*u+0],c=e[3*u+1],g=e[3*u+2],l=0;l<f;l+=1)a.push((n=g,o=void 0,(o={}).totalCount=c,o.dataCount=n,o));return a},A),M=function(){var e=[],n=0,o={getBuffer:function(){return e},getAt:function(t){var r=Math.floor(t/8);return 1==(e[r]>>>7-t%8&1)},put:function(t,r){for(var e=0;e<r;e+=1)o.putBit(1==(t>>>r-e-1&1))},getLengthInBits:function(){return n},putBit:function(t){var r=Math.floor(n/8);e.length<=r&&e.push(0),t&&(e[r]|=128>>>n%8),n+=1}};return o},x=function(t){var r=a,n=t,e={getMode:function(){return r},getLength:function(t){return n.length},write:function(t){for(var r=n,e=0;e+2<r.length;)t.put(o(r.substring(e,e+3)),10),e+=3;e<r.length&&(r.length-e==1?t.put(o(r.substring(e,e+1)),4):r.length-e==2&&t.put(o(r.substring(e,e+2)),7))}},o=function(t){for(var r=0,e=0;e<t.length;e+=1)r=10*r+i(t.charAt(e));return r},i=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);throw"illegal char :"+t};return e},m=function(t){var r=u,n=t,e={getMode:function(){return r},getLength:function(t){return n.length},write:function(t){for(var r=n,e=0;e+1<r.length;)t.put(45*o(r.charAt(e))+o(r.charAt(e+1)),11),e+=2;e<r.length&&t.put(o(r.charAt(e)),6)}},o=function(t){if("0"<=t&&t<="9")return t.charCodeAt(0)-"0".charCodeAt(0);if("A"<=t&&t<="Z")return t.charCodeAt(0)-"A".charCodeAt(0)+10;switch(t){case" ":return 36;case"$":return 37;case"%":return 38;case"*":return 39;case"+":return 40;case"-":return 41;case".":return 42;case"/":return 43;case":":return 44;default:throw"illegal char :"+t}};return e},L=function(t){var r=o,e=i.stringToBytes(t),n={getMode:function(){return r},getLength:function(t){return e.length},write:function(t){for(var r=0;r<e.length;r+=1)t.put(e[r],8)}};return n},D=function(t){var r=f,e=i.stringToBytesFuncs.SJIS;if(!e)throw"sjis not supported.";!function(){var t=e("友");if(2!=t.length||38726!=(t[0]<<8|t[1]))throw"sjis not supported."}();var o=e(t),n={getMode:function(){return r},getLength:function(t){return~~(o.length/2)},write:function(t){for(var r=o,e=0;e+1<r.length;){var n=(255&r[e])<<8|255&r[e+1];if(33088<=n&&n<=40956)n-=33088;else{if(!(57408<=n&&n<=60351))throw"illegal char at "+(e+1)+"/"+n;n-=49472}n=192*(n>>>8&255)+(255&n),t.put(n,13),e+=2}if(e<r.length)throw"illegal char at "+(e+1)}};return n},S=function(t){var e=t,n=0,o=0,i=0,r={read:function(){for(;i<8;){if(n>=e.length){if(0==i)return-1;throw"unexpected end of file./"+i}var t=e.charAt(n);if(n+=1,"="==t)return i=0,-1;t.match(/^\s$/)||(o=o<<6|a(t.charCodeAt(0)),i+=6)}var r=o>>>i-8&255;return i-=8,r}},a=function(t){if(65<=t&&t<=90)return t-65;if(97<=t&&t<=122)return t-97+26;if(48<=t&&t<=57)return t-48+52;if(43==t)return 62;if(47==t)return 63;throw"c:"+t};return r},I=function(t,r,e){for(var n=function(t,r){var n=t,o=r,l=new Array(t*r),e={setPixel:function(t,r,e){l[r*n+t]=e},write:function(t){t.writeString("GIF87a"),t.writeShort(n),t.writeShort(o),t.writeByte(128),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(0),t.writeByte(255),t.writeByte(255),t.writeByte(255),t.writeString(","),t.writeShort(0),t.writeShort(0),t.writeShort(n),t.writeShort(o),t.writeByte(0);var r=i(2);t.writeByte(2);for(var e=0;255<r.length-e;)t.writeByte(255),t.writeBytes(r,e,255),e+=255;t.writeByte(r.length-e),t.writeBytes(r,e,r.length-e),t.writeByte(0),t.writeString(";")}},i=function(t){for(var r=1<<t,e=1+(1<<t),n=t+1,o=h(),i=0;i<r;i+=1)o.add(String.fromCharCode(i));o.add(String.fromCharCode(r)),o.add(String.fromCharCode(e));var a=p(),u=function(t){var e=t,n=0,o=0,r={write:function(t,r){if(t>>>r!=0)throw"length over";for(;8<=n+r;)e.writeByte(255&(t<<n|o)),r-=8-n,t>>>=8-n,n=o=0;o|=t<<n,n+=r},flush:function(){0<n&&e.writeByte(o)}};return r}(a);u.write(r,n);var f=0,c=String.fromCharCode(l[f]);for(f+=1;f<l.length;){var g=String.fromCharCode(l[f]);f+=1,o.contains(c+g)?c+=g:(u.write(o.indexOf(c),n),o.size()<4095&&(o.size()==1<<n&&(n+=1),o.add(c+g)),c=g)}return u.write(o.indexOf(c),n),u.write(e,n),u.flush(),a.toByteArray()},h=function(){var r={},e=0,n={add:function(t){if(n.contains(t))throw"dup key:"+t;r[t]=e,e+=1},size:function(){return e},indexOf:function(t){return r[t]},contains:function(t){return void 0!==r[t]}};return n};return e}(t,r),o=0;o<r;o+=1)for(var i=0;i<t;i+=1)n.setPixel(i,o,e(i,o));var a=p();n.write(a);for(var u=function(){function e(t){a+=String.fromCharCode(r(63&t))}var n=0,o=0,i=0,a="",t={},r=function(t){if(t<0);else{if(t<26)return 65+t;if(t<52)return t-26+97;if(t<62)return t-52+48;if(62==t)return 43;if(63==t)return 47}throw"n:"+t};return t.writeByte=function(t){for(n=n<<8|255&t,o+=8,i+=1;6<=o;)e(n>>>o-6),o-=6},t.flush=function(){if(0<o&&(e(n<<6-o),o=n=0),i%3!=0)for(var t=3-i%3,r=0;r<t;r+=1)a+="="},t.toString=function(){return a},t}(),f=a.toByteArray(),c=0;c<f.length;c+=1)u.writeByte(f[c]);return u.flush(),"data:image/gif;base64,"+u};return i}();qrcode.stringToBytesFuncs["UTF-8"]=function(t){return function(t){for(var r=[],e=0;e<t.length;e++){var n=t.charCodeAt(e);n<128?r.push(n):n<2048?r.push(192|n>>6,128|63&n):n<55296||57344<=n?r.push(224|n>>12,128|n>>6&63,128|63&n):(e++,n=65536+((1023&n)<<10|1023&t.charCodeAt(e)),r.push(240|n>>18,128|n>>12&63,128|n>>6&63,128|63&n))}return r}(t)},function(t){"function"==typeof define&&define.amd?define([],t):"object"==typeof exports&&(module.exports=t())}(function(){return qrcode});
+qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8']; return qrcode; })();
+
 function win(key, title, opts){
   opts = opts || {};
   return '<section class="mh-win' + (opts.wide ? ' wide' : '') + (opts.cls ? ' ' + opts.cls : '') + '" data-card="' + key + '" style="animation-delay:' + (opts.delay || 0) + 'ms">' +
@@ -1031,7 +1049,7 @@ var DOCK = [
   ['lanip','Network','net','indigo'],'|',['overview','System','gear','gray'],['upgrade','Upgrade','up','pink'],['@dnshub','DNS','dnsq','red']
 ];
 
-var MH_VERSION = '2.7.1', MH_BUILD = '2026-11-24';
+var MH_VERSION = '2.8.0', MH_BUILD = '2026-11-26';
 /* 2.7.1: a beta build has a pre-release version like 2.8.0-beta.1 (Control Center → Router Home updates → Beta) */
 var MH_BETA = /\d-?[a-z]/i.test(MH_VERSION);
 var MH_REPO = 'https://github.com/xDarkHawkx/RouterHome';   /* updates come from this repo's GitHub Releases */
@@ -1056,7 +1074,7 @@ var ABOUT = [
   ['GL.inet Utilities Toolkit','The last card on the page: point-and-click tools inspired by phantasm22’s GL.iNet Utilities Toolkit (github.com/phantasm22/GL-iNet_utils), rebuilt from scratch for Router Home. Hardware: CPU, memory, storage, temperatures (°F or °C), network ports, Wi-Fi radios and a VPN crypto acceleration check. Benchmarks: CPU thermal stress (stops at 203 °F / 95 °C), VPN & crypto speed, storage, memory and DNS latency; results stay until the router restarts. Network: MTU check and per-device speed limits (below). Zram & system: zram size and compression, package system check (leftover lock, refresh lists). SSH keys: list, add and remove; the last key can’t be removed while password sign-in is off.'],
   ['MTU check','Toolkit → Network → “Check MTU”: measures the biggest packet the internet path (and the path to each VPN server) carries without being split up, then shows the best size for each WireGuard tunnel (path minus 60 bytes for WireGuard’s own wrapping, 80 for an IPv6 server). Nothing changes while it measures. “Use N” changes that tunnel’s size and tests it for a minute: if websites or full-size packets stop getting through, the old size comes back by itself. Only the server the tunnel uses now is changed (other saved servers keep their size); an undo script is kept in /root/machome-backup/. OpenVPN tunnels aren’t changed.'],
   ['Speed limits','Toolkit → Network → Speed limits: cap a device’s download and upload speed (Mbps). This uses GL’s own speed limiter, the same one as Clients → Speed limit, so limits show there too and stay after a restart. Remove a limit with “Remove”. Set limits on the main router; an access point passes its devices’ traffic to the main router, which limits them there.'],
-  ['Known vulnerabilities','Security card → “Known vulnerabilities”: checks this router against published security problems, with plain rules (no AI). Source 1: GL.iNet security notices, turned into a signed list on the Router Home GitHub page (which models/firmware, what to look for on the router: a process, file, setting, service or open port, and which fix applies). The router only accepts a list signed with the Router Home release key; a copy ships built in. Source 2: the National Vulnerability Database (NVD), published CVEs for this exact model matched to this firmware version. Also reads GL.iNet’s own news feeds (Security Updates and the blog) once a day: a security post the list doesn’t cover yet shows as “New notice, not checked yet” and sends one Discord alert. Downloaded once a day; the on-router checks repeat every 10 minutes. Also reads GL’s firmware release notes: when a new firmware describes security fixes, any model gets “Firmware update needed” with the CVEs. A daily tampering check looks for signs no notice is needed for (programs running from temp folders, extra admin accounts, code injection, unknown programs in system folders, new SSH keys / accounts / tasks / open ports compared with this router’s normal). Serious signs, and notices that say so, show “Factory reset recommended” with the steps. Optional (Settings → Auto-heal → Security, off by default): apply safe fixes automatically; install security firmware at 4 AM. Results: Not affected, Exposed (a risky setting is on), Suspicious file, Unusual activity, Signs of infection, or Firmware update needed. Fixes come from a short fixed list (stop a process and delete its file, keeping a copy as evidence; change one setting; turn off a service; tighten file permissions), always ask first and leave an undo script in /root/machome-backup/ where that makes sense. Firmware upgrades are never automatic: you get a button to the Upgrade page. New findings send one Discord alert (type “Vulnerability”). It only knows what has been published, and “no signs” doesn’t prove a router was never attacked.'],
+  ['Known vulnerabilities','Security card → “Known vulnerabilities”: checks this router against published security problems, with plain rules (no AI). Source 1: GL.iNet security notices, turned into a signed list on the Router Home GitHub page (which models/firmware, what to look for on the router: a process, file, setting, service or open port, and which fix applies). The router only accepts a list signed with the Router Home release key; a copy ships built in. From 2.8.0 the list can also hold the published signs of an actual attack (text in a startup file, a firewall rule, a connection to an attackers’ server), so it can tell “could be attacked” from “was attacked”. Source 2: the National Vulnerability Database (NVD), published CVEs for this exact model matched to this firmware version. Also reads GL.iNet’s own news feeds (Security Updates and the blog) once a day: a security post the list doesn’t cover yet shows as “New notice, not checked yet” and sends one Discord alert. Downloaded once a day; the on-router checks repeat every 10 minutes. Also reads GL’s firmware release notes: when a new firmware describes security fixes, any model gets “Firmware update needed” with the CVEs. A daily tampering check looks for signs no notice is needed for (programs running from temp folders, extra admin accounts, code injection, unknown programs in system folders, new SSH keys / accounts / tasks / open ports compared with this router’s normal). Serious signs, and notices that say so, show “Factory reset recommended” with the steps. Optional (Settings → Auto-heal → Security, off by default): apply safe fixes automatically; install security firmware at 4 AM. Results: Not affected, Exposed (a risky setting is on), Suspicious file, Unusual activity, Signs of infection, or Firmware update needed. Fixes come from a short fixed list (stop a process and delete its file, keeping a copy as evidence; change one setting; turn off a service; tighten file permissions), always ask first and leave an undo script in /root/machome-backup/ where that makes sense. Firmware upgrades are never automatic: you get a button to the Upgrade page. New findings send one Discord alert (type “Vulnerability”). It only knows what has been published, and “no signs” doesn’t prove a router was never attacked.'],
   ['Zram gauge','System card, next to Memory: zram is memory the router compresses instead of running out of RAM (GL’s zram-swap package; about half the RAM, set up automatically at boot). The gauge shows how full it is; hover for the compression ratio, the real RAM it uses and the peak since the last restart. Orange from 60% full, red from 85%. Shown only when zram is on. A GL firmware upgrade removes the zram-swap package; Router Home reinstalls it by itself once the internet is back (only on a router that had it) and sends an “upgrade” alert.'],
   ['VPN outage log','VPN Health card → “Outage log”: every REAL VPN outage (30 s or more with no pings and no web page through the tunnel) of the last 7, 30 or 60 days, with server, length, why, where devices went and whether auto-heal restarted it. Filter by provider, then “Copy as text” or “Send to Discord” for the VPN provider’s support. Ping-only blips aren’t listed. Recording since 11-20 evening; kept for 60 days.'],
   ['Phone view','The 📱 button in the menu bar switches to a compact page for phones: overall status, internet grade and speed, VPN tunnels with on/off switches, devices online, and big buttons (speed test, test VPN, clear alerts, recent events, DNS hub, outage log, settings). It turns on by itself on small screens; your choice is remembered in that browser. “Full page” goes back.'],
@@ -1083,6 +1101,7 @@ var ABOUT = [
   ['Choose network', 'Button on the Wi-Fi Uplink card. Saved networks connect with one click (no password needed). Nearby networks come from a ~20-second scan, strongest first, with band and security. “Join a hidden network” for networks that don’t broadcast. Business (802.1X) networks: use GL’s Internet page. While it switches (up to a minute) the router’s own Wi-Fi stays up but internet pauses.'],
   ['VPN', 'Each WireGuard tunnel: connected or not, server, data used, kill switch and when it last checked in with the server (Stale after 3 min). Under each tunnel, its last 7 days: uptime, average ping, packet loss, day vs evening ping and nightly speed; the steadiest tunnel is tagged MOST RELIABLE. “Past servers this week” (click to open) lists servers or providers you used earlier in the week. Each tunnel has an on/off switch, and clicking a tunnel opens its server list (servers saved in GL’s VPN page, grouped by provider) so you can switch it to another server; a server another tunnel is using can’t be picked. In access-point mode this becomes the Access Point card.'],
   ['VPN Health', 'A plain checklist for each WireGuard or OpenVPN tunnel, next to the VPN card: pings (Cloudflare and Quad9, every 10 s, each server shown separately), a domain lookup of example.com sent through the tunnel and a web page check through the tunnel (once a minute), the WireGuard handshake (for OpenVPN, which has none: when data last came back from its server), and drops in the last hour and 24 hours, with the time and length of the last one. A drop = 30 s or more with no pings AND no web page through the tunnel (or no handshake). When pings stop but web pages still load, it’s a “ping-only blip”: listed separately and ignored, so devices aren’t moved to another tunnel. The “Monitor 5 h” button watches every tunnel closely for 5 hours (pings to 3 servers every few seconds, plus a domain lookup and a web page through each tunnel) and sends one summary to Discord at the end; it counts down while running and can be stopped early (the summary is still sent). “Clear all VPN alerts” (bottom of the card) clears every VPN warning, moves devices back to their own tunnels and resets the drop history; tunnels are then re-checked from scratch. Turning a tunnel off, removing it or switching its server never sends an alert: a tunnel gets 2 minutes to reconnect after a change, and a new or changed tunnel starts with a clean history. Green ✓ = passing, orange ! = shaky, red ✗ = failing. The domain lookup is shown only; it doesn’t trigger alerts or failover. Hidden in access-point mode.'],
+  ['Guest Wi-Fi QR code', 'Wi-Fi card → “Guest on · QR code” (2.8.0): a QR code for your guest Wi-Fi, so visitors can point their phone camera at it to join. Made in your browser from GL’s own Wi-Fi settings when you open it; nothing is stored or sent anywhere. Privacy mode blurs it until you press Show code. Only shown when a guest network is turned on.'],
   ['Access Point', 'Access points only: the main router’s address, internet latency, uplink and Wi-Fi clients.'],
   ['AdGuard Home', 'Whether ad blocking is on and which DNS server your devices use. With AdGuard on a NAS connected (the card’s Connection button) it shows live stats: protection, queries, % blocked, a 24-hour graph and top blocked domains.'],
   ['Clients', 'Every connected device. NEW = joined in the last 24 h, PAUSED = internet paused. The pause button cuts a device off immediately; click a device to rename, block or open its sheet.'],
@@ -1119,7 +1138,8 @@ var ABOUT = [
   ['NAS backup', 'Scheduled settings backups to your NAS (FTP, FTPS, WebDAV or SCP), with how many to keep. The password is stored on the router only. After every backup a restore check downloads the newest copy back into the router’s memory, makes sure it’s complete and contains the router’s settings, then deletes the temporary copy (“Verify now” runs it any time).'],
   ['ISP report card', 'Monthly uptime and outages, average and slowest speeds and how often tests reached 80% of your plan. Set your plan speeds here; “Copy as text” for your ISP.'],
   ['Weather', 'Location: a US ZIP code or a city anywhere (add the country if there are several: London, GB). “Show weather” off removes the weather from the Home tab and stops the downloads. On touchscreen models: weather on the sleep screen and the radar background (radar covers the US only).'],
-  ['Temperature unit', '°F or °C for the whole Home tab, the weather and Discord alerts. Saved on the router, so every browser shows the same. Alert limits keep working the same way; they’re just shown in your unit.']]],
+  ['Temperature unit', '°F or °C for the whole Home tab, the weather and alert messages. Saved on the router, so every browser shows the same. Alert limits keep working the same way; they’re just shown in your unit.'],
+  ['Notification providers', 'Settings → Notification providers (2.8.0): where alerts go. Discord, Telegram (your own bot; “Find my chat ID” finds the chat), Gmail (a separate alerts account with an app password, sent over an encrypted connection to Gmail), Slack (incoming webhook) and Home Assistant (a webhook automation; the window shows one to copy). Every alert goes to each one that’s on, at the same time; one that fails is retried on its own. Each has Send test, a pause switch and Remove. Router name (for example Flint 3) replaces the model name (GL-MT5000) in every alert: the Discord sender, the email sender and subject, and the other messages. Tokens and passwords stay on the router (admin only) and are never shown again.']]],
  ['Things it does by itself', 'Switches are in Control Center > Settings > Auto-heal. Each fix happens at most once per problem with a cool-down, sends a Discord message when it acts, and tells you if it didn’t help.', [
   ['Background checks', 'Every ~10 seconds: pings, DNS, VPN check-ins and temperature. Every minute: security checks, new devices, history and the self-care below.'],
   ['VPN failover', 'If a tunnel stops working for ~30 seconds its devices move to another working tunnel (never off the VPN) and move back once it has been healthy for a minute. WireGuard and OpenVPN tunnels are treated the same and can cover for each other.'],
@@ -2447,7 +2467,7 @@ return {
         var html = '<div class="hic" style="background:' + GRAD.green + '">' + svg('shield') + '</div><h2>Auto-heal</h2>' +
           '<p>Problems the router fixes by itself. Each fix happens at most once per problem with a cool-down, and tells you if it didn’t help. Switches marked opt-in are off until you turn them on.</p>' +
           groups.map(function(g){ return '<div class="mh-mgrp"><h4>' + esc(g) + '</h4>' + rows.filter(function(h){ return h.g === g; }).map(sw).join('') + '</div>'; }).join('') +
-          '<p style="text-align:left;font-size:11px;margin-top:10px">' + (a.enabled && a.has_webhook ? 'When a fix runs you get a Discord message (VPN, Router health, Security, Wi-Fi or NAS backup alert) and it’s listed in Recent events.' : 'Fixes are listed in Recent events. Set up Discord alerts to also get a message when one runs.') + '</p>' +
+          '<p style="text-align:left;font-size:11px;margin-top:10px">' + (a.enabled && (a.has_any || a.has_webhook) ? 'When a fix runs you get an alert (VPN, Router health, Security, Wi-Fi or NAS backup) and it’s listed in Recent events.' : 'Fixes are listed in Recent events. Set up alerts (Settings → Notification providers) to also get a message when one runs.') + '</p>' +
           '<div class="err" data-e></div><div class="btns"><button data-m="cancel">Close</button><button class="pri" data-m="save">Save</button></div>';
         var doSave = function(p){
           return rpcx('machome', 'set_alerts', p).then(function(r){
@@ -2570,13 +2590,14 @@ return {
         var whours = ''; for (var wh = 0; wh < 24; wh++) whours += '<option value="' + wh + '"' + (wh === a.weekly_hour ? ' selected' : '') + '>' + ((wh % 12) || 12) + ':00 ' + (wh < 12 ? 'AM' : 'PM') + '</option>';
         var sw = function(id, on, label, sub){ return '<label class="mh-mrow"><span><b>' + esc(label) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span><input type="checkbox" class="mh-msw" data-f="' + id + '"' + (on ? ' checked' : '') + '></label>'; };
         var hours = ''; for (var h = 0; h < 24; h++) hours += '<option value="' + h + '"' + (h === a.speed_hour ? ' selected' : '') + '>' + ((h % 12) || 12) + ':00 ' + (h < 12 ? 'AM' : 'PM') + '</option>';
-        var html = '<div class="hic" style="background:' + GRAD.indigo + '">' + svg('pulse') + '</div><h2>Discord alerts</h2>' +
-          '<p>Get notified in a Discord channel when something needs attention.</p>' +
+        /* 2.7.1: the providers (Discord, Telegram, Gmail, Slack, Home Assistant) have their own window */
+        var act = (a.active || []).map(function(p){ return PROV_NAMES[p] || p; });
+        var html = '<div class="hic" style="background:' + GRAD.indigo + '">' + svg('pulse') + '</div><h2>Alerts</h2>' +
+          '<p>Get a message when something needs attention, on ' + (act.length ? esc(act.join(', ')) : 'Discord, Telegram, Gmail, Slack or Home Assistant') + '.</p>' +
           '<input class="mh-al-q" type="search" placeholder="Search alerts and schedules (e.g. VPN, upload, weekly)…" autocomplete="off" aria-label="Search alert settings">' +
-          '<div class="mh-al-sec" data-k="setup webhook discord url channel send alerts on off pause">' +
-          sw('enabled', a.enabled, 'Send alerts', a.has_webhook ? 'Webhook saved ' + a.hint : 'Add a webhook below first') +
-          '<label for="mh-wh">Discord webhook URL</label><input id="mh-wh" type="password" autocomplete="off" placeholder="' + (a.has_webhook ? 'Saved (' + esc(a.hint) + '). Paste a new one to replace' : 'https://discord.com/api/webhooks/…') + '">' +
-          '<p style="text-align:left;font-size:11px;margin-top:6px">In Discord: <b>Server Settings → Integrations → Webhooks → New Webhook</b>, choose the channel, then <b>Copy Webhook URL</b>. It’s stored on the router (root-only) and never shown here again.</p></div>' +
+          '<div class="mh-al-sec" data-k="setup provider providers discord telegram gmail email slack home assistant send alerts on off pause">' +
+          sw('enabled', a.enabled, 'Send alerts', act.length ? 'Sending to ' + act.join(', ') : 'Set up a notification provider first') +
+          '<label class="mh-mrow"><span><b>Notification providers</b><small>Where alerts go: Discord, Telegram, Gmail, Slack, Home Assistant. Set up one or more, each with its own test.</small></span><button class="mh-btn sec" data-m="goprov" style="margin:0">Open</button></label></div>' +
           '<div class="mh-mgrp" data-k="alert alerts notify notification message type"><h4>Alert me about</h4>' + T.map(function(t){ return sw('t-' + t[0], a.types[t[0]] !== false, t[1]); }).join('') + '</div>' +
           '<div class="mh-mgrp" data-k="threshold schedule time when"><h4>Thresholds &amp; schedule</h4>' +
             '<label class="mh-mrow"><span><b>Temperature limit</b><small>Alert after 5 minutes above this</small></span><span><input type="number" id="mh-tf" min="' + (TU === 'C' ? 49 : 120) + '" max="' + (TU === 'C' ? 104 : 220) + '" value="' + (TU === 'C' ? Math.round((a.temp_f - 32) * 5 / 9) : a.temp_f) + '" style="width:76px"> °' + TU + '</span></label>' +
@@ -2618,17 +2639,17 @@ return {
                     /* the Auto-heal switches are NOT sent from here (own window now): the router keeps whatever they are */
                     wifi_report: g('wifi_report'), speed_retest: g('speed_retest'), weekly_day: Number(md.querySelector('#mh-wd').value), weekly_hour: Number(md.querySelector('#mh-wh2').value),
                     digest_types: DIGEST_TYPES.filter(function(k){ return g('dg-' + k); }), digest_hour: Number((md.querySelector('#mh-dgh') || {}).value || 18) };
-          var w = md.querySelector('#mh-wh').value.trim(); if (w) p.webhook = w;
           return p;
         };
         var save = function(md){
           var e = md.querySelector('[data-e]'); e.style.color = ''; e.textContent = '';
           var p = collect(md);
-          if (p.enabled && !p.webhook && !a.has_webhook) return Promise.reject(new Error('Add a webhook URL to turn alerts on'));
-          return rpcx('machome', 'set_alerts', p).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'could not save'); if (p.webhook){ a.has_webhook = true; md.querySelector('#mh-wh').value = ''; } return r; });
+          if (p.enabled && !a.has_any) return Promise.reject(new Error('Set up a notification provider first (Notification providers → Open)'));
+          return rpcx('machome', 'set_alerts', p).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'could not save'); return r; });
         };
         var amd = self.openModal(html, {
           goheal: function(){ self.openAutoheal(); },
+          goprov: function(){ self.openProviders(); },
           unmute: function(md, b){
             var k = b.getAttribute('data-k'); b.disabled = true;
             rpcx('machome', 'alert_mute', { kind: k, secs: 0 }).then(function(r){
@@ -2648,10 +2669,13 @@ return {
           save: function(md, b){ b.disabled = true; save(md).then(function(){ self.closeModal(); self.toast('Alert settings saved'); rpc('machome','get_alerts').then(function(x){ self.mh.alerts = x; }); })
             .catch(function(err){ b.disabled = false; md.querySelector('[data-e]').textContent = err.message; }); },
           test: function(md, b){ b.disabled = true; b.textContent = 'Sending…'; var e = md.querySelector('[data-e]');
-            save(md).then(function(){ return rpcx('machome', 'test_alert', {}, 20000); }).then(function(r){
+            save(md).then(function(){ return rpcx('machome', 'test_alert', {}, 40000); }).then(function(r){
               b.disabled = false; b.textContent = 'Send test';
-              if (r && r.ok){ e.style.color = 'var(--mh-green)'; e.textContent = 'Test alert sent. Check your Discord channel.'; }
-              else { e.style.color = ''; e.textContent = 'Discord didn’t accept it' + (r && r.code ? ' (HTTP ' + r.code + ')' : '') + '. Check the webhook URL.'; }
+              if (!r || (!r.res && r.err)){ e.style.color = ''; e.textContent = (r && r.err) || 'Couldn’t send the test'; return; }
+              var R = r.res || {}, ok = [], bad = [];
+              Object.keys(R).forEach(function(p){ if (R[p].ok) ok.push(R[p].name || p); else bad.push((R[p].name || p) + ': ' + (R[p].why || 'failed')); });
+              e.style.color = bad.length ? '' : 'var(--mh-green)';
+              e.textContent = (ok.length ? 'Test sent to ' + ok.join(', ') + '. ' : '') + bad.join(' ');
             }).catch(function(err){ b.disabled = false; b.textContent = 'Send test'; e.style.color = ''; e.textContent = err.message; }); }
         });
         /* search: every word must appear in the row's label/description or its section's name/keywords.
@@ -2668,6 +2692,148 @@ return {
           });
           amd.querySelector('.mh-al-none').style.display = any ? 'none' : '';
         });
+      });
+    },
+    /* Notification providers (2.7.1, Settings → Notification providers, also from the Alerts window): where alerts
+       go. Discord, Telegram, Gmail (app password over SMTP/TLS), Slack, Home Assistant (webhook automation).
+       Every alert goes to each provider that's set up and switched on. Secrets are saved root-only on the router and
+       never come back (get_alerts.prov only has "…last 4" hints); empty boxes keep what's saved. Each card has its
+       own Send test (tests ignore the pause switches). keep: re-open in place (keeps the scroll position). */
+    openProviders: function(keep){
+      var self = this, old = document.querySelector('#machome-modal .sheet'), top = keep && old ? old.scrollTop : 0;
+      rpc('machome', 'get_alerts').then(function(a){
+        if (!a){ self.toast('Couldn’t load the notification settings'); return; }
+        self.mh.alerts = a;
+        var P = a.prov || {}, st = function(p){ return P[p] || {}; };
+        var rnd = function(n){ var c = 'abcdefghijkmnpqrstuvwxyz23456789', s = '', b = new Uint8Array(n); (window.crypto || window.msCrypto).getRandomValues(b); for (var i = 0; i < n; i++) s += c[b[i] % c.length]; return s; };
+        var inp = function(id, label, type, val, ph){ return '<label for="' + id + '">' + label + '</label><input id="' + id + '" type="' + type + '" autocomplete="off" spellcheck="false" value="' + esc(val || '') + '" placeholder="' + esc(ph || '') + '">'; };
+        var saved = function(h, ex){ return h ? 'Saved (' + h + '). Type a new one to replace' : ex; };
+        var steps = function(l, open){ return '<details class="mh-pvh"' + (open ? ' open' : '') + '><summary>How to set it up</summary><ol>' + l.map(function(s){ return '<li>' + s + '</li>'; }).join('') + '</ol></details>'; };
+        var card = function(p, icon, body, help){
+          var s = st(p), on = s.configured && s.on !== false;
+          var pill = s.configured ? (on ? '<span class="mh-pvst on">On</span>' : '<span class="mh-pvst">Paused</span>') : '<span class="mh-pvst">Not set up</span>';
+          return '<div class="mh-mgrp mh-pv" data-pv="' + p + '" data-k="' + p + ' ' + PROV_NAMES[p].toLowerCase() + '"><h4>' + icon + ' ' + PROV_NAMES[p] + pill + '</h4>' +
+            (s.configured ? '<label class="mh-mrow"><span><b>Send alerts to ' + PROV_NAMES[p] + '</b><small>Turn off to pause just this one</small></span><input type="checkbox" class="mh-msw" data-f="pvon-' + p + '"' + (on ? ' checked' : '') + '></label>' : '') +
+            body + steps(help, false) +
+            '<div class="mh-pvb"><button class="mh-btn sec" data-m="ptest" data-p="' + p + '">Send test</button>' + (s.configured ? '<button class="mh-btn sec" data-m="pclear" data-p="' + p + '">Remove</button>' : '') + '</div>' +
+            '<div class="mh-pvm" data-pm="' + p + '"></div></div>';
+        };
+        var ha = st('ha'), haId = ha.configured ? '' : 'routerhome-' + rnd(20);
+        var haYaml = function(id){ return 'alias: Router Home alerts\ntriggers:\n  - trigger: webhook\n    webhook_id: ' + (id || 'your-webhook-id') + '\n    allowed_methods: [POST]\n    local_only: true\nactions:\n  - action: notify.notify\n    data:\n      title: "{{ trigger.json.title }}"\n      message: "{{ trigger.json.message }}"'; };
+        var html = '<div class="hic" style="background:' + GRAD.indigo + '">' + svg('pulse') + '</div><h2>Notification providers</h2>' +
+          '<p>Where Router Home sends its alerts. Set up one or more: every alert goes to each one that’s on. What gets sent, and when, is in Settings → Alerts.</p>' +
+          '<p style="text-align:left;font-size:11px">Tokens, passwords and webhook links are saved on the router only (readable by its admin account only) and are never shown here again. Leave a box empty to keep what’s saved.</p>' +
+          /* beta.2 (owner): a friendly router name instead of the model name (GL-MT5000) in every alert */
+          '<div class="mh-mgrp mh-pv" data-k="router name friendly label"><h4>🏷️ Router name</h4>' +
+            inp('pv-rname', 'Name shown in alerts', 'text', a.router_name || '', 'For example: Flint 3 (empty = ' + (a.hostname || 'the model name') + ')') +
+            '<p style="text-align:left;font-size:11px;margin:6px 0 0">Used instead of the model name' + (a.hostname ? ' (' + esc(a.hostname) + ')' : '') + ' on every alert: the Discord sender, the email sender and subject (“Flint 3: …”), and on Telegram, Slack and Home Assistant messages. Handy when several routers send to the same place. Leave it empty to use the model name.</p></div>' +
+          card('discord', '💬', inp('pv-discord-url', 'Discord webhook URL', 'password', '', saved(st('discord').hint, 'https://discord.com/api/webhooks/…')),
+            ['In Discord, open your server’s <b>Server Settings → Integrations → Webhooks → New Webhook</b>.',
+             'Pick the channel the alerts should go to, then press <b>Copy Webhook URL</b>.',
+             'Paste it above, press <b>Save</b>, then <b>Send test</b>.']) +
+          card('telegram', '✈️', inp('pv-tg-token', 'Bot token', 'password', '', saved(st('telegram').hint, '123456789:AA…')) +
+            inp('pv-tg-chat', 'Chat ID', 'text', st('telegram').chat, 'Press “Find my chat ID” below') +
+            '<div class="mh-pvb"><button class="mh-btn sec" data-m="tgfind">Find my chat ID</button></div><div class="mh-pvm" data-tgl></div>',
+            ['In Telegram, open a chat with <b>@BotFather</b> (the official one with the blue check mark), send <b>/newbot</b> and answer its two questions: a name, then a username ending in “bot”.',
+             'BotFather replies with a <b>token</b> (it looks like 123456789:AA…). Paste it above.',
+             'Open your new bot (BotFather sends the link) and press <b>Start</b>, or send it any message. For a group: add the bot to the group, then send a message in the group.',
+             'Press <b>Find my chat ID</b> and pick your chat. Then <b>Save</b> and <b>Send test</b>.']) +
+          card('gmail', '✉️', '<div class="mh-pvw"><b>Use a separate Gmail account just for router alerts.</b> An app password can read and send all mail in its account, so if it ever leaked, only that empty mailbox would be exposed. Alerts can go to any address, like your normal email.</div>' +
+            inp('pv-gm-user', 'Gmail address (sends the alerts)', 'email', st('gmail').user, 'routeralerts@gmail.com') +
+            inp('pv-gm-pass', 'App password', 'password', '', st('gmail').has_pass ? 'Saved. Type a new one to replace' : '16 letters from Google, like abcd efgh ijkl mnop') +
+            inp('pv-gm-to', 'Send alerts to', 'email', st('gmail').to, 'you@example.com'),
+            ['Create a new Gmail account for the router (recommended) and sign in to it.',
+             'Turn on <b>2-Step Verification</b>: Google Account → <b>Security</b> → 2-Step Verification. Google only offers app passwords with it on.',
+             'Open <b>myaccount.google.com/apppasswords</b>, type a name like “Router Home” and press <b>Create</b>. Copy the 16-letter password (Google shows it only once).',
+             'Fill in the three boxes above, <b>Save</b>, then <b>Send test</b>. The first time, check the spam folder and mark it “Not spam”.',
+             'To stop it any time: delete the app password on that Google page, or press <b>Remove</b> here. The router sends through Gmail’s mail server over an encrypted connection and checks its certificate.']) +
+          card('slack', '#️⃣', inp('pv-slack-url', 'Slack webhook URL', 'password', '', saved(st('slack').hint, 'https://hooks.slack.com/services/…')),
+            ['Open <b>api.slack.com/apps</b> → <b>Create New App</b> → <b>From scratch</b>, name it (for example Router Home) and pick your workspace.',
+             'In the app’s menu choose <b>Incoming Webhooks</b>, switch it <b>On</b>, then press <b>Add New Webhook</b> and pick the channel.',
+             'Copy the <b>Webhook URL</b> (https://hooks.slack.com/services/…), paste it above, <b>Save</b>, then <b>Send test</b>.']) +
+          card('ha', '🏠', inp('pv-ha-host', 'Home Assistant address', 'text', ha.host, 'http://homeassistant.local:8123') +
+            inp('pv-ha-id', 'Webhook ID', 'text', haId, ha.configured ? 'Saved (' + (ha.hint || '') + '). Type a new one to replace' : '') +
+            '<pre class="mh-pvy" data-hay>' + esc(haYaml(haId)) + '</pre><div class="mh-pvb"><button class="mh-btn sec" data-m="hacopy">Copy the automation</button></div>',
+            ['In Home Assistant: <b>Settings → Automations &amp; scenes → Create automation → Create new automation</b>, then the <b>⋮</b> menu → <b>Edit in YAML</b>.',
+             'Paste the automation above (<b>Copy the automation</b>) and change <b>notify.notify</b> to your phone, for example notify.mobile_app_your_phone (Developer tools → Actions lists them). Save it.',
+             'Type your Home Assistant address above as the router reaches it, usually http://homeassistant.local:8123 or http://192.168.x.x:8123. Keep the webhook ID the same as in the automation (it works like a password).',
+             '<b>Save</b>, then <b>Send test</b>. Use http:// on your home network: https only works with a valid certificate.']) +
+          '<div class="err" data-e></div>' +
+          '<div class="btns"><button data-m="cancel">Close</button><button class="pri" data-m="save">Save</button></div>';
+        /* what to save: only boxes that were filled in or changed, plus the on/off switches */
+        var collect = function(md){
+          var v = function(id){ var i = md.querySelector('#' + id); return i ? i.value.trim() : ''; };
+          var g = function(f){ var i = md.querySelector('[data-f="' + f + '"]'); return i ? i.checked : null; };
+          var p = {}, prov = {}, add = function(k, o){ var on = g('pvon-' + k); if (on !== null) o.on = on; if (Object.keys(o).length) prov[k] = o; };
+          if (v('pv-discord-url')) p.webhook = v('pv-discord-url');
+          add('discord', {});
+          var tg = {}; if (v('pv-tg-token')) tg.token = v('pv-tg-token'); if (v('pv-tg-chat') && v('pv-tg-chat') !== (st('telegram').chat || '')) tg.chat = v('pv-tg-chat'); add('telegram', tg);
+          if (v('pv-rname') !== (a.router_name || '')) p.router_name = v('pv-rname');
+          var gm = {}; if (v('pv-gm-user') && v('pv-gm-user').toLowerCase() !== (st('gmail').user || '')) gm.user = v('pv-gm-user'); if (v('pv-gm-pass')) gm.pass = v('pv-gm-pass'); if (v('pv-gm-to') && v('pv-gm-to') !== (st('gmail').to || '')) gm.to = v('pv-gm-to'); add('gmail', gm);
+          var sl = {}; if (v('pv-slack-url')) sl.url = v('pv-slack-url'); add('slack', sl);
+          var hh = {}, host = v('pv-ha-host').replace(/\/+$/, ''), hid = v('pv-ha-id');
+          if (hid && host) hh.url = host + '/api/webhook/' + hid;
+          else if (host && ha.configured && host !== ha.host) throw new Error('Home Assistant: type the webhook ID again to change the address.');
+          add('ha', hh);
+          if (Object.keys(prov).length) p.prov = prov;
+          /* the first provider that's set up also switches "Send alerts" on */
+          if (!a.has_any && !a.enabled && (p.webhook || Object.keys(prov).some(function(k){ return Object.keys(prov[k]).some(function(x){ return x !== 'on'; }); }))) p.enabled = true;
+          return p;
+        };
+        var save = function(md){
+          var e = md.querySelector('[data-e]'); e.style.color = ''; e.textContent = '';
+          var p; try { p = collect(md); } catch (x) { return Promise.reject(x); }
+          if (!Object.keys(p).length) return Promise.resolve({ ok: true, none: true });
+          return rpcx('machome', 'set_alerts', p).then(function(r){ if (!r || !r.ok) throw new Error((r && r.err) || 'could not save'); return r; });
+        };
+        var md = self.openModal(html, {
+          save: function(md, b){ b.disabled = true; save(md).then(function(r){ self.toast(r && r.none ? 'Nothing changed' : 'Notification settings saved'); self.openProviders(true); })
+            .catch(function(err){ b.disabled = false; md.querySelector('[data-e]').textContent = err.message; }); },
+          ptest: function(md, b){
+            var p = b.getAttribute('data-p'), box = md.querySelector('[data-pm="' + p + '"]');
+            b.disabled = true; b.textContent = 'Sending…'; box.style.color = ''; box.textContent = '';
+            save(md).then(function(){ return rpcx('machome', 'test_alert', { provider: p }, 40000); }).then(function(r){
+              b.disabled = false; b.textContent = 'Send test';
+              var x = r && r.res && r.res[p];
+              if (x && x.ok){ box.style.color = 'var(--mh-green)'; box.textContent = 'Test sent. Check ' + PROV_NAMES[p] + (p === 'gmail' ? ' (and the spam folder the first time).' : '.'); }
+              else { box.style.color = 'var(--mh-red)'; box.textContent = (x && x.why) || (r && r.err) || 'Couldn’t send the test'; }
+            }).catch(function(err){ b.disabled = false; b.textContent = 'Send test'; box.style.color = 'var(--mh-red)'; box.textContent = err.message; });
+          },
+          pclear: function(md, b){
+            var p = b.getAttribute('data-p');
+            if (b.getAttribute('data-sure') !== '1'){ b.setAttribute('data-sure', '1'); b.textContent = 'Press again to remove'; return; }
+            b.disabled = true;
+            var prov = {}; prov[p] = { clear: true };
+            rpcx('machome', 'set_alerts', { prov: prov }).then(function(r){
+              if (!r || !r.ok) throw new Error((r && r.err) || 'could not remove');
+              self.toast(PROV_NAMES[p] + ' removed'); self.openProviders(true);
+            }).catch(function(err){ b.disabled = false; md.querySelector('[data-pm="' + p + '"]').textContent = err.message; });
+          },
+          tgfind: function(md, b){
+            var box = md.querySelector('[data-tgl]'), tok = (md.querySelector('#pv-tg-token').value || '').trim();
+            if (!tok && !st('telegram').hint){ box.style.color = 'var(--mh-red)'; box.textContent = 'Paste the bot token first.'; return; }
+            b.disabled = true; box.style.color = ''; box.textContent = 'Asking Telegram…';
+            rpcx('machome', 'tg_chats', { token: tok }, 25000).then(function(r){
+              b.disabled = false;
+              if (!r || !r.ok){ box.style.color = 'var(--mh-red)'; box.textContent = (r && r.err) || 'Telegram didn’t answer'; return; }
+              if (!r.chats || !r.chats.length){ box.style.color = ''; box.textContent = 'No messages yet. Open your bot in Telegram, press Start (or send it any message), then press Find my chat ID again.'; return; }
+              box.innerHTML = '<div style="margin-bottom:4px">Pick the chat for the alerts:</div><div class="mh-pvc">' + r.chats.map(function(c){
+                return '<button class="mh-btn sec" data-m="tgpick" data-id="' + esc(c.id) + '">' + esc(c.name) + (c.type && c.type !== 'private' ? ' (' + esc(c.type) + ')' : '') + '</button>'; }).join('') + '</div>';
+            }).catch(function(err){ b.disabled = false; box.style.color = 'var(--mh-red)'; box.textContent = err.message; });
+          },
+          tgpick: function(md, b){ md.querySelector('#pv-tg-chat').value = b.getAttribute('data-id'); md.querySelector('[data-tgl]').textContent = 'Chat ID filled in. Press Save, then Send test.'; },
+          hacopy: function(md, b){
+            var t = md.querySelector('[data-hay]').textContent;
+            var done = function(){ b.textContent = 'Copied'; setTimeout(function(){ b.textContent = 'Copy the automation'; }, 2000); };
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, function(){ b.textContent = 'Select the text above and copy it'; });
+            else b.textContent = 'Select the text above and copy it';
+          }
+        });
+        if (!md) return;
+        var hid = md.querySelector('#pv-ha-id'), pre = md.querySelector('[data-hay]');
+        if (hid && pre) hid.addEventListener('input', function(){ pre.textContent = haYaml(hid.value.trim()); });
+        var sh = md.querySelector('.sheet');
+        if (sh && keep){ sh.style.animation = 'none'; md.style.animation = 'none'; sh.scrollTop = top; }
       });
     },
     /* 7-day reliability per tunnel/server (merged into the VPN card 2026-11-13; was its own "VPN Reliability" card).
@@ -3001,7 +3167,7 @@ return {
       this.confirm({ title: 'Monitor all VPN tunnels for 5 hours?', icon: 'pulse', grad: GRAD.green, ok: 'Start', working: 'Starting…',
         body: '<p>Every few seconds, each tunnel gets pings to three servers, plus a domain lookup and a web page through the tunnel. It only checks; nothing is changed.</p>' +
           '<p>' + (discord ? 'When it’s done (about ' + hhmm(Date.now() / 1000 + 18000) + '), one summary goes to Discord.'
-                           : '<b>Discord alerts are off</b>, so the summary is only saved on the router. Turn them on in Settings → Discord alerts.') +
+                           : '<b>Alerts are off</b>, so the summary is only saved on the router. Turn them on in Settings → Alerts.') +
           ' The button counts down, and you can stop it early.</p>' },
         function(){ return rpcx('machome', 'vpnwatch_start', {}, 15000).then(function(r){
           if (!r || r.ok === false) throw new Error((r && r.err) || 'the router returned an error');
@@ -3166,7 +3332,7 @@ return {
         extra += '<div class="mh-ck click" data-act="ready" style="cursor:pointer"><i style="background:' + (lost ? 'var(--mh-orange)' : 'var(--mh-blue)') + '">' + (lost ? '!' : 'i') + '</i><b>Firmware-upgrade safe</b><small>' +
           (lost ? lost + ' item' + (lost > 1 ? 's' : '') + ' would be wiped' : rd.kept + ' kept' + (rev ? ' · ' + rev + ' services re-enable' : '')) + ' ›</small></div>';
       }
-      if (al) extra += '<div class="mh-ck click" data-act="alerts" style="cursor:pointer"><i style="background:' + (al.enabled && al.configured ? 'var(--mh-green)' : 'var(--mh-text3)') + '">' + (al.enabled && al.configured ? '✓' : '–') + '</i><b>Discord alerts</b><small>' +
+      if (al) extra += '<div class="mh-ck click" data-act="alerts" style="cursor:pointer"><i style="background:' + (al.enabled && al.configured ? 'var(--mh-green)' : 'var(--mh-text3)') + '">' + (al.enabled && al.configured ? '✓' : '–') + '</i><b>Alerts</b><small>' +
           (al.enabled && al.configured ? 'On' + (al.sent ? ' · ' + al.sent + ' sent' : '') + (al.queued ? ' · ' + al.queued + ' queued' : '') : al.configured ? 'Paused' : 'Not set up') + ' ›</small></div>';
       var ckRow = function(c){ return '<div class="mh-ck"><i style="background:' + (c.ok ? 'var(--mh-green)' : 'var(--mh-orange)') + '">' + (c.ok ? '✓' : '!') + '</i><b>' + esc(c.label) + '</b><small>' + esc(c.detail) + '</small></div>'; };
       /* order: real failures, then recommendations, then passing checks */
@@ -3240,7 +3406,9 @@ return {
           row('Live wallpaper', live ? 'On · colors slowly move and blend' : 'Off · still background', '<button class="mh-sw' + (live ? ' on' : '') + '" data-m="go" data-arg="uilive" aria-label="Toggle live wallpaper"></button>') +
           row('Layout', 'Hide, move and resize cards', go('lay', 'Edit', 'edit')) + '</div>' +
         '<div class="mh-ccg"><h4>Alerts &amp; backups</h4>' +
-          row('Discord alerts', m.alerts ? (m.alerts.enabled && m.alerts.has_webhook ? 'On' : m.alerts.has_webhook ? 'Paused' : 'Not set up') : '…', go('alerts')) +
+          /* 2.7.1: alerts can go to Discord, Telegram, Gmail, Slack and Home Assistant (own window) */
+          row('Notification providers', m.alerts ? (m.alerts.active && m.alerts.active.length ? esc(m.alerts.active.map(function(p){ return PROV_NAMES[p] || p; }).join(', ')) : 'Not set up · Discord, Telegram, Gmail, Slack, Home Assistant') : '…', go('notif')) +
+          row('Alerts', m.alerts ? (m.alerts.enabled && (m.alerts.has_any || m.alerts.has_webhook) ? 'On · what to send and when' : (m.alerts.has_any || m.alerts.has_webhook) ? 'Paused' : 'Set up a notification provider first') : '…', go('alerts')) +
           row('Auto-heal', esc(this.healSummary() || 'Problems the router fixes by itself'), go('autoheal')) +
           row('NAS backup', m.nasB ? (m.nasB.configured ? (m.nasB.enabled ? 'On' + (m.nasB.last_ok ? ' · last ' + ago(Math.floor(Date.now() / 1000) - m.nasB.last_ok) : '') : 'Paused') : 'Not set up') : '…', go('nasbak')) + '</div>' +
         '<div class="mh-ccg"><h4>Internet</h4>' +
@@ -3296,6 +3464,7 @@ return {
     /* ---------- actions ---------- */
     act: function(name, arg){
       if (name === 'cc'){ if (this.mh.ccOpen) this.closeCC(); else this.openCC(); return; }
+      if (name === 'guestqr') return this.guestQr(arg);
       if (name === 'dev') return this.openDevice(arg);
       if (name === 'vpn') return this.doVpn(Number(arg));
       if (name === 'vpnsrv') return this.openVpnServer(arg);
@@ -3326,6 +3495,7 @@ return {
       if (name === 'uilive'){ var lv = true; try { lv = localStorage.getItem('machome-live') !== '0'; localStorage.setItem('machome-live', lv ? '0' : '1'); } catch (e) {} this.theme(); return; }
       if (name === 'uitheme'){ try { localStorage.setItem('machome-ui', arg === 'android' ? 'android' : 'mac'); } catch (e) {} this.theme(); if (this.mh.ccOpen) this.set('cc', this.ccHtml()); return; }
       if (name === 'alerts'){ this.closeCC(); return this.openAlerts(); }
+      if (name === 'notif'){ this.closeCC(); return this.openProviders(); }
       if (name === 'ready') return this.openReadiness();
       if (name === 'secon'){   /* Security card recommendation → "Turn on" (2.6.7). HTTPS via GL's own setting, the rest via rpc sec_apply */
         var sid = String(arg || ''), sself = this;
@@ -5663,6 +5833,36 @@ return {
         setTimeout(poll, 4000);
       }).catch(function(e){ done(false, 'The router refused: ' + ((e && e.message) || 'error') + '.'); });
     },
+    /* 2.8.0 (owner, Thanksgiving 2026): guest Wi-Fi QR code. Guests point their phone camera at it to join. Built in
+       the browser from GL's own Wi-Fi settings (wifi.get_config, fetched fresh when opened); nothing is stored or sent.
+       Privacy mode blurs the code and hides the name until "Show code" is pressed. */
+    guestQr: function(band){
+      var self = this, m = this.mh;
+      rpc('wifi', 'get_config').then(function(W){
+        var all = [];
+        ((W && W.res) || []).forEach(function(b){ (b.ifaces || []).forEach(function(i){
+          if (i.guest && i.enabled) all.push({ band: String(b.band || ''), ssid: String(i.ssid || ''), key: String(i.key || ''), enc: String(i.encryption || ''), hidden: !!i.hidden });
+        }); });
+        var g = all.filter(function(x){ return x.band === String(band || ''); })[0] || all[0];
+        if (!g){ self.toast('Guest Wi-Fi is off. Turn it on in GL’s Wireless page first.'); return; }
+        var open = /^(none|owe)/i.test(g.enc);
+        var q = function(s){ return String(s).replace(/([\\;,:"])/g, '\\$1'); };
+        var data = 'WIFI:T:' + (open ? 'nopass' : 'WPA') + ';S:' + q(g.ssid) + ';' + (open ? '' : 'P:' + q(g.key) + ';') + (g.hidden ? 'H:true;' : '') + ';';
+        var code = QRGEN(0, 'M'); code.addData(data); code.make();
+        var bandTxt = g.band === '2G' ? '2.4 GHz' : g.band.replace('G', ' GHz');
+        var html = '<div class="hic" style="background:' + GRAD.teal + '">' + svg('wifi') + '</div><h2>Guest Wi-Fi</h2>' +
+          '<p style="margin:0 0 6px;color:var(--mh-text2)">Guests can point their phone camera at this code to join (' + esc(bandTxt) + ').' + (all.length > 1 ? ' Other guest bands have their own code in the Wi-Fi card.' : '') + '</p>' +
+          '<div id="mh-qr" style="background:#fff;padding:12px;border-radius:14px;width:max-content;max-width:100%;margin:8px auto;' + (m.priv ? 'filter:blur(10px);' : '') + '">' + code.createSvgTag(6, 0) + '</div>' +
+          '<label class="mh-mrow"><span><b>Network</b><small id="mh-qrname">' + esc(m.priv ? 'Hidden (privacy mode)' : g.ssid) + '</small></span></label>' +
+          (open ? '<label class="mh-mrow"><span><b>Password</b><small>None (open network)</small></span></label>'
+                : '<label class="mh-mrow"><span><b>Password</b><small id="mh-qrpw">••••••••</small></span><span><button data-m="pw">Show</button></span></label>') +
+          '<div class="btns"><button data-m="cancel">Close</button>' + (m.priv ? '<button class="pri" data-m="reveal">Show code</button>' : '') + '</div>';
+        self.openModal(html, {
+          pw: function(md, b){ var el = md.querySelector('#mh-qrpw'); var shown = b.textContent === 'Hide'; el.textContent = shown ? '••••••••' : g.key; b.textContent = shown ? 'Show' : 'Hide'; },
+          reveal: function(md, b){ md.querySelector('#mh-qr').style.filter = ''; md.querySelector('#mh-qrname').textContent = g.ssid; b.remove(); }
+        });
+      }).catch(function(e){ self.toast('Couldn’t read the Wi-Fi settings: ' + ((e && e.message) || 'error')); });
+    },
     wifiHtml: function(){
       var m = this.mh, W = m.wifi, priv = m.priv;
       if (!W || !W.res) return '<div class="mh-empty">Loading Wi-Fi…</div>';
@@ -5677,7 +5877,7 @@ return {
           '<small>' + esc(priv ? 'SSID hidden' : (main.ssid || '—')) + ' · ' + esc(String(main.encryption || '').toUpperCase()) + '</small>' +
           '<small>Channel ' + (b.channel ? b.channel : 'auto') + ' · ' + esc(b.htmode === 'auto' ? 'auto width' : (b.htmode || '')) + ' · power ' + esc(b.txpower || '—') + '</small>' +
           '<div style="display:flex;justify-content:space-between;margin-top:4px"><span><b style="font-size:18px">' + n + '</b> <small style="display:inline">clients</small></span>' +
-          (guest ? '<small style="display:inline">Guest ' + (guest.enabled ? 'on' : 'off') + '</small>' : '') + '</div></div>';
+          (guest ? (guest.enabled ? '<a href="#" data-act="guestqr" data-arg="' + esc(b.band) + '" style="font-size:12px;color:var(--mh-purple)">Guest on Â· QR code</a>' : '<small style="display:inline">Guest off</small>') : '') + '</div></div>';
       };
       var mld = cnt.mld || cnt.MLD || 0;
       return '<div class="mh-hgrid" style="grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr))">' + W.res.map(col).join('') + '</div>' +

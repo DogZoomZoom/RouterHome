@@ -51,6 +51,9 @@ sed -i -e '/machome/d' -e '\#/root/.config/ookla/#d' /etc/sysupgrade.conf
 /etc/init.d/nginx restart; echo "Home tab removed (settings in /etc/machome kept)."
 EOF
 chmod +x $B/uninstall.sh
+# a second copy where firmware upgrades don't delete it (/usr/lib/machome is on the keep list; /root is wiped):
+# the installers' Remove falls back to it (2026-11-24, owner's Slate said "not installed" after an upgrade)
+cp $B/uninstall.sh /usr/lib/machome/uninstall.sh
 rm -rf $X $T
 # optional: the router downloads the official Ookla CLI itself (only if the owner accepted Ookla's license in the installer)
 if [ -f /tmp/mh-accept-ookla ] && [ ! -x /usr/share/machome/speedtest ]; then

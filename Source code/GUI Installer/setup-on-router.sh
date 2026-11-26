@@ -5,7 +5,9 @@
 D=/tmp/rhsetup
 cd $D || exit 1
 command -v usign >/dev/null 2>&1 || { echo "This router has no usign, so the download's signature can't be checked. Nothing installed."; exit 3; }
-if ! usign -V -q -m pkg.tgz -p release.pub -x pkg.tgz.sig; then
+# release.pub = the current Router Home key; release-old.pub = the previous one, accepted only during the 2.8.0 key
+# switch (2.8.0 itself is signed with it). Drop it once releases are signed with the new key.
+if ! usign -V -q -m pkg.tgz -p release.pub -x pkg.tgz.sig && ! { [ -f release-old.pub ] && usign -V -q -m pkg.tgz -p release-old.pub -x pkg.tgz.sig; }; then
   echo "The download's signature does NOT match the Router Home release key. Nothing installed."; exit 4
 fi
 echo "Signature OK: this is an official Router Home release."

@@ -64,7 +64,8 @@ local function load_cfg()
         mutes = type(c.mutes) == "table" and c.mutes or {}, vpn_keep_provider = c.vpn_keep_provider ~= false, vpn_autoforget = c.vpn_autoforget ~= false,
         adg_watch = c.adg_watch == true, vpn_return = c.vpn_return ~= false,
         -- 2.7.0 security automation, both opt-in
-        vuln_autofix = c.vuln_autofix == true, fw_autosec = c.fw_autosec == true }
+        vuln_autofix = c.vuln_autofix == true, fw_autosec = c.fw_autosec == true,
+        raw = c }   -- 2.7.1: the whole file, for notify.lua (provider settings; never sent to the page)
     for _, k in ipairs(type(c.digest_types) == "table" and c.digest_types or {}) do out.digest[tostring(k)] = true end
     for k, v in pairs(DEF.types) do out.types[k] = (type(c.types) == "table" and c.types[k] ~= nil) and (c.types[k] == true) or v end
     return out
@@ -73,16 +74,20 @@ X.cfg = load_cfg()
 
 local HOST = trim(readf("/proc/sys/kernel/hostname") or "Router")
 
--- ---------------------------------------------------------------- discord
+-- ---------------------------------------------------------------- sending (Discord + the other providers, 2.7.1)
+-- notify.lua sends one message to every provider that's set up and switched on (Settings > Notification providers).
+-- The message is still built as a Discord embed {title, description, color, fields, footer}; notify.lua turns it
+-- into plain text / Slack / email for the others. A provider that fails is retried later on its own (no repeats
+-- for the ones that already got it).
 local queue, stats = {}, { sent = 0, failed = 0, last = nil, last_ok = nil }
-local function post(embed)
-    local c = X.cfg
-    if not c.enabled or c.webhook == "" or not c.webhook:match("^https://[%w%.]*discord[%w]*%.com/api/webhooks/%d+/[%w_%-]+$") then return nil end
-    writef(DIR .. "/wh.json", cjson.encode({ username = HOST .. " router", embeds = { embed } }))
-    local code = trim(sh("curl -s -m 15 -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' --data-binary @" .. DIR .. "/wh.json '" .. c.webhook .. "'"))
-    local ok = (code == "204" or code == "200")
+local NT = nil
+local function notify() if not NT then local ok, m = pcall(dofile, "/usr/lib/machome/notify.lua"); if ok and type(m) == "table" then NT = m end end; return NT end
+local function post(embed, only)
+    local N = notify(); if not N then return nil end
+    local ok, _, failed = N.send(X.cfg.raw or {}, embed, only)
+    if ok == nil then return nil end
     stats.last = os.time(); if ok then stats.sent = stats.sent + 1; stats.last_ok = os.time() else stats.failed = stats.failed + 1 end
-    return ok
+    return ok, failed
 end
 local COLORS = { red = 16726832, orange = 16752394, green = 3446617, blue = 689407, purple = 12540658, gray = 9342611 }
 -- ---------------------------------------------------------------- event timeline ("Recent Events" card)
@@ -118,8 +123,8 @@ local function alert(kind, title, desc, color, fields)
     if X.cfg.digest and X.cfg.digest[kind] then pcall(digest_add, kind, title, desc); return end
     local e = { title = title, description = desc, color = COLORS[color] or COLORS.blue, fields = fields,
         timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ"), footer = { text = HOST .. " · Home tab" } }
-    local r = post(e)
-    if r == false then queue[#queue + 1] = e; while #queue > 20 do table.remove(queue, 1) end end
+    local r, failed = post(e)
+    if r == false then queue[#queue + 1] = { e = e, only = failed }; while #queue > 20 do table.remove(queue, 1) end end
 end
 X.alert = alert
 --- one Discord message the owner asked for from the Home tab (e.g. "Send to Discord" on the Outage & lag log):
@@ -1386,7 +1391,7 @@ function X.tick(ctx)
     X.wan_since = wansince     -- start of the current outage (watch.lua: last-resort modem restart)
     if online then
         -- flush queued alerts
-        if #queue > 0 then local q = queue; queue = {}; for _, e in ipairs(q) do if post(e) == false then queue[#queue + 1] = e end end end
+        if #queue > 0 then local q = queue; queue = {}; for _, it in ipairs(q) do local r, failed = post(it.e, it.only); if r == false then queue[#queue + 1] = { e = it.e, only = failed } end end end
         pcall(web_probe, now)
         vpn_alerts(now, p, wg)
         pcall(fo_tick, now)
@@ -1495,7 +1500,7 @@ function X.live()
     -- muted alert types (still muted) for the banner, and the netplus data for Network Health (2026-11-18)
     local mutes = {}; for k, u in pairs(X.cfg.mutes or {}) do if tonumber(u) and tonumber(u) > os.time() then mutes[k] = tonumber(u) end end
     local okn, np = false, nil; if NP and NP.live then okn, np = pcall(NP.live) end
-    return { vh = next(vhl) and vhl or cjson.null, inc = inc, fw = fw, ready = ready, alerts = { enabled = X.cfg.enabled, configured = X.cfg.webhook ~= "", sent = stats.sent, failed = stats.failed,
+    return { vh = next(vhl) and vhl or cjson.null, inc = inc, fw = fw, ready = ready, alerts = { enabled = X.cfg.enabled, configured = (notify() and notify().any(X.cfg.raw or {})) or false, sent = stats.sent, failed = stats.failed,
         last = stats.last or cjson.null, last_ok = stats.last_ok or cjson.null, queued = #queue, mutes = next(mutes) and mutes or cjson.null },
         np = (okn and np) or cjson.null, vuln = X.vuln_sum or cjson.null,
         upg = (function() if X.last_upgrade == nil then X.last_upgrade = jread(EDIR .. "/last_upgrade.json", nil) or false end; return X.last_upgrade or cjson.null end)(),

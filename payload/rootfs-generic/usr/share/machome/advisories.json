@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 6,
   "updated": "2026-11-24",
   "about": "Router Home known-vulnerability list (GL.iNet security notices turned into checks). Signed with the Router Home release key; routers ignore a copy whose signature doesn't match. Format: docs/VULN-CHECKER.md in the Router Home project.",
   "advisories": [
@@ -13,8 +13,25 @@
       "models": ["*"],
       "fixed_in": { "mt5000": "4.9.1", "be9300": "4.10.2" },
       "firmware_note": "Fixed in GL's stable security firmware of 2026-11-22: 4.9.1 for the Brume 3 (GL-MT5000) and 4.10.2 for the Flint 3 (GL-BE9300), per GL's release notes (\"fixes a vulnerability in the cloud platform's remote management\"; also kernel patches for CVE-2026-98432 and CVE-2026-99288). Other models: install GL's stable update from 2026-11-22 or later when the Upgrade page offers it, even if this check finds nothing.",
+      "indicators_note": "List v5 (2026-11-24): besides GL's own sign, traces published by independent researchers who examined affected routers (RemoteToHome-io/gl-security-incident-2026 on GitHub, plus the community triage script admonstrator/glinet-csa-2026-01). GL.iNet hasn't confirmed these. Traces in /tmp and the running programs disappear when the router restarts; the backdoor files survive restarts and firmware upgrades with Keep settings.",
+      "sources": ["https://github.com/RemoteToHome-io/gl-security-incident-2026", "https://github.com/admonstrator/glinet-csa-2026-01"],
       "indicators": [
         { "type": "process", "match": "crond -i /tmp/.log", "label": "The malware process \"crond -i /tmp/.log\" is running (GL's sign of infection)" },
+        { "type": "process", "match": "monitord /var/run/monitord.pid", "label": "A hidden backdoor program (monitord) is running" },
+        { "type": "process", "match": "ujaild", "label": "A hidden backdoor program (ujaild) is running" },
+        { "type": "process", "match": "170.39.226.219", "label": "A remote-control connection to the attackers' server is running" },
+        { "type": "conn", "ip_prefix": "170.39.226.", "label": "The router is connecting to the attackers' server (170.39.226.x)" },
+        { "type": "path", "path": "/usr/bin/monitord", "label": "The backdoor program file /usr/bin/monitord exists" },
+        { "type": "path", "path": "/bin/ulogd", "label": "The backdoor file /bin/ulogd exists (it isn't part of GL's firmware)" },
+        { "type": "contains", "path": "/etc/init.d/urandom_seed", "match": "monitord", "label": "A startup file (urandom_seed) was changed to launch the backdoor" },
+        { "type": "contains", "path": "/lib/upgrade/keep.d/netifd", "match": "/bin/ulogd", "label": "The backdoor was set to survive firmware upgrades" },
+        { "type": "contains", "path": "/etc/dropbear/authorized_keys", "match": "gl-agent", "label": "An attacker's SSH key (named gl-agent) can sign in" },
+        { "type": "contains", "path": "/root/.ssh/authorized_keys", "match": "gl-agent", "label": "An attacker's SSH key (named gl-agent) can sign in" },
+        { "type": "contains", "path": "/etc/rtty_conf", "any": ["gl-inet.top", "65.20.71.131", "66.245.219.252"], "label": "The remote terminal (rtty) points to an attackers' server" },
+        { "type": "contains", "path": "/etc/rc.local", "any": ["adguardns.com", "adguardns.org", "lede-openproject.org", "adxinsight.com", "openwrt-project.org", "adsanalypro.com", "170.39.226.", "65.20.71.131", "66.245.219.252", "gl-inet.top"], "label": "A startup script contacts an attackers' server" },
+        { "type": "contains", "path": "/etc/crontabs/root", "any": ["adguardns.com", "adguardns.org", "lede-openproject.org", "adxinsight.com", "openwrt-project.org", "adsanalypro.com", "170.39.226.", "65.20.71.131", "66.245.219.252", "gl-inet.top"], "label": "A scheduled task contacts an attackers' server" },
+        { "type": "nat_rule", "chain": "SDWAN_IP_MAPPING", "match": "-d 127.0.0.1/32 -j DNAT --to-destination 127.0.0.1", "strength": "possible", "label": "A firewall rule left behind by the attack's remote command is present" },
+        { "type": "path", "path": "/tmp/f", "strength": "possible", "label": "A pipe file /tmp/f exists (used by the attack's remote shell; the name is generic, so not proof on its own)" },
         { "type": "file", "path": "/tmp/.log", "strength": "possible", "label": "A hidden file /tmp/.log exists (the malware's file; not proof on its own)" }
       ],
       "exposures": [
@@ -22,13 +39,11 @@
       ],
       "reset": { "infected": true },
       "fixes": {
-        "infected": { "type": "kill_remove", "process": "crond -i /tmp/.log", "path": "/tmp/.log", "label": "Stop the malware process and delete /tmp/.log" },
-        "suspicious": { "type": "kill_remove", "process": "crond -i /tmp/.log", "path": "/tmp/.log", "label": "Delete /tmp/.log (a copy is kept)" },
         "exposed": { "type": "uci_set", "key": "gl-cloud.@cloud[0].enable", "value": "0", "restart": "gl-cloud", "label": "Turn off GoodCloud remote management" }
       },
       "advice": {
-        "infected": "GL says to treat the router as infected. Stopping the process removes the running malware, but GL's own remedy is a factory reset (or the security firmware), then setting the router up again and changing the admin password. Install the stable security firmware as soon as it's offered.",
-        "suspicious": "The malware's file name is there but its process isn't running. Delete it, then run the check again; if the process ever shows up, treat the router as infected.",
+        "infected": "Treat this router as hacked. Don't restart it yet if you want to keep evidence (a restart erases some traces). Then reinstall GL's latest official firmware with \"Keep settings\" turned OFF (a plain factory reset doesn't remove a backdoor that was set to survive upgrades and doesn't install the fix), set the router up again by hand without restoring a backup from it, use a new admin password, and change the passwords and keys of VPNs and accounts used through it. Leave GoodCloud remote management off unless you need it.",
+        "suspicious": "A trace that matches this attack was found, but it isn't proof on its own (a file or rule with the same name can have an innocent cause). Run the check again; if anything stronger shows up, treat the router as hacked. If you don't recognise it, the safe choice is to reinstall GL's latest firmware with \"Keep settings\" turned off.",
         "update": "No sign of infection, but this router's firmware is older than GL's security fix for this issue. Install the update from the Upgrade page (use the Home tab's firmware checklist first; Router Home survives with Keep settings).",
         "exposed": "No sign of infection, but the exploited service is on. GL has blocked the attack path; turning remote management off until the security firmware is installed removes the risk entirely. You can turn it back on in GL's Applications > GoodCloud page later.",
         "ok": "No signs of infection and GoodCloud remote management is off. GL still recommends installing the stable security firmware when it's offered."
@@ -45,9 +60,15 @@
       "fixed_in": { "mt5000": "4.9.2" },
       "firmware_note": "Fixed in 4.9.2 for the Brume 3 (GL-MT5000), per GL's release notes (\"Fixed vulnerability VDB-submit-1113491 and enhanced the security protection of NAS identity authentication\"). GL's table of fixed versions for other models doesn't line up on their page, so other models aren't listed here yet: install the update GL offers on the Upgrade page from 2026-11-24 or later. Router Home also reads GL's release notes and shows \"Firmware update needed\" when a new firmware for your model describes security fixes.",
       "indicators": [],
-      "exposures": [],
+      "exposures_note": "List v6 (2026-11-26): the three affected router services, checked only while the firmware is older than GL's fix for the model (until_fixed; when GL hasn't confirmed a fixed version for a model, they always count). New check types 'running'/'setting' (Router Home 2.8.0+) so older versions skip them.",
+      "exposures": [
+        { "type": "running", "match": "/usr/bin/gl_nas_sys", "until_fixed": true, "label": "NAS sharing (gl_nas_sys) is running, and this firmware doesn't have GL's fix for its login bypass yet" },
+        { "type": "running", "match": "rtty -h", "until_fixed": true, "label": "GoodCloud's remote terminal (rtty) is running, and this firmware doesn't have GL's fix yet" },
+        { "type": "setting", "key": "mptun.global.enable", "equals": "1", "until_fixed": true, "label": "AstroWarp is turned on, and this firmware doesn't have GL's fix for its command injection yet" }
+      ],
       "fixes": {},
       "advice": {
+        "exposed": "One of the services from GL's Nov 24 advisories is on, and this router's firmware doesn't have GL's fix yet. Install the update from the Upgrade page as soon as it's offered. Until then, turn off what you don't use: NAS sharing in GL's Applications > Network Storage page, the remote terminal in GoodCloud, AstroWarp in its own page.",
         "update": "This router's firmware is older than GL's fix. Install the update from the Upgrade page (use the Home tab's firmware checklist first; Router Home survives with Keep settings). Until then, if you don't use them, turn off NAS sharing (GL's Applications > Network Storage page) and GoodCloud's remote terminal.",
         "ok": "This router's firmware has GL's fix, or GL hasn't confirmed a fixed version for this model yet. If GL's Upgrade page offers an update dated 2026-11-24 or later, install it; until then, turn off NAS sharing and GoodCloud's remote terminal if you don't use them."
       }

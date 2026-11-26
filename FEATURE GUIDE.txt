@@ -229,6 +229,11 @@ TRAVEL ROUTERS  (Slate, Beryl, etc., or any router getting internet over Wi-Fi /
 WI-FI  (models with Wi-Fi)
   Each band (2.4 / 5 / 6 GHz): network name, channel, channel width, number of
   connected devices, and Wi-Fi 7 multi-link (MLO) devices.
+  - Guest Wi-Fi QR code (2.8.0): when a guest network is on, its band shows
+    "Guest on · QR code". It opens a code visitors point their phone camera at to join,
+    with the network name and a Show button for the password. It's made in your browser
+    from GL's own Wi-Fi settings when you open it; nothing is stored or sent anywhere.
+    Privacy mode blurs it until you press Show code.
 
 ADGUARD HOME
   - Whether AdGuard ad blocking is on, and which DNS server your devices actually use.
@@ -291,6 +296,13 @@ SECURITY
       1. GL.iNet security notices, turned into a list of checks on the Router Home
          GitHub page: which models/firmware, what to look for on the router (a running
          process, a file, a setting, a service, an open port) and which fix applies.
+         From 2.8.0 it also looks for the published signs of an ACTUAL attack (text in
+         a startup file, a firewall rule, a connection to an attackers' server), where
+         researchers have documented them, so it can tell "could be attacked" from
+         "was attacked". It can also warn about a risky service only while your
+         firmware doesn't have GL's fix yet (used for the November 24 advisories: NAS
+         sharing, the remote terminal, AstroWarp); once the fix is installed, the
+         warning goes away by itself.
          The list is signed with the Router Home release key (the same one updates use);
          the router ignores a copy whose signature doesn't match. A copy ships built in.
       2. The National Vulnerability Database (NVD): published vulnerabilities (CVEs)

@@ -39,7 +39,12 @@ end
 V.cmp = cmp
 
 -- ---------------------------------------------------------------- the advisory list (signed)
-local function verify(file, sig) return os.execute("usign -V -q -m " .. q(file) .. " -p " .. PUB .. " -x " .. q(sig) .. " >/dev/null 2>&1") == 0 end
+-- 2.8.0 key rotation: the new key, or (only during the switch) the previous one. Remove the fallback next release.
+local PUB_OLD = "/usr/share/machome/release-old.pub"
+local function verify(file, sig)
+    if os.execute("usign -V -q -m " .. q(file) .. " -p " .. PUB .. " -x " .. q(sig) .. " >/dev/null 2>&1") == 0 then return true end
+    return readf(PUB_OLD) ~= nil and os.execute("usign -V -q -m " .. q(file) .. " -p " .. PUB_OLD .. " -x " .. q(sig) .. " >/dev/null 2>&1") == 0
+end
 function V.load_adv()
     -- the downloaded list (signature checked when it was downloaded AND again now) if it's at least as new as the built-in one
     local bi = jread(ADV_BUILTIN)
@@ -311,6 +316,14 @@ end
 -- one condition from the list: true = found on this router, nil = couldn't check
 function V.test(c)
     if type(c) ~= "table" then return nil end
+    -- 2.8.0 (list v6): "running" = a program is running (like process), "setting" = a setting has a value (like uci).
+    -- New names on purpose: older versions skip unknown types, so exposures that use "until_fixed" (which they
+    -- don't understand) can't give them false alarms on already-fixed firmware.
+    if c.type == "running" or c.type == "setting" then
+        local d = {}; for k, v in pairs(c) do d[k] = v end
+        d.type = c.type == "running" and "process" or "uci"
+        return V.test(d)
+    end
     if c.type == "process" then
         local m = tostring(c.match or ""); if #m < 3 then return nil end
         for _, p in ipairs(processes()) do if p.cmd:find(m, 1, true) and p.pid ~= tonumber(trim(readf("/proc/self/stat") or ""):match("^%d+")) then return true end end
@@ -324,6 +337,32 @@ function V.test(c)
         if not readf("/etc/init.d/" .. s) then return false end
         return os.execute("/etc/init.d/" .. s .. " enabled >/dev/null 2>&1") == 0
     elseif c.type == "listen" then return listening(c.port)
+    -- list v5 (2026-11-24): signs of an actual attack published by researchers. Older versions skip these types.
+    elseif c.type == "path" then   -- exists, without opening it (a named pipe would block on open)
+        if not SAFE_PATH(c.path) then return nil end
+        return sh("ls -d " .. q(c.path)):match("%S") ~= nil
+    elseif c.type == "contains" then   -- a regular file contains one of the strings
+        if not SAFE_PATH(c.path) then return nil end
+        if not sh("[ -f " .. q(c.path) .. " ] && echo y"):match("y") then return false end
+        local s = readf(c.path) or ""
+        for _, m in ipairs(type(c.any) == "table" and c.any or { c.match }) do
+            m = tostring(m or ""); if #m >= 3 and s:find(m, 1, true) then return true end
+        end
+        return false
+    elseif c.type == "nat_rule" then   -- a rule in the firewall's NAT table
+        local ch, m = tostring(c.chain or ""), tostring(c.match or "")
+        if not ch:match("^[%w_]+$") or #m < 3 or sh("command -v iptables") == "" then return nil end
+        return sh("iptables -t nat -S " .. ch):find(m, 1, true) ~= nil
+    elseif c.type == "conn" then   -- a TCP connection (any state, also unanswered attempts) to an address starting with ip_prefix
+        local pre = tostring(c.ip_prefix or ""); if not pre:match("^%d+%.[%d%.]+$") then return nil end
+        for line in (readf("/proc/net/tcp") or ""):gmatch("[^\n]+") do
+            local h = line:match("^%s*%d+:%s+%x+:%x+%s+(%x%x%x%x%x%x%x%x):%x+")
+            if h then
+                local ip = tonumber(h:sub(7, 8), 16) .. "." .. tonumber(h:sub(5, 6), 16) .. "." .. tonumber(h:sub(3, 4), 16) .. "." .. tonumber(h:sub(1, 2), 16)
+                if ip:sub(1, #pre) == pre then return true end
+            end
+        end
+        return false
     end
     return nil
 end
@@ -346,8 +385,12 @@ function V.check_adv(a, model, fw)
         if hit then r.found[#r.found + 1] = c.label or c.type; local st = c.strength == "possible" and "suspicious" or "infected"; if RANK[st] > RANK[r.status] then r.status = st end end
     end
     if RANK[r.status] < RANK.exposed then
+        -- until_fixed (2.8.0): the exposure only counts while this firmware is older than GL's fix for this model
+        -- (or when no fixed version is known for it yet)
+        local fx0 = type(a.fixed_in) == "table" and (a.fixed_in[model] or a.fixed_in["*"]) or nil
         for _, c in ipairs(type(a.exposures) == "table" and a.exposures or {}) do
-            if V.test(c) then r.found[#r.found + 1] = c.label or c.type; r.status = "exposed" end
+            local fixed = c.until_fixed and fx0 and cmp(fw, fx0) >= 0
+            if not fixed and V.test(c) then r.found[#r.found + 1] = c.label or c.type; r.status = "exposed" end
         end
     end
     -- firmware: fixed in a known version for this model (or "*")

@@ -205,19 +205,19 @@ if #text > 3900 then text = text:sub(1, 3890) .. "…" end
 writef(DIR .. "/vpnwatch-summary.txt", text .. "\n")
 
 local c = {}; local okc, v = pcall(cjson.decode, readf("/etc/machome/alerts.json") or "{}"); if okc and type(v) == "table" then c = v end
-local wh = c.webhook or ""; local sent = false
+local sent = false
+local okN, NT = pcall(dofile, "/usr/lib/machome/notify.lua"); if not okN or type(NT) ~= "table" then NT = nil end
 if os.getenv("VW_DRY") == "1" then   -- test run: summary saved, nothing sent
   os.execute("logger -t machome 'VPN monitor: test run finished (nothing sent)'")
-elseif c.enabled == true and wh:match("^https://[%w%.]*discord[%w]*%.com/api/webhooks/%d+/[%w_%-]+$") then
+elseif NT and c.enabled == true and NT.any(c) then   -- 2.7.1: every notification provider that's set up
   local host = trim(readf("/proc/sys/kernel/hostname") or "Router")
   local color = (not troubled) and 3446617 or (worst and worst.score < 3000 and 16752394 or 16726832)
-  writef(W .. "/wh.json", cjson.encode({ username = host .. " router", embeds = { { title = "📋 VPN monitor finished", description = text, color = color,
-    footer = { text = host .. " · Home tab" }, timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ") } } }))
-  local code = trim(sh("curl -s -m 15 -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' --data-binary @" .. W .. "/wh.json '" .. wh .. "'"))
-  os.remove(W .. "/wh.json"); sent = code:match("^2") ~= nil
-  os.execute("logger -t machome 'VPN monitor: finished, Discord summary sent (HTTP " .. code:gsub("%D", "") .. ")'")
+  local ok = NT.send(c, { title = "📋 VPN monitor finished", description = text, color = color,
+    footer = { text = host .. " · Home tab" }, timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ") })
+  sent = ok ~= nil
+  os.execute("logger -t machome 'VPN monitor: finished, summary sent" .. (ok == false and " (some providers failed)" or "") .. "'")
 else
-  os.execute("logger -t machome 'VPN monitor: finished (Discord alerts are off; summary saved on the router)'")
+  os.execute("logger -t machome 'VPN monitor: finished (alerts are off; summary saved on the router)'")
 end
 local per = {}; for _, t in ipairs(tuns) do per[t] = { name = (LAB[t] or LAB0[t] or {}).name or t, stalls = #S[t].stalls } end
 writef(STATUS, cjson.encode({ running = false, start = start, ["end"] = END, finished = fin, tunnels = tuns, per = per, sent = sent, early = stopped_early }))

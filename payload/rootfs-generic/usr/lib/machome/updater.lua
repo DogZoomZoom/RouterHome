@@ -73,7 +73,7 @@ function U.check()
     local cur, ch = U.installed(), U.channel()
     -- Stable: /releases/latest (GitHub never returns a pre-release there). Beta: the newest of the last 20 releases,
     -- pre-releases included (a stable release newer than every beta wins, so testers end up on it).
-    -- -L (2.7.1): the owner's GitHub account was renamed for a while (11-24) and GitHub answered the old name
+    -- -L (2.7.1): the owner's GitHub account was renamed (xDarkHawkx → DogZoomZoom) and GitHub answers the old name
     -- with "301 Moved Permanently"; routers up to 2.7.0 didn't follow it, so their update check failed.
     local out = sh("curl -s -L -m 20 -w '\\n%{http_code}' -A RouterHome-updater -H 'Accept: application/vnd.github+json' https://api.github.com/repos/" .. REPO ..
         (ch == "beta" and "/releases?per_page=20" or "/releases/latest"))

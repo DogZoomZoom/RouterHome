@@ -293,13 +293,65 @@ function M.clear_events(args)
     return { ok = true, removed = n }
 end
 local function jdec(p, def) local s = readf(p); if not s or s == "" then return def end; local ok, v = pcall(cjson.decode, s); return (ok and type(v) == "table") and v or def end
+local function notify_mod() local ok, m = pcall(dofile, "/usr/lib/machome/notify.lua"); return (ok and type(m) == "table") and m or nil end
+
+--- 2.7.1 notification providers (Settings > Notification providers). args.prov = { telegram = { token, chat, on, clear }, ... }.
+--- Empty secret fields keep what's saved; clear = true removes that provider. Returns nil on success or an error text.
+local function set_providers(c, P)
+    local NT = notify_mod(); if not NT then return "notify.lua is missing" end
+    local function s(v) return type(v) == "string" and trim(v) or nil end
+    for name, a in pairs(P) do
+        if type(a) == "table" then
+            if name == "discord" then
+                if a.clear == true then c.webhook = "" end
+                if a.on ~= nil then c.discord_off = a.on ~= true end
+            elseif name == "telegram" then
+                local t = type(c.tg) == "table" and c.tg or {}
+                if a.clear == true then t = {} end
+                local tok, chat = s(a.token), s(a.chat)
+                if tok and tok ~= "" then if not tok:match(NT.PAT.tg_token) then return "That doesn't look like a Telegram bot token (123456789:AA…)" end; t.token = tok end
+                if chat and chat ~= "" then if not chat:match(NT.PAT.tg_chat) then return "The Telegram chat ID is a number (for example 123456789, or -100… for a group)" end; t.chat = chat end
+                if a.on ~= nil then t.on = a.on == true end
+                c.tg = next(t) and t or nil
+            elseif name == "gmail" then
+                local t = type(c.gmail) == "table" and c.gmail or {}
+                if a.clear == true then t = {} end
+                local u, pw, to = s(a.user), s(a.pass), s(a.to)
+                if u and u ~= "" then u = u:lower(); if not NT.gmail_addr(u) then return "Use a Gmail address (…@gmail.com)" end; t.user = u end
+                if pw and pw ~= "" then pw = pw:gsub("%s", ""):lower(); if not pw:match(NT.PAT.gmail_pass) or #pw ~= 16 then return "The app password is the 16 letters Google shows (spaces don't matter), not your normal password" end; t.pass = pw end
+                if to and to ~= "" then if not to:match(NT.PAT.email) then return "The “Send to” address doesn't look like an email address" end; t.to = to end
+                if a.on ~= nil then t.on = a.on == true end
+                c.gmail = next(t) and t or nil
+            elseif name == "slack" then
+                local t = type(c.slack) == "table" and c.slack or {}
+                if a.clear == true then t = {} end
+                local u = s(a.url)
+                if u and u ~= "" then if not u:match(NT.PAT.slack) then return "That doesn't look like a Slack webhook URL (https://hooks.slack.com/services/…)" end; t.url = u end
+                if a.on ~= nil then t.on = a.on == true end
+                c.slack = next(t) and t or nil
+            elseif name == "ha" then
+                local t = type(c.ha) == "table" and c.ha or {}
+                if a.clear == true then t = {} end
+                local u = s(a.url)
+                if u and u ~= "" then if not u:match(NT.PAT.ha) then return "The Home Assistant address should look like http://homeassistant.local:8123/api/webhook/your-id" end; t.url = u end
+                if a.on ~= nil then t.on = a.on == true end
+                c.ha = next(t) and t or nil
+            end
+        end
+    end
+end
 
 function M.get_alerts()
     local c = jdec(ALERTS, {})
     local wh = c.webhook or ""
     local types = {}
     for _, k in ipairs(ALERT_TYPES) do types[k] = not (type(c.types) == "table" and c.types[k] == false) end
+    local NT = notify_mod()
     return { enabled = c.enabled == true, has_webhook = wh ~= "", hint = (wh ~= "") and ("…" .. wh:sub(-6)) or "",
+        -- 2.7.1 notification providers: what's set up and switched on (never the secrets)
+        has_any = NT and NT.any(c) or false, prov = NT and NT.status(c) or cjson.null,
+        router_name = c.router_name or "", hostname = trim(readf("/proc/sys/kernel/hostname") or ""),   -- beta.2
+        active = NT and (function() local l = NT.active(c); return #l > 0 and l or cjson.empty_array or {} end)() or {},
         types = types, temp_f = tonumber(c.temp_f) or 185, ping_ms = tonumber(c.ping_ms) or 75,speed_daily = c.speed_daily ~= false, speed_hour = tonumber(c.speed_hour) or 3,
         autoheal = c.autoheal ~= false, failover = c.failover ~= false, autoreboot = c.autoreboot ~= false, wifi_report = c.wifi_report ~= false, weekly_day = tonumber(c.weekly_day) or 0, weekly_hour = tonumber(c.weekly_hour) or 9,
         wan_heal = c.wan_heal ~= false, dns_heal = c.dns_heal ~= false, ts_heal = c.ts_heal ~= false,
@@ -326,6 +378,13 @@ function M.set_alerts(args)
         c.webhook = w
     end
     if args.clear_webhook == true then c.webhook = "" end
+    if type(args.prov) == "table" then local err = set_providers(c, args.prov); if err then return { ok = false, err = err } end end
+    -- 2.8.0-beta.2: the router's name in every alert (Discord sender, email sender/subject, footers). "" = host name.
+    if type(args.router_name) == "string" then
+        local n = trim(args.router_name)
+        if #n > 40 or n:find("[%c<>\"`$\\]") then return { ok = false, err = "The router name can be up to 40 characters, without < > \" ` $ or \\" } end
+        c.router_name = n ~= "" and n or nil
+    end
     if args.enabled ~= nil then c.enabled = args.enabled == true end
     if type(args.types) == "table" then
         c.types = type(c.types) == "table" and c.types or {}
@@ -361,22 +420,39 @@ function M.set_alerts(args)
     return { ok = true }
 end
 
-function M.test_alert()
+--- test message. args.provider = one provider (Notification providers window), or nothing = every provider that's
+--- set up and switched on (Alerts window). Sent even when "Send alerts" is paused. 2.7.1: all providers.
+function M.test_alert(args)
+    args = type(args) == "table" and args or {}
     local c = jdec(ALERTS, {})
-    local w = c.webhook or ""
-    if not w:match(WH_PAT) then return { ok = false, err = "No webhook saved yet" } end
-    local host = trim(readf("/proc/sys/kernel/hostname") or "Router")
-    local body = cjson.encode({ username = host .. " router", embeds = { {
-        title = "✅ Test alert from your " .. host, color = 3446617,
-        description = "Discord alerts are working. You'll be notified about VPN, DNS and internet problems, new devices, security changes, temperature, firmware updates and nightly speed tests.",
-        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ") } } })
-    local f = io.open("/tmp/machome/wh_test.json", "w"); if not f then return { ok = false, err = "tmp write failed" } end
-    f:write(body); f:close()
-    local p = io.popen("curl -s -m 12 -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' --data-binary @/tmp/machome/wh_test.json '" .. w .. "' 2>/dev/null")
-    local code = p and trim(p:read("*a") or "") or ""
-    if p then p:close() end
-    os.remove("/tmp/machome/wh_test.json")
-    return { ok = code == "204" or code == "200", code = code }
+    local NT = notify_mod(); if not NT then return { ok = false, err = "notify.lua is missing" } end
+    local only
+    if type(args.provider) == "string" then
+        if not NT.NAMES[args.provider] then return { ok = false, err = "unknown provider" } end
+        if not NT.configured(c, args.provider) then return { ok = false, err = NT.NAMES[args.provider] .. " isn't set up yet" } end
+        only = { args.provider }
+    else
+        only = NT.active(c)
+        if #only == 0 then return { ok = false, err = "No notification provider is set up and switched on yet (Settings > Notification providers)" } end
+    end
+    local ok, res = NT.send(c, { title = "✅ Test alert from " .. NT.name(c), color = 3446617,
+        description = "Router Home alerts are working. You'll be notified about VPN, DNS and internet problems, new devices, security changes, temperature, firmware updates and nightly speed tests.",
+        timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ") }, only, true)
+    local out = {}
+    for p, r in pairs(res or {}) do out[p] = { ok = r.ok, code = r.code, name = NT.NAMES[p], why = (not r.ok) and NT.why(p, r.code) or cjson.null } end
+    local first = res and res[only[1]] or {}
+    return { ok = ok == true, res = out, code = first.code or "" }
+end
+
+--- Telegram setup helper: the chats that recently messaged the bot. args.token (typed, not saved yet) or the saved one.
+function M.tg_chats(args)
+    args = type(args) == "table" and args or {}
+    local NT = notify_mod(); if not NT then return { ok = false, err = "notify.lua is missing" } end
+    local tok = trim(type(args.token) == "string" and args.token or "")
+    if tok == "" then local c = jdec(ALERTS, {}); tok = type(c.tg) == "table" and c.tg.token or "" end
+    local list, err = NT.tg_chats(tok)
+    if not list then return { ok = false, err = err } end
+    return { ok = true, chats = #list > 0 and list or cjson.empty_array or {} }
 end
 
 -- ---------------- NAS backup, AdGuard on the NAS, device pause, ISP report, hardware acceleration

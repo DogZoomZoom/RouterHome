@@ -12,7 +12,8 @@ The secret key file holds the 32-byte Ed25519 seed and the 8-byte key fingerprin
 import base64, hashlib, json, os, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-KEYFILE = os.path.join(ROOT, "private", "release-signing.key")
+# RH_SIGN_KEY picks another key file (2026-11-26 key rotation: the new key is made and kept next to the old one)
+KEYFILE = os.environ.get("RH_SIGN_KEY") or os.path.join(ROOT, "private", "release-signing.key")
 
 p = 2 ** 255 - 19
 q = 2 ** 252 + 27742317777372353535851937790883648493

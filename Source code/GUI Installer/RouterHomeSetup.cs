@@ -233,6 +233,7 @@ static class Setup
         files.Add(new KeyValuePair<string, byte[]>("pkg.tgz", pkg));
         files.Add(new KeyValuePair<string, byte[]>("pkg.tgz.sig", sig));
         files.Add(new KeyValuePair<string, byte[]>("release.pub", ResBytes("release.pub")));
+        files.Add(new KeyValuePair<string, byte[]>("release-old.pub", ResBytes("release-old.pub")));   // 2.8.0 key switch only
         files.Add(new KeyValuePair<string, byte[]>("setup.sh", Encoding.ASCII.GetBytes(Res("setup-on-router.sh").Replace("\r", ""))));
         files.Add(new KeyValuePair<string, byte[]>("channel", Encoding.ASCII.GetBytes(ch + "\n")));
         if (ookla) files.Add(new KeyValuePair<string, byte[]>("mh-accept-ookla", Encoding.ASCII.GetBytes("yes\n")));
@@ -352,7 +353,8 @@ static class Setup
         var bundle = InstallBundle(ch, pkg, sig, true, new List<string> { "kernel", "wgkey" });
         log("package " + pkg.Length + " bytes, bundle " + bundle.Length + " bytes");
         string cmd = "rm -rf /tmp/rhsetup-test && mkdir -p /tmp/rhsetup-test && tar -xf - -C /tmp/rhsetup-test && cd /tmp/rhsetup-test && ls && sh -n setup.sh && echo SETUP-SH-SYNTAX-OK && " +
-                     "if usign -V -q -m pkg.tgz -p release.pub -x pkg.tgz.sig; then echo SIGNATURE-OK; mkdir x && tar xzf pkg.tgz -C x && ls x && cat x/version.txt; else echo SIGNATURE-REFUSED; fi; cat channel; cd /; rm -rf /tmp/rhsetup-test";
+                     "if usign -V -q -m pkg.tgz -p release.pub -x pkg.tgz.sig; then echo SIGNATURE-OK-NEWKEY; OK=1; elif usign -V -q -m pkg.tgz -p release-old.pub -x pkg.tgz.sig; then echo SIGNATURE-OK-OLDKEY; OK=1; else echo SIGNATURE-REFUSED; OK=0; fi; " +
+                     "[ $OK = 1 ] && mkdir x && tar xzf pkg.tgz -C x && ls x && cat x/version.txt; cat channel; cd /; rm -rf /tmp/rhsetup-test";
         string err;
         int rc = Ssh(ip, Environment.GetEnvironmentVariable("RH_TEST_PW"), cmd, bundle, true, log, out err, extra);
         log("exit " + rc);

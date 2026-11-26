@@ -6,6 +6,45 @@ installer again and choose 1. Your settings (Discord webhook, weather ZIP, NAS b
 etc.) are kept either way.
 
 
+VERSION 2.8.0  (2026-11-26)
+-------------------------
+New since 2.7.1:
+  - Notification providers: alerts can go to Telegram, Gmail, Slack and Home Assistant
+    as well as Discord (Settings → Notification providers), each with step-by-step
+    setup, Send test, pause and Remove. One shared Router name (for example "Flint 3")
+    replaces the model name on every alert.
+  - Guest Wi-Fi QR code: in the Wi-Fi card, "Guest on · QR code" shows a code your
+    visitors can point their phone camera at to join the guest Wi-Fi. It's made in your
+    browser from GL's own Wi-Fi settings; nothing is stored or sent anywhere. Privacy
+    mode blurs it until you press Show code.
+  - Known vulnerabilities: spots published signs of an actual attack (backdoor programs
+    and files, attacker SSH keys, connections to attackers' servers), and now also warns
+    when one of the services from GL's November 24 advisories (NAS sharing, the remote
+    terminal or AstroWarp) is on while your firmware doesn't have GL's fix yet. Once
+    your firmware has the fix, that warning goes away by itself.
+  - New release-signing key. Router Home updates are digitally signed, and this version
+    brings a new key. 2.8.0 itself is still signed with the previous key, so every
+    router can update to it as usual. From the next release on, only the new key is
+    used, so please install 2.8.0 before then (Control Center → Router Home updates).
+  - Remove works even after a firmware upgrade deleted the old uninstaller.
+
+
+VERSION 2.8.0-beta.2  (2026-11-24, BETA: only for routers on the Beta update channel)
+-------------------------
+  - Router name: Settings → Notification providers → Router name (for example "Flint 3").
+    It replaces the model name (like GL-MT5000) on every alert: the Discord sender, the
+    email sender and subject ("Flint 3: ..."), and on Telegram, Slack and Home Assistant
+    messages. Leave it empty to keep the model name.
+  - ntfy removed from the notification providers. Discord, Telegram, Gmail, Slack and
+    Home Assistant stay.
+  - Known vulnerabilities can now spot signs of an actual attack, not only "your firmware
+    is affected": text in startup files, firewall rules and connections to attackers'
+    servers. The vulnerability list (version 5) uses them for the November 20 incident,
+    with 15 traces published by researchers who examined hacked routers (backdoor
+    programs and files, an attacker SSH key, the remote-control connection). Older
+    versions keep working with the new list; they just skip these checks.
+
+
 VERSION 2.8.0-beta.1  (2026-11-24, BETA: only for routers on the Beta update channel)
 -------------------------
   - Notification providers: alerts can now go to Telegram, ntfy, Gmail, Slack and Home
@@ -13,7 +52,7 @@ VERSION 2.8.0-beta.1  (2026-11-24, BETA: only for routers on the Beta update cha
     provider with step-by-step setup instructions, Send test, a pause switch and Remove.
     Every alert goes to each provider that's on, at the same time; if one fails, only
     that one is retried. "Discord alerts" in Settings is now called "Alerts".
-  - Telegram: create a bot with @BotFather, paste its token, press Start in the bot,
+  - Telegram: create a bot with BotFather (Telegram's official bot-making account), paste its token, press Start in the bot,
     then "Find my chat ID" picks your chat.
   - ntfy: "Make a random topic name", then subscribe to the same topic in the ntfy app.
     High-priority push for red alerts. Your own ntfy server and access token work too.
